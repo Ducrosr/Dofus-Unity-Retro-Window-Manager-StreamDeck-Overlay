@@ -5,7 +5,10 @@ Ce dossier contient l'exécutable Windows 64 bits prêt à l'emploi. Il ne néce
 - fichier : `DofusWindowManager.exe` ;
 - taille : 20 944 895 octets ;
 - SHA-256 : `01f9c139acaebdcca8ca4df85daa8c4e034b24be1859728b39788658b34840f9` ;
-- signature Authenticode : aucune.
+- signature Authenticode : aucune ;
+- variante : standard, sans détection visuelle expérimentale des invitations Dofus Retro.
+
+La détection et la gestion classiques des fenêtres Dofus Retro restent incluses. Seule l'analyse visuelle facultative des invitations nécessite une compilation séparée avec l'option `--with-popup`.
 
 Vérification sous PowerShell :
 

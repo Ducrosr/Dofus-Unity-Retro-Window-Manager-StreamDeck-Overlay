@@ -27,6 +27,8 @@ La valeur attendue pour cette bêta est :
 
 Le binaire n'est pas encore signé numériquement. SmartScreen peut donc demander une confirmation au premier lancement. Cela ne constitue pas une garantie de sécurité : vérifiez toujours l'adresse du dépôt et l'empreinte du fichier.
 
+Cet exécutable est la version standard. La gestion des fenêtres Dofus Retro est incluse, mais pas la détection visuelle expérimentale des invitations Retro. Pour utiliser cette fonction facultative, installez l'application depuis les sources puis suivez la section correspondante de ce guide.
+
 ## Installation depuis les sources
 
 ### Prérequis

@@ -59,6 +59,8 @@ Pour utiliser l'application sans installer Python ni compiler le projet :
 
 Cette bêta n'est pas encore signée numériquement. Windows SmartScreen peut donc afficher un avertissement, même pour le fichier officiel. Ne contournez jamais cet avertissement pour une copie obtenue ailleurs que sur ce dépôt.
 
+L'exécutable fourni est la version standard : il gère Dofus Unity et Dofus Retro, mais n'inclut pas la détection visuelle expérimentale des invitations Retro. Cette fonction facultative nécessite une installation depuis les sources avec les dépendances décrites dans le guide.
+
 ### Installation depuis les sources
 
 ### Prérequis
