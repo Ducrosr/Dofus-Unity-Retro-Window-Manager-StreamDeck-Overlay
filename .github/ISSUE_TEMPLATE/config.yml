@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Consignes de sécurité
+    url: https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager/blob/main/SECURITY.md
+    about: Ne publiez pas les détails sensibles d’une vulnérabilité dans une Issue.
+  - name: Guide d’installation
+    url: https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager/blob/main/docs/INSTALLATION.md
+    about: Vérifiez l’installation et les solutions de dépannage avant de signaler un bug.

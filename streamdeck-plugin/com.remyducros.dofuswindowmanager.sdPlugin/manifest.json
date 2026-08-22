@@ -1,0 +1,174 @@
+{
+    "Name": "Dofus Window Manager",
+    "Version": "0.4.1.0",
+    "Author": "Rémy Ducros",
+    "Actions": [
+        {
+            "Name": "Lancer / afficher",
+            "UUID": "com.remyducros.dofuswindowmanager.launch",
+            "Icon": "imgs/actions/launch/icon",
+            "Tooltip": "Lance Dofus Window Manager ou affiche sa fenêtre s’il est déjà ouvert.",
+            "Controllers": [
+                "Keypad"
+            ],
+            "UserTitleEnabled": false,
+            "States": [
+                {
+                    "Image": "imgs/actions/launch/key"
+                }
+            ],
+            "SupportedInMultiActions": false
+        },
+        {
+            "Name": "Personnage",
+            "UUID": "com.remyducros.dofuswindowmanager.character",
+            "Icon": "imgs/actions/character/icon",
+            "Tooltip": "Affiche un personnage et active sa fenêtre.",
+            "PropertyInspectorPath": "ui/character.html",
+            "Controllers": [
+                "Keypad"
+            ],
+            "UserTitleEnabled": false,
+            "States": [
+                {
+                    "Image": "imgs/actions/character/key",
+                    "TitleAlignment": "bottom",
+                    "TitleColor": "#DCE7F5",
+                    "FontSize": 16
+                },
+                {
+                    "Image": "imgs/actions/character/key-active",
+                    "TitleAlignment": "bottom",
+                    "TitleColor": "#FFFFFF",
+                    "FontSize": 16
+                }
+            ],
+            "SupportedInMultiActions": false
+        },
+        {
+            "Name": "Suivant",
+            "UUID": "com.remyducros.dofuswindowmanager.next",
+            "Icon": "imgs/actions/next/icon",
+            "Tooltip": "Active le personnage suivant.",
+            "Controllers": [
+                "Keypad"
+            ],
+            "UserTitleEnabled": false,
+            "States": [
+                {
+                    "Image": "imgs/actions/next/key"
+                }
+            ],
+            "SupportedInMultiActions": false
+        },
+        {
+            "Name": "Précédent",
+            "UUID": "com.remyducros.dofuswindowmanager.previous",
+            "Icon": "imgs/actions/previous/icon",
+            "Tooltip": "Active le personnage précédent.",
+            "Controllers": [
+                "Keypad"
+            ],
+            "UserTitleEnabled": false,
+            "States": [
+                {
+                    "Image": "imgs/actions/previous/key"
+                }
+            ],
+            "SupportedInMultiActions": false
+        },
+        {
+            "Name": "Monter le personnage",
+            "UUID": "com.remyducros.dofuswindowmanager.move-up",
+            "Icon": "imgs/actions/move-up/icon",
+            "Tooltip": "Monte la fenêtre Dofus actuelle d’une position dans l’ordre.",
+            "Controllers": [
+                "Keypad"
+            ],
+            "UserTitleEnabled": false,
+            "States": [
+                {
+                    "Image": "imgs/actions/move-up/key"
+                }
+            ],
+            "SupportedInMultiActions": false
+        },
+        {
+            "Name": "Descendre le personnage",
+            "UUID": "com.remyducros.dofuswindowmanager.move-down",
+            "Icon": "imgs/actions/move-down/icon",
+            "Tooltip": "Descend la fenêtre Dofus actuelle d’une position dans l’ordre.",
+            "Controllers": [
+                "Keypad"
+            ],
+            "UserTitleEnabled": false,
+            "States": [
+                {
+                    "Image": "imgs/actions/move-down/key"
+                }
+            ],
+            "SupportedInMultiActions": false
+        },
+        {
+            "Name": "Actualiser",
+            "UUID": "com.remyducros.dofuswindowmanager.refresh",
+            "Icon": "imgs/actions/refresh/icon",
+            "Tooltip": "Relance la détection des fenêtres Dofus.",
+            "Controllers": [
+                "Keypad"
+            ],
+            "UserTitleEnabled": false,
+            "States": [
+                {
+                    "Image": "imgs/actions/refresh/key"
+                }
+            ],
+            "SupportedInMultiActions": false
+        },
+        {
+            "Name": "Ignorer / réintégrer",
+            "UUID": "com.remyducros.dofuswindowmanager.toggle-ignore",
+            "Icon": "imgs/actions/toggle-ignore/icon",
+            "Tooltip": "Ignore ou réintègre la fenêtre Dofus actuellement au premier plan.",
+            "Controllers": [
+                "Keypad"
+            ],
+            "UserTitleEnabled": false,
+            "States": [
+                {
+                    "Image": "imgs/actions/toggle-ignore/key"
+                }
+            ],
+            "SupportedInMultiActions": false
+        }
+    ],
+    "Category": "Dofus Window Manager",
+    "CategoryIcon": "imgs/plugin/category-icon",
+    "CodePath": "bin/plugin.js",
+    "Description": "Affiche les personnages détectés par Dofus Window Manager et permet d'activer rapidement leur fenêtre.",
+    "Icon": "imgs/plugin/marketplace",
+    "SDKVersion": 3,
+    "Software": {
+        "MinimumVersion": "7.1"
+    },
+    "OS": [
+        {
+            "Platform": "windows",
+            "MinimumVersion": "10"
+        }
+    ],
+    "Nodejs": {
+        "Version": "24",
+        "Debug": "enabled"
+    },
+    "Profiles": [
+        {
+            "Name": "profiles/DofusWindowManager",
+            "DeviceType": 0,
+            "Readonly": false,
+            "DontAutoSwitchWhenInstalled": false,
+            "AutoInstall": true
+        }
+    ],
+    "UUID": "com.remyducros.dofuswindowmanager"
+}

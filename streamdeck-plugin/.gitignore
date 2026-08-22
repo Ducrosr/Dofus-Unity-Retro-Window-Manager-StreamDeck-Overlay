@@ -1,0 +1,4 @@
+node_modules/
+*.streamDeckPlugin
+!com.remyducros.dofuswindowmanager.streamDeckPlugin
+*.map

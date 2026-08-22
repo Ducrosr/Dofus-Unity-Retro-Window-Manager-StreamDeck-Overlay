@@ -1,0 +1,2839 @@
+from __future__ import annotations
+
+import json
+import os
+import queue
+import threading
+import time
+from datetime import datetime
+from pathlib import Path
+from tkinter import BooleanVar, Canvas, StringVar, Text, Toplevel, filedialog, messagebox, simpledialog
+from tkinter.ttk import (
+    Button as TtkButton,
+    Checkbutton as TtkCheckbutton,
+    Combobox,
+    Entry as TtkEntry,
+    Frame as TtkFrame,
+    Label as TtkLabel,
+    LabelFrame as TtkLabelFrame,
+    Scrollbar,
+    Spinbox,
+    Style,
+    Treeview,
+)
+
+from ttkthemes import ThemedTk
+
+from . import __version__
+from .models import GameWindow
+from .services.windows import (
+    extract_character_class,
+    extract_pseudo_retro,
+    extract_pseudo_unity,
+    list_game_windows,
+    list_visible_dofus_candidates,
+    suspect_privilege_mismatch,
+)
+from .services.focus import FocusError, focus_hwnd, get_foreground_hwnd, is_window
+from .services.game_mode import game_mode_label, normalize_game_mode, win_event_filter
+from .services.hotkeys_win import HotkeyManager, parse_hotkey
+from .services.streamdeck_bridge import StreamDeckBridge
+from .services.streamdeck_installer import open_streamdeck_plugin
+from .services.streamdeck_preview import STREAMDECK_ACTION_LABELS, STREAMDECK_PROFILE_LAYOUT, format_character_key
+from .services.streamdeck_state import build_streamdeck_windows, reconcile_streamdeck_order
+from .services.ui_scroll import vertical_scroll_needed, wheel_scroll_units
+from .services.configuration_backup import build_configuration_backup, parse_configuration_backup
+from .services.diagnostics import (
+    build_diagnostic_report,
+    format_activity,
+    installed_plugin_manifest,
+    read_manifest_version,
+    read_packaged_plugin_version,
+)
+from .services.tray import TrayController
+from .services.windows_startup import set_startup_enabled
+from .services.window_order import (
+    align_streamdeck_slots_with_managed,
+    move_column,
+    move_window,
+    move_window_by_delta,
+)
+from .services.window_table import window_table_values
+from .services.win32_enum import get_class_name, get_last_enum_error, get_window_title
+from .services.win_event_hook import WinEventHook
+
+# Optional: Retro in-game popup watcher (requires Windows Graphics Capture)
+# This feature can rotate/focus to the character window when a modal popup
+# (group invite / exchange request) appears inside the game UI.
+try:
+    from .retro_popup_watcher import RetroPopupWatcher, WatchedWindow, PopupEvent
+
+    _POPUP_WATCH_AVAILABLE = True
+except Exception:
+    RetroPopupWatcher = None  # type: ignore
+    WatchedWindow = None  # type: ignore
+    PopupEvent = None  # type: ignore
+    _POPUP_WATCH_AVAILABLE = False
+
+from .storage.settings import (
+    DEFAULT_WINDOW_COLUMN_ORDER,
+    MODERN_DARK_THEME,
+    Settings,
+    load_settings,
+    save_settings,
+)
+from .storage.profiles import Profile, delete_profile, list_profiles, load_profile, migrate_pickles, save_profile
+from .utils.paths import application_dir, ensure_dirs, resource_path
+from .utils.logging import AppLogger, install_excepthook
+
+
+WINDOW_COLUMN_TITLES = {
+    "class": "Classe",
+    "name": "Nom",
+    "alias": "Alias",
+    "hwnd": "ID fenêtre",
+}
+WINDOW_COLUMN_WIDTHS = {
+    "class": 120,
+    "name": 170,
+    "alias": 150,
+    "hwnd": 110,
+}
+MODERN_DARK_THEME_LABEL = "Sombre moderne (recommandé)"
+
+# -----------------------
+# Dark UI skin (robust)
+# -----------------------
+def apply_dark_theme(root, theme_name: str = MODERN_DARK_THEME) -> None:
+    """Apply DWM's modern dark theme or polish a legacy dark theme."""
+    t = (theme_name or "").strip().lower()
+
+    # Only apply our palette if user selected a dark-ish theme
+    want_dark = t in {"equilux", "black"} or "equilux" in t or "dark" in t
+    if not want_dark:
+        return
+
+    style = Style(root)
+    if t == MODERN_DARK_THEME:
+        try:
+            if MODERN_DARK_THEME not in style.theme_names():
+                style.theme_create(MODERN_DARK_THEME, parent="clam")
+            style.theme_use(MODERN_DARK_THEME)
+        except Exception:
+            style.theme_use("clam")
+        colors = {
+            "bg": "#0f1724",
+            "bg2": "#172131",
+            "bg3": "#223047",
+            "fg": "#e8eef7",
+            "muted": "#9aa9bd",
+            "line": "#33435b",
+            "accent": "#22b8f0",
+            "accent_hover": "#0ea5e9",
+            "accent_pressed": "#0284c7",
+        }
+    else:
+        try:
+            if hasattr(root, "set_theme"):
+                root.set_theme(t if t in {"equilux", "black"} else "equilux")
+        except Exception:
+            pass
+        colors = {
+            "bg": "#1e1f22",
+            "bg2": "#25262a",
+            "bg3": "#2b2d31",
+            "fg": "#e6e6e6",
+            "muted": "#b8b8b8",
+            "line": "#3a3f4b",
+            "accent": "#00aaff",
+            "accent_hover": "#0284c7",
+            "accent_pressed": "#0369a1",
+        }
+    C = colors
+
+    try:
+        root.configure(bg=C["bg"])
+    except Exception:
+        pass
+
+    # Classic Tk widgets (Text/Listbox) via option_add so it propagates.
+    try:
+        root.option_add("*Text.background", C["bg2"])
+        root.option_add("*Text.foreground", C["fg"])
+        root.option_add("*Text.insertBackground", C["fg"])
+        root.option_add("*Text.selectBackground", C["accent"])
+        root.option_add("*Text.selectForeground", "#ffffff")
+
+        root.option_add("*Listbox.background", C["bg2"])
+        root.option_add("*Listbox.foreground", C["fg"])
+        root.option_add("*Listbox.selectBackground", C["accent"])
+        root.option_add("*Listbox.selectForeground", "#ffffff")
+
+        root.option_add("*Toplevel.background", C["bg"])
+    except Exception:
+        pass
+
+    # Base style
+    style.configure(".",
+                    background=C["bg"],
+                    foreground=C["fg"],
+                    fieldbackground=C["bg2"],
+                    bordercolor=C["line"],
+                    lightcolor=C["line"],
+                    darkcolor=C["line"],
+                    troughcolor=C["bg2"],
+                    selectbackground=C["accent"],
+                    selectforeground="#ffffff",
+                    font=("Segoe UI", 10),
+                    )
+
+    style.configure("TFrame", background=C["bg"])
+    style.configure("TLabel", background=C["bg"], foreground=C["fg"])
+    style.configure("Header.TLabel", background=C["bg"], foreground=C["accent"], font=("Segoe UI", 16, "bold"))
+    style.configure("Muted.TLabel", background=C["bg"], foreground=C["muted"])
+
+    style.configure(
+        "TLabelframe",
+        background=C["bg"],
+        foreground=C["fg"],
+        bordercolor=C["line"],
+        borderwidth=1,
+        relief="solid",
+    )
+    style.configure("TLabelframe.Label", background=C["bg"], foreground=C["fg"])
+
+    style.configure("TButton",
+                    background=C["bg3"],
+                    foreground=C["fg"],
+                    borderwidth=1,
+                    focusthickness=0,
+                    padding=(11, 7))
+    style.map("TButton",
+              background=[("active", C["bg2"]), ("pressed", C["bg3"]), ("disabled", C["bg2"])],
+              foreground=[("disabled", C["muted"])])
+    style.configure("Accent.TButton", background=C["accent"], foreground="#ffffff")
+    style.map(
+        "Accent.TButton",
+        background=[("active", C["accent_hover"]), ("pressed", C["accent_pressed"])],
+    )
+    style.configure(
+        "StreamDeck.TButton",
+        background="#111827",
+        foreground=C["fg"],
+        padding=(6, 9),
+        font=("Segoe UI", 9, "bold"),
+    )
+    style.map(
+        "StreamDeck.TButton",
+        background=[("active", C["bg3"]), ("pressed", C["bg2"]), ("disabled", "#111827")],
+        foreground=[("disabled", C["muted"])],
+    )
+    style.configure("StreamDeckActive.TButton", background="#064e3b", foreground="#ecfdf5")
+    style.map("StreamDeckActive.TButton", background=[("active", "#047857"), ("pressed", "#065f46")])
+    style.configure("StreamDeckIgnored.TButton", background="#4c1d1d", foreground="#fecaca")
+    style.map("StreamDeckIgnored.TButton", background=[("active", "#7f1d1d"), ("pressed", "#991b1b")])
+
+    style.configure("TCheckbutton", background=C["bg"], foreground=C["fg"])
+    style.configure("TRadiobutton", background=C["bg"], foreground=C["fg"])
+
+    style.configure("TEntry", fieldbackground=C["bg2"], foreground=C["fg"], insertcolor=C["fg"])
+    style.configure("TCombobox", fieldbackground=C["bg2"], background=C["bg2"], foreground=C["fg"])
+    style.map("TCombobox",
+              fieldbackground=[("readonly", C["bg2"])],
+              foreground=[("readonly", C["fg"])])
+
+    style.configure("TNotebook", background=C["bg"], borderwidth=0)
+    style.configure("TNotebook.Tab", background=C["bg3"], foreground=C["fg"], padding=(10, 6))
+    style.map("TNotebook.Tab",
+              background=[("selected", C["bg2"]), ("active", C["bg2"])],
+              foreground=[("selected", C["fg"])])
+
+    style.configure("Treeview",
+                    background=C["bg2"],
+                    fieldbackground=C["bg2"],
+                    foreground=C["fg"],
+                    bordercolor=C["line"],
+                    rowheight=28)
+    style.map("Treeview",
+              background=[("selected", C["accent"])],
+              foreground=[("selected", "#ffffff")])
+    style.configure("Treeview.Heading", background=C["bg3"], foreground=C["fg"], relief="flat")
+    style.map("Treeview.Heading", background=[("active", C["bg2"])])
+
+    style.configure("TScrollbar", background=C["bg"], troughcolor=C["bg2"], bordercolor=C["bg"], arrowcolor=C["fg"])
+
+
+class WindowManagerApp:
+    def __init__(self, game_mode: str = "unity", *, start_minimized: bool = False):
+        self.dirs = ensure_dirs()
+        self.settings_path = self.dirs["root"] / "settings.json"
+        self.settings: Settings = load_settings(self.settings_path)
+
+        # Game mode: allow main.py to override, otherwise use last saved setting.
+        gm = normalize_game_mode(game_mode, self.settings.game_mode)
+        self.game_mode = gm
+        self.settings.game_mode = gm
+        self.game_label = game_mode_label(self.game_mode)
+
+        self.logger = AppLogger(
+            log_file=self.dirs["logs"] / "app.log",
+            actions_file=self.dirs["logs"] / "actions.log",
+        )
+        install_excepthook(self.logger)
+
+        # Ensure log files exist + useful startup info
+        try:
+            self.logger.info(
+                f"Starting Dofus Window Manager {__version__} | mode={self.game_mode} | data={self.dirs['root']}"
+            )
+            self.logger.action("App started")
+            if not _POPUP_WATCH_AVAILABLE:
+                self.logger.warn("PopupWatcher not available (missing windows-capture/numpy or unsupported OS)")
+        except Exception:
+            pass
+
+
+        # Migrate legacy pickles if present next to the executable/script.
+        legacy_formation = application_dir() / "Formation"
+        migrated = migrate_pickles(legacy_formation, self.dirs["profiles"])
+        if migrated:
+            self.logger.info(f"Migration .pkl -> JSON: {len(migrated)} profil(s) importé(s).")
+
+        # ---- State ----
+        self._all_windows: dict[int, GameWindow] = {}
+        self._managed_order: list[int] = []  # list of hwnd
+        self._ignored: set[int] = set()
+        self._streamdeck_order: list[int] = []  # stable slots, including ignored windows
+        self._streamdeck_preview_entries: list[dict[str, object]] = []
+        self.streamdeck_preview_window: Toplevel | None = None
+        self._streamdeck_preview_buttons: dict[int, TtkButton] = {}
+        self._streamdeck_preview_poll_job: str | None = None
+        self.rotation_index: int = 0
+        self.aliases: dict[str, str] = {}
+        self.desired_order_pseudos: list[str] = []  # current profile order
+
+        # Heuristics (fiabilité)
+        self._privilege_mismatch_suspected: bool = False
+        self._hotkey_dead_logged: bool = False
+
+        # Window tables and drag/drop state
+        self._window_column_order = list(self.settings.window_column_order or DEFAULT_WINDOW_COLUMN_ORDER)
+        self._dragged_managed_hwnd: int | None = None
+        self._column_drag_tree: Treeview | None = None
+        self._column_drag_source: str | None = None
+        self._column_drag_target: str | None = None
+        self._row_drag_preview_tree: Treeview | None = None
+        self._row_drag_preview_item: str | None = None
+
+        # ---- Threading ----
+        self._queue: "queue.Queue[object]" = queue.Queue()
+        self._stop_event = threading.Event()
+        self._refresh_inflight = False
+        self._refresh_again_requested = False
+        self._scan_revision = 0
+        self._game_mode_revision = 0
+        self.streamdeck_bridge: StreamDeckBridge | None = None
+        self._start_minimized = bool(start_minimized)
+        self._tray_notice_shown = False
+        self.tray = TrayController(resource_path("icons", "dofus.ico"))
+
+        # UI update debounce for event-driven updates
+        self._ui_update_pending = False
+
+        # ---- Performance ----
+        # Signature of last scanned windows (hwnd+title) to skip unnecessary UI rebuilds.
+        self._windows_sig: tuple[tuple[int, str], ...] = tuple()
+        # Debounce scan requests (helps when the user clicks refresh multiple times).
+        self._last_scan_monotonic: float = 0.0
+        self._min_scan_interval_sec: float = 0.35
+
+        # ---- Hotkeys ----
+        self.hotkeys = HotkeyManager()
+        self.hotkeys.start()
+
+        # ---- UI ----
+        startup_theme = "equilux" if self.settings.theme == MODERN_DARK_THEME else self.settings.theme
+        try:
+            self.root = ThemedTk(theme=startup_theme)
+        except Exception:
+            self.root = ThemedTk(theme="equilux")
+            self.settings.theme = MODERN_DARK_THEME
+        self.root.title(f"Dofus Window Manager {__version__} ({self.game_label})")
+        self.root.geometry("1040x760")
+        self.root.minsize(900, 620)
+        try:
+            self.root.iconbitmap(resource_path("icons", "dofus.ico"))
+        except Exception:
+            pass
+
+        # Apply dark skin (if a dark theme is selected)
+        apply_dark_theme(self.root, self.settings.theme)
+
+        self.search_var = StringVar()
+        self.game_mode_var = StringVar(value=self.game_label)
+        self.game_subtitle_var = StringVar(value=f"Mode {self.game_label} · gestion locale des fenêtres")
+        self.status_var = StringVar(value="")
+        self.last_update_time = StringVar(value="")
+        self.auto_refresh_enabled = BooleanVar(value=bool(self.settings.auto_refresh))
+        self.log_visible = BooleanVar(value=False)
+        self.selected_profile = StringVar(value=self.settings.last_profile or "")
+
+        # Style
+        self.style = Style(self.root)
+        try:
+            self.style.theme_use(self.settings.theme)
+        except Exception:
+            pass
+
+        self._build_ui()
+        self._register_hotkeys()
+        self.root.after(1000, self._check_hotkey_errors)
+
+        # Schedule polling of background queue
+        self.root.after(100, self._process_queue)
+
+        # Local, loopback-only bridge used by the Stream Deck plugin.
+        try:
+            bridge = StreamDeckBridge(self._dispatch_streamdeck_command)
+            bridge.start()
+            self.streamdeck_bridge = bridge
+            self._publish_streamdeck_state()
+            self._log(f"Stream Deck prêt sur http://127.0.0.1:{bridge.port}")
+        except OSError as exc:
+            self._log(f"Stream Deck indisponible (port local 32145 occupé) : {exc}")
+        except Exception as exc:
+            self._log(f"Stream Deck indisponible : {exc}")
+
+        # WinEventHook keeps the registry in sync without polling/scanning.
+        self.win_events: WinEventHook | None = None
+        self._start_win_event_hook()
+
+        # ---- Optional Retro in-game popup watcher (Groupe/Echange) ----
+        # Works best when windows are stacked (off-screen capture via Windows Graphics Capture).
+        self.popup_watcher = None
+        self._popup_event_pump_started = False
+        self._popup_queue = queue.SimpleQueue()
+        # Global cooldown to avoid ping-pong when multiple popups are detected at once
+        self._popup_global_cooldown_until = 0.0
+        self._popup_global_cooldown_sec = float(getattr(self.settings, "popup_watch_global_cooldown_sec", 2.0))
+        self._popup_watch_enabled = bool(getattr(self.settings, "popup_watch_enabled", False))
+
+        if self.game_mode == "retro" and _POPUP_WATCH_AVAILABLE and self._popup_watch_enabled:
+            try:
+                # Emit into a thread-safe queue; handled on the Tk thread.
+                self.popup_watcher = RetroPopupWatcher(
+                    emit=lambda evt: self._popup_queue.put(evt),
+                    max_fps_per_window=4.0,
+                    cooldown_sec=2.0,
+                )
+                self.popup_watcher.set_enabled(self._popup_watch_enabled)
+                self._ensure_popup_event_pump()
+            except Exception as e:
+                try:
+                    self.logger.error("PopupWatcher init failed", e)
+                except Exception:
+                    pass
+                self._log(f"PopupWatcher: impossible de démarrer ({e})")
+                self.popup_watcher = None
+
+
+        # Auto refresh timer
+        self._schedule_refresh()
+
+        # Initial refresh
+        self.refresh_windows()
+
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+        tray_started = self.tray.start(
+            show=lambda: self._queue.put(("tray", "show")),
+            refresh=lambda: self._queue.put(("tray", "refresh")),
+            quit_app=lambda: self._queue.put(("tray", "quit")),
+        )
+        if self._start_minimized:
+            if tray_started:
+                self.root.after_idle(self._hide_main_window)
+            else:
+                self._log("Zone de notification indisponible : l’application reste affichée.")
+
+    # ---------------------------- UI ----------------------------
+
+    def _build_ui(self):
+        viewport = TtkFrame(self.root)
+        viewport.pack(fill="both", expand=True)
+
+        self.main_canvas = Canvas(
+            viewport,
+            borderwidth=0,
+            highlightthickness=0,
+            background=self.root.cget("background"),
+        )
+        self.main_scrollbar = Scrollbar(viewport, orient="vertical", command=self.main_canvas.yview)
+        self.main_canvas.configure(yscrollcommand=self.main_scrollbar.set)
+        self.main_scrollbar.pack(side="right", fill="y")
+        self.main_canvas.pack(side="left", fill="both", expand=True)
+
+        self.main_content = TtkFrame(self.main_canvas)
+        self._main_canvas_window = self.main_canvas.create_window((0, 0), window=self.main_content, anchor="nw")
+        self.main_content.bind("<Configure>", self._on_main_content_configure)
+        self.main_canvas.bind("<Configure>", self._on_main_canvas_configure)
+        self.root.bind_all("<MouseWheel>", self._on_global_mousewheel, add="+")
+
+        header = TtkFrame(self.main_content)
+        header.pack(fill="x", padx=12, pady=(12, 6))
+
+        title_box = TtkFrame(header)
+        title_box.pack(side="left")
+        TtkLabel(title_box, text=f"Dofus Window Manager {__version__}", style="Header.TLabel").pack(anchor="w")
+        TtkLabel(
+            title_box,
+            textvariable=self.game_subtitle_var,
+            style="Muted.TLabel",
+        ).pack(anchor="w")
+
+        search_box = TtkFrame(header)
+        search_box.pack(side="right", fill="x", expand=True, padx=(30, 0))
+        TtkLabel(search_box, text="Rechercher").pack(anchor="w")
+        search_row = TtkFrame(search_box)
+        search_row.pack(fill="x", pady=(2, 0))
+        search = TtkEntry(search_row, textvariable=self.search_var)
+        search.pack(side="left", fill="x", expand=True)
+        search.bind("<KeyRelease>", lambda e: self.update_listboxes())
+        TtkButton(search_row, text="Rafraîchir", command=self.refresh_windows).pack(side="right", padx=(6, 0))
+
+        main = TtkFrame(self.main_content)
+        main.pack(fill="both", expand=True, padx=12, pady=(4, 10))
+
+        left = TtkFrame(main)
+        left.pack(side="left", fill="both", expand=True)
+
+        right = TtkFrame(main)
+        right.pack(side="right", fill="y", padx=(12, 0))
+
+        # Window tables
+        TtkLabel(left, text="Fenêtres gérées").pack(pady=(0, 5), anchor="w")
+        self.managed_tree = self._create_window_tree(left, height=10)
+        self.managed_tree.bind("<ButtonPress-1>", lambda event: self._on_window_tree_press(event, self.managed_tree), add="+")
+        self.managed_tree.bind(
+            "<B1-Motion>", lambda event: self._on_window_tree_motion(event, self.managed_tree), add="+"
+        )
+        self.managed_tree.bind(
+            "<ButtonRelease-1>", lambda event: self._on_window_tree_release(event, self.managed_tree), add="+"
+        )
+        TtkLabel(
+            left,
+            text="Glissez un personnage pour modifier l’ordre ; glissez un en-tête pour déplacer une colonne.",
+        ).pack(pady=(4, 0), anchor="w")
+
+        TtkLabel(left, text="Fenêtres ignorées").pack(pady=(10, 5), anchor="w")
+        self.ignored_tree = self._create_window_tree(left, height=5)
+        self.ignored_tree.bind("<ButtonPress-1>", lambda event: self._on_window_tree_press(event, self.ignored_tree), add="+")
+        self.ignored_tree.bind(
+            "<B1-Motion>", lambda event: self._on_window_tree_motion(event, self.ignored_tree), add="+"
+        )
+        self.ignored_tree.bind(
+            "<ButtonRelease-1>", lambda event: self._on_window_tree_release(event, self.ignored_tree), add="+"
+        )
+
+        # Right panel controls, grouped by frequency and purpose.
+        navigation = TtkLabelFrame(right, text="Navigation", padding=8)
+        navigation.pack(fill="x", pady=(0, 8))
+        navigation.columnconfigure(0, weight=1)
+        navigation.columnconfigure(1, weight=1)
+        TtkButton(navigation, text="← Précédent", command=lambda: self.rotate("backward")).grid(
+            row=0, column=0, sticky="ew", padx=(0, 3), pady=2
+        )
+        TtkButton(navigation, text="Suivant →", command=lambda: self.rotate("forward")).grid(
+            row=0, column=1, sticky="ew", padx=(3, 0), pady=2
+        )
+        TtkButton(navigation, text="↑ Monter", command=lambda: self.move_selected(-1)).grid(
+            row=1, column=0, sticky="ew", padx=(0, 3), pady=2
+        )
+        TtkButton(navigation, text="↓ Descendre", command=lambda: self.move_selected(1)).grid(
+            row=1, column=1, sticky="ew", padx=(3, 0), pady=2
+        )
+
+        selection = TtkLabelFrame(right, text="Fenêtre sélectionnée", padding=8)
+        selection.pack(fill="x", pady=(0, 8))
+        selection.columnconfigure(0, weight=1)
+        selection.columnconfigure(1, weight=1)
+        TtkButton(selection, text="Modifier l’alias…", command=self.rename_alias).grid(
+            row=0, column=0, columnspan=2, sticky="ew", pady=2
+        )
+        TtkLabel(
+            selection,
+            text=(
+                "Astuce : un élément (Terre, Feu, Eau, Air) ou un métier peut servir d’alias "
+                "pour distinguer des pseudos proches ou deux personnages de même classe."
+            ),
+            style="Muted.TLabel",
+            wraplength=235,
+            justify="left",
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(5, 7))
+        TtkButton(selection, text="Ignorer", command=self.ignore_selected).grid(
+            row=2, column=0, sticky="ew", padx=(0, 3), pady=2
+        )
+        TtkButton(selection, text="Réintégrer", command=self.unignore_selected).grid(
+            row=2, column=1, sticky="ew", padx=(3, 0), pady=2
+        )
+
+        profiles = TtkLabelFrame(right, text="Profils", padding=8)
+        profiles.pack(fill="x", pady=(0, 8))
+        profiles.columnconfigure(0, weight=1)
+        profiles.columnconfigure(1, weight=1)
+        self.profile_combo = Combobox(
+            profiles,
+            textvariable=self.selected_profile,
+            values=self._get_profiles(),
+            state="readonly",
+        )
+        self.profile_combo.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 4))
+        TtkButton(profiles, text="Charger", command=self.load_profile_selected).grid(
+            row=1, column=0, sticky="ew", padx=(0, 3), pady=2
+        )
+        TtkButton(profiles, text="Enregistrer…", command=self.save_profile_dialog).grid(
+            row=1, column=1, sticky="ew", padx=(3, 0), pady=2
+        )
+        TtkButton(profiles, text="Gérer les profils…", command=self.open_profile_manager).grid(
+            row=2, column=0, columnspan=2, sticky="ew", pady=2
+        )
+
+        application = TtkLabelFrame(right, text="Application", padding=8)
+        application.pack(fill="x")
+        mode_row = TtkFrame(application)
+        mode_row.pack(fill="x", pady=(1, 6))
+        TtkLabel(mode_row, text="Version de Dofus").pack(side="left")
+        self.game_mode_combo = Combobox(
+            mode_row,
+            textvariable=self.game_mode_var,
+            values=("Unity", "Retro"),
+            state="readonly",
+            width=9,
+        )
+        self.game_mode_combo.pack(side="right")
+        self.game_mode_combo.bind("<<ComboboxSelected>>", self._on_game_mode_selected)
+        TtkButton(application, text="Paramètres…", command=self.open_settings_window).pack(fill="x", pady=2)
+        TtkButton(application, text="Aperçu Stream Deck…", command=self.open_streamdeck_preview).pack(fill="x", pady=2)
+        TtkButton(application, text="Diagnostic…", command=self.open_diagnostics_window).pack(fill="x", pady=2)
+        TtkButton(
+            application,
+            text="Sauvegarder / restaurer…",
+            command=self.open_configuration_manager,
+        ).pack(fill="x", pady=2)
+        TtkButton(
+            application,
+            text="Installer le plugin Stream Deck",
+            command=self.install_streamdeck_plugin,
+            style="Accent.TButton",
+        ).pack(fill="x", pady=2)
+        TtkButton(application, text="Quitter", command=lambda: self.on_close(force=True)).pack(fill="x", pady=2)
+
+        # Status and logs
+        bottom = TtkFrame(self.main_content)
+        bottom.pack(fill="both", expand=False, padx=12, pady=(0, 10))
+
+        status_row = TtkFrame(bottom)
+        status_row.pack(fill="x")
+        TtkLabel(status_row, textvariable=self.status_var).pack(side="left", anchor="w")
+        TtkCheckbutton(
+            status_row,
+            text="Afficher le journal",
+            variable=self.log_visible,
+            command=self._toggle_log_visibility,
+        ).pack(side="right")
+
+        self.log_text = Text(bottom, height=7)
+        self.log_text.pack(fill="both", expand=True, pady=(5, 5))
+        self.log_text.pack_forget()
+
+        self.log_footer = TtkFrame(bottom)
+        self.log_footer.pack(fill="x", pady=(4, 0))
+        TtkCheckbutton(
+            self.log_footer,
+            text="Actualisation automatique",
+            variable=self.auto_refresh_enabled,
+            command=self._on_toggle_autorefresh,
+        ).pack(side="left")
+        TtkLabel(self.log_footer, textvariable=self.last_update_time, style="Muted.TLabel").pack(side="right")
+
+    def _on_main_content_configure(self, _event=None) -> None:
+        bounds = self.main_canvas.bbox("all")
+        if bounds is not None:
+            self.main_canvas.configure(scrollregion=bounds)
+
+    def _on_main_canvas_configure(self, event) -> None:
+        self.main_canvas.itemconfigure(self._main_canvas_window, width=event.width)
+
+    def _on_global_mousewheel(self, event):
+        widget = self.root.winfo_containing(event.x_root, event.y_root)
+        current = widget
+        inside_main_content = False
+        while current is not None:
+            if current is self.main_content:
+                inside_main_content = True
+            if isinstance(current, (Treeview, Text)):
+                return None
+            current = getattr(current, "master", None)
+
+        if not inside_main_content:
+            return None
+
+        units = wheel_scroll_units(event.delta)
+        first, last = self.main_canvas.yview()
+        if units and vertical_scroll_needed(first, last):
+            self.main_canvas.yview_scroll(units, "units")
+            return "break"
+        return None
+
+    def _toggle_log_visibility(self) -> None:
+        if self.log_visible.get():
+            self.log_text.pack(fill="both", expand=True, pady=(5, 5), before=self.log_footer)
+        else:
+            self.log_text.pack_forget()
+
+    def _create_window_tree(self, parent, *, height: int) -> Treeview:
+        container = TtkFrame(parent)
+        container.pack(fill="both", expand=True)
+
+        tree = Treeview(
+            container,
+            columns=DEFAULT_WINDOW_COLUMN_ORDER,
+            displaycolumns=self._window_column_order,
+            show="headings",
+            selectmode="browse",
+            height=height,
+        )
+        scrollbar = Scrollbar(container, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=scrollbar.set)
+        tree.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        for column in DEFAULT_WINDOW_COLUMN_ORDER:
+            tree.heading(column, text=WINDOW_COLUMN_TITLES[column])
+            tree.column(
+                column,
+                width=WINDOW_COLUMN_WIDTHS[column],
+                minwidth=70,
+                anchor="center" if column in {"class", "hwnd"} else "w",
+                stretch=column != "hwnd",
+            )
+        tree.tag_configure("active", foreground="#5eead4")
+        tree.tag_configure("drop_before", background="#164e63", foreground="#ffffff")
+        tree.tag_configure("drop_after", background="#155e75", foreground="#ffffff")
+        return tree
+
+    def _display_column_at(self, tree: Treeview, x: int) -> str | None:
+        right_edge = 0
+        for column in self._window_column_order:
+            right_edge += int(tree.column(column, "width"))
+            if x < right_edge:
+                return column
+        return None
+
+    def _on_window_tree_press(self, event, tree: Treeview):
+        self._clear_drag_previews()
+        region = tree.identify_region(event.x, event.y)
+        self._column_drag_tree = None
+        self._column_drag_source = None
+        self._dragged_managed_hwnd = None
+
+        if region == "heading":
+            column = self._display_column_at(tree, event.x)
+            if column:
+                self._column_drag_tree = tree
+                self._column_drag_source = column
+                self._set_drag_cursor(tree, "sb_h_double_arrow")
+                self._update_column_drag_preview(tree, column)
+            return
+
+        if tree is self.managed_tree and region in {"cell", "tree"}:
+            row = tree.identify_row(event.y)
+            if row:
+                try:
+                    self._dragged_managed_hwnd = int(row)
+                except ValueError:
+                    return
+                tree.selection_set(row)
+                self._set_drag_cursor(tree, "hand2")
+
+    @staticmethod
+    def _set_drag_cursor(tree: Treeview, cursor: str) -> None:
+        try:
+            tree.configure(cursor=cursor)
+        except Exception:
+            tree.configure(cursor="hand2" if cursor else "")
+
+    def _clear_column_drag_preview(self) -> None:
+        tree = self._column_drag_tree
+        if tree is not None:
+            for column in DEFAULT_WINDOW_COLUMN_ORDER:
+                tree.heading(column, text=WINDOW_COLUMN_TITLES[column])
+            self._set_drag_cursor(tree, "")
+        self._column_drag_target = None
+
+    def _update_column_drag_preview(self, tree: Treeview, target: str | None) -> None:
+        source = self._column_drag_source
+        if self._column_drag_tree is not tree or source is None:
+            return
+        for column in DEFAULT_WINDOW_COLUMN_ORDER:
+            tree.heading(column, text=WINDOW_COLUMN_TITLES[column])
+        tree.heading(source, text=f"↔ {WINDOW_COLUMN_TITLES[source]}")
+        self._column_drag_target = target
+        if target and target != source:
+            tree.heading(target, text=f"▸ {WINDOW_COLUMN_TITLES[target]}")
+            self.status_var.set(
+                f"Déposer « {WINDOW_COLUMN_TITLES[source]} » avant « {WINDOW_COLUMN_TITLES[target]} »."
+            )
+        else:
+            self.status_var.set(f"Déplacement de la colonne « {WINDOW_COLUMN_TITLES[source]} »…")
+
+    def _clear_row_drag_preview(self) -> None:
+        tree = self._row_drag_preview_tree
+        item = self._row_drag_preview_item
+        if tree is not None and item and tree.exists(item):
+            tags = tuple(tag for tag in tree.item(item, "tags") if tag not in {"drop_before", "drop_after"})
+            tree.item(item, tags=tags)
+        if tree is not None:
+            self._set_drag_cursor(tree, "")
+        self._row_drag_preview_tree = None
+        self._row_drag_preview_item = None
+
+    def _update_row_drag_preview(self, tree: Treeview, target: str, *, after: bool) -> None:
+        self._clear_row_drag_preview()
+        if target == str(self._dragged_managed_hwnd) or not tree.exists(target):
+            self._set_drag_cursor(tree, "hand2")
+            return
+        preview_tag = "drop_after" if after else "drop_before"
+        tags = tuple(tag for tag in tree.item(target, "tags") if tag not in {"drop_before", "drop_after"})
+        tree.item(target, tags=(*tags, preview_tag))
+        self._row_drag_preview_tree = tree
+        self._row_drag_preview_item = target
+        self._set_drag_cursor(tree, "hand2")
+        try:
+            target_hwnd = int(target)
+        except ValueError:
+            return
+        window = self._all_windows.get(target_hwnd)
+        name = (self.aliases.get(window.pseudo) or window.pseudo) if window else target
+        placement = "après" if after else "avant"
+        self.status_var.set(f"Déposer le personnage {placement} « {name} ».")
+
+    def _clear_drag_previews(self) -> None:
+        self._clear_row_drag_preview()
+        self._clear_column_drag_preview()
+
+    def _on_window_tree_motion(self, event, tree: Treeview):
+        if self._column_drag_tree is tree and self._column_drag_source:
+            self._update_column_drag_preview(tree, self._display_column_at(tree, event.x))
+            return
+        if tree is not self.managed_tree or self._dragged_managed_hwnd is None:
+            return
+        if event.y < 22:
+            tree.yview_scroll(-1, "units")
+        elif event.y > tree.winfo_height() - 22:
+            tree.yview_scroll(1, "units")
+        target = tree.identify_row(event.y)
+        if not target:
+            self._clear_row_drag_preview()
+            self._set_drag_cursor(tree, "hand2")
+            return
+        bounds = tree.bbox(target)
+        after = bool(bounds and event.y >= bounds[1] + bounds[3] / 2)
+        self._update_row_drag_preview(tree, target, after=after)
+
+    def _on_window_tree_release(self, event, tree: Treeview):
+        if self._column_drag_tree is tree and self._column_drag_source:
+            target_column = self._display_column_at(tree, event.x)
+            source_column = self._column_drag_source
+            self._clear_drag_previews()
+            self._column_drag_tree = None
+            self._column_drag_source = None
+            if target_column and target_column != source_column:
+                order = move_column(self._window_column_order, source_column, target_column)
+                self._apply_window_column_order(order, persist=True)
+                self._log("Ordre des colonnes modifié")
+            return
+
+        dragged_hwnd = self._dragged_managed_hwnd
+        target = tree.identify_row(event.y)
+        bounds = tree.bbox(target) if target else ()
+        after = bool(bounds and event.y >= bounds[1] + bounds[3] / 2)
+        self._clear_drag_previews()
+        self._set_drag_cursor(tree, "")
+        self._dragged_managed_hwnd = None
+        if tree is not self.managed_tree or dragged_hwnd is None:
+            return
+        if self.search_var.get().strip():
+            self._log("Glisser-déposer désactivé pendant un filtrage.")
+            self.update_listboxes()
+            return
+
+        if not target:
+            return
+        try:
+            target_hwnd = int(target)
+        except ValueError:
+            return
+        self._move_managed_window(dragged_hwnd, target_hwnd, after=after)
+
+    def _apply_window_column_order(self, order: list[str], *, persist: bool) -> None:
+        normalized = [column for column in order if column in DEFAULT_WINDOW_COLUMN_ORDER]
+        for column in DEFAULT_WINDOW_COLUMN_ORDER:
+            if column not in normalized:
+                normalized.append(column)
+        self._window_column_order = normalized
+        self.managed_tree.configure(displaycolumns=normalized)
+        self.ignored_tree.configure(displaycolumns=normalized)
+        if persist:
+            self.settings.window_column_order = list(normalized)
+            save_settings(self.settings_path, self.settings)
+
+    def _log(self, msg: str):
+        self.status_var.set(msg)
+        self.log_text.insert("end", msg + "\n")
+        self.log_text.see("end")
+        # keep it light
+        if int(self.log_text.index("end-1c").split(".")[0]) > 250:
+            self.log_text.delete("1.0", "80.0")
+        self.logger.action(msg)
+
+    # ---------------------------- Profiles ----------------------------
+
+    def _get_profiles(self):
+        return list_profiles(self.dirs["profiles"])
+
+    def _refresh_profile_combo(self):
+        self.profile_combo["values"] = self._get_profiles()
+
+    def save_profile_dialog(self):
+        current_name = self.selected_profile.get().strip()
+        name = simpledialog.askstring(
+            "Enregistrer le profil",
+            "Nom du profil :",
+            initialvalue=current_name,
+            parent=self.root,
+        )
+        if not name:
+            return
+        name = name.strip()
+        if name in self._get_profiles() and not messagebox.askyesno(
+            "Mettre à jour le profil",
+            f"Le profil « {name} » existe déjà. Remplacer son ordre et ses alias ?",
+            parent=self.root,
+        ):
+            return
+        order_pseudos = [self._all_windows[hwnd].pseudo for hwnd in self._managed_order if hwnd in self._all_windows]
+        saved_aliases = {pseudo: alias.strip() for pseudo, alias in self.aliases.items() if alias.strip()}
+        pr = Profile(name=name, order=order_pseudos, aliases=saved_aliases, created_at="", updated_at="")
+        self.desired_order_pseudos = list(order_pseudos)
+        save_profile(self.dirs["profiles"], pr)
+        self._log(f"Profil '{name}' enregistré")
+        self._refresh_profile_combo()
+        self.selected_profile.set(name)
+        self.settings.last_profile = name
+        save_settings(self.settings_path, self.settings)
+
+    def load_profile_selected(self):
+        name = self.selected_profile.get().strip()
+        if not name:
+            messagebox.showwarning("Charger profil", "Sélectionne un profil.")
+            return
+        try:
+            pr = load_profile(self.dirs["profiles"], name)
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible de charger: {e}")
+            return
+
+        self.aliases.clear()
+        self.aliases.update({pseudo: alias.strip() for pseudo, alias in pr.aliases.items() if alias.strip()})
+        self.desired_order_pseudos = list(pr.order)
+        self.apply_order_by_pseudo(pr.order)
+        self._log(f"Profil '{name}' chargé")
+        self.settings.last_profile = name
+        save_settings(self.settings_path, self.settings)
+        self.update_listboxes()
+
+    def delete_profile_selected(self):
+        name = self.selected_profile.get().strip()
+        if not name:
+            return
+        if not messagebox.askyesno("Confirmer", f"Supprimer le profil '{name}' ?"):
+            return
+        try:
+            delete_profile(self.dirs["profiles"], name)
+            self._log(f"Profil '{name}' supprimé")
+            self.selected_profile.set("")
+            self._refresh_profile_combo()
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Suppression impossible: {e}")
+
+    def export_profile_json(self):
+        name = self.selected_profile.get().strip()
+        if not name:
+            messagebox.showwarning("Exporter", "Sélectionne un profil.")
+            return
+        try:
+            pr = load_profile(self.dirs["profiles"], name)
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible de charger: {e}")
+            return
+        path = filedialog.asksaveasfilename(
+            title="Exporter le profil",
+            defaultextension=".json",
+            filetypes=[("JSON", "*.json")],
+            initialfile=f"{name}.json",
+        )
+        if not path:
+            return
+        Path(path).write_text(json_dump(pr.to_dict()), encoding="utf-8")
+        self._log(f"Profil exporté: {path}")
+
+    def import_profile_json(self):
+        path = filedialog.askopenfilename(title="Importer un profil", filetypes=[("JSON", "*.json")])
+        if not path:
+            return
+        try:
+            data = json_load(Path(path))
+            pr = Profile.from_dict(data)
+            if not pr.name:
+                pr.name = Path(path).stem
+            save_profile(self.dirs["profiles"], pr)
+            self._log(f"Profil importé: '{pr.name}'")
+            self._refresh_profile_combo()
+            self.selected_profile.set(pr.name)
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Import impossible: {e}")
+
+    def open_profile_manager(self) -> None:
+        win = Toplevel(self.root)
+        win.title("Gérer les profils")
+        win.transient(self.root)
+        win.grab_set()
+        win.resizable(False, False)
+
+        content = TtkFrame(win, padding=12)
+        content.pack(fill="both", expand=True)
+        content.columnconfigure(0, weight=1)
+        content.columnconfigure(1, weight=1)
+
+        TtkLabel(content, text="Profil sélectionné").grid(row=0, column=0, columnspan=2, sticky="w")
+        manager_combo = Combobox(
+            content,
+            textvariable=self.selected_profile,
+            values=self._get_profiles(),
+            state="readonly",
+            width=36,
+        )
+        manager_combo.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(3, 10))
+
+        TtkLabel(
+            content,
+            text=(
+                "Enregistrer conserve le profil dans l’application. "
+                "L’import et l’export JSON servent à transférer une copie vers un autre PC."
+            ),
+            style="Muted.TLabel",
+            wraplength=380,
+            justify="left",
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(0, 10))
+
+        def refresh_values() -> None:
+            values = self._get_profiles()
+            self._refresh_profile_combo()
+            manager_combo.configure(values=values)
+
+        def import_profile() -> None:
+            self.import_profile_json()
+            refresh_values()
+
+        def delete_selected_profile() -> None:
+            self.delete_profile_selected()
+            refresh_values()
+
+        TtkButton(content, text="Importer un JSON…", command=import_profile).grid(
+            row=3, column=0, sticky="ew", padx=(0, 3), pady=2
+        )
+        TtkButton(content, text="Exporter une copie…", command=self.export_profile_json).grid(
+            row=3, column=1, sticky="ew", padx=(3, 0), pady=2
+        )
+        TtkButton(content, text="Supprimer le profil", command=delete_selected_profile).grid(
+            row=4, column=0, columnspan=2, sticky="ew", pady=2
+        )
+        TtkButton(content, text="Fermer", command=win.destroy).grid(
+            row=5, column=0, columnspan=2, sticky="e", pady=(10, 0)
+        )
+
+    def install_streamdeck_plugin(self) -> None:
+        try:
+            open_streamdeck_plugin()
+        except FileNotFoundError as exc:
+            messagebox.showerror(
+                "Plugin Stream Deck introuvable",
+                f"Le paquet d’installation n’est pas inclus dans cette copie de l’application.\n\n{exc}",
+                parent=self.root,
+            )
+            return
+        except OSError as exc:
+            messagebox.showerror("Installation impossible", str(exc), parent=self.root)
+            return
+        except Exception as exc:
+            messagebox.showerror(
+                "Installation impossible",
+                f"Impossible d’ouvrir le paquet Stream Deck : {exc}",
+                parent=self.root,
+            )
+            return
+
+        self._log("Installation ou mise à jour du plugin Stream Deck ouverte")
+
+    def open_streamdeck_preview(self) -> None:
+        existing = self.streamdeck_preview_window
+        if existing is not None:
+            try:
+                if existing.winfo_exists():
+                    existing.deiconify()
+                    existing.lift()
+                    existing.focus_force()
+                    return
+            except Exception:
+                pass
+
+        win = Toplevel(self.root)
+        self.streamdeck_preview_window = win
+        self._streamdeck_preview_buttons = {}
+        win.title("Aperçu Stream Deck — profil 15 touches")
+        win.resizable(False, False)
+        win.transient(self.root)
+
+        content = TtkFrame(win, padding=14)
+        content.pack(fill="both", expand=True)
+        TtkLabel(content, text="Aperçu interactif du profil par défaut", style="Header.TLabel").pack(anchor="w")
+        TtkLabel(
+            content,
+            text=(
+                "Les huit touches centrales reprennent l’ordre actuel. Cliquez sur une touche pour tester son action ; "
+                "les réglages visuels personnalisés restent gérés par Stream Deck."
+            ),
+            style="Muted.TLabel",
+            wraplength=650,
+            justify="left",
+        ).pack(anchor="w", pady=(2, 12))
+
+        deck = TtkFrame(content)
+        deck.pack(fill="both", expand=True)
+        for column in range(5):
+            deck.columnconfigure(column, weight=1)
+
+        action_commands = {
+            "move-up": lambda: self._execute_preview_command("reorder", {"direction": "up"}),
+            "move-down": lambda: self._execute_preview_command("reorder", {"direction": "down"}),
+            "show": lambda: self._execute_preview_command("show", {}),
+            "toggle-ignore": lambda: self._execute_preview_command("toggle_ignore", {}),
+            "refresh": lambda: self._execute_preview_command("refresh", {}),
+            "previous": lambda: self._execute_preview_command("rotate", {"direction": "backward"}),
+            "next": lambda: self._execute_preview_command("rotate", {"direction": "forward"}),
+        }
+
+        for row_index, row in enumerate(STREAMDECK_PROFILE_LAYOUT):
+            for column_index, key in enumerate(row):
+                if isinstance(key, int):
+                    button = TtkButton(
+                        deck,
+                        text=f"Case {key}\nPersonnage\nindisponible",
+                        width=13,
+                        style="StreamDeck.TButton",
+                    )
+                    button.state(["disabled"])
+                    self._streamdeck_preview_buttons[key] = button
+                else:
+                    button = TtkButton(
+                        deck,
+                        text=STREAMDECK_ACTION_LABELS[key],
+                        command=action_commands[key],
+                        width=13,
+                        style="StreamDeck.TButton",
+                    )
+                button.grid(row=row_index, column=column_index, sticky="nsew", padx=4, pady=4, ipady=7)
+
+        TtkButton(content, text="Fermer", command=self._close_streamdeck_preview).pack(anchor="e", pady=(12, 0))
+        win.protocol("WM_DELETE_WINDOW", self._close_streamdeck_preview)
+
+        self._publish_streamdeck_state()
+        self._poll_streamdeck_preview()
+
+    def _close_streamdeck_preview(self) -> None:
+        win = self.streamdeck_preview_window
+        job = self._streamdeck_preview_poll_job
+        self._streamdeck_preview_poll_job = None
+        if win is not None and job is not None:
+            try:
+                win.after_cancel(job)
+            except Exception:
+                pass
+        self.streamdeck_preview_window = None
+        self._streamdeck_preview_buttons = {}
+        if win is not None:
+            try:
+                win.destroy()
+            except Exception:
+                pass
+
+    def _poll_streamdeck_preview(self) -> None:
+        win = self.streamdeck_preview_window
+        if win is None:
+            return
+        try:
+            if not win.winfo_exists():
+                return
+            self._refresh_streamdeck_preview()
+            self._streamdeck_preview_poll_job = win.after(750, self._poll_streamdeck_preview)
+        except Exception:
+            self._streamdeck_preview_poll_job = None
+
+    def _refresh_streamdeck_preview(self) -> None:
+        win = self.streamdeck_preview_window
+        if win is None:
+            return
+        try:
+            if not win.winfo_exists():
+                return
+        except Exception:
+            return
+
+        entries_by_slot = {
+            int(entry["slot"]): entry
+            for entry in self._streamdeck_preview_entries
+            if isinstance(entry.get("slot"), int)
+        }
+        foreground_hwnd = get_foreground_hwnd()
+        active_hwnd = foreground_hwnd if foreground_hwnd in self._all_windows else None
+        if active_hwnd is None and self._managed_order:
+            self.rotation_index %= len(self._managed_order)
+            active_hwnd = self._managed_order[self.rotation_index]
+
+        for slot, button in self._streamdeck_preview_buttons.items():
+            entry = entries_by_slot.get(slot)
+            if entry is None:
+                button.configure(
+                    text=f"Case {slot}\nPersonnage\nindisponible",
+                    style="StreamDeck.TButton",
+                    command=lambda: None,
+                )
+                button.state(["disabled"])
+                continue
+
+            hwnd = int(entry["hwnd"])
+            ignored = bool(entry.get("ignored"))
+            style = "StreamDeckActive.TButton" if hwnd == active_hwnd else "StreamDeckIgnored.TButton" if ignored else "StreamDeck.TButton"
+            position = entry.get("position")
+            button.configure(
+                text=format_character_key(
+                    int(position) if isinstance(position, int) else None,
+                    str(entry.get("pseudo") or entry.get("name") or ""),
+                    str(entry.get("character_class") or ""),
+                    str(entry.get("alias") or ""),
+                ),
+                style=style,
+                command=lambda target=hwnd: self._execute_preview_command("focus", {"hwnd": target}),
+            )
+            button.state(["!disabled"])
+
+    def _execute_preview_command(self, command: str, payload: dict[str, object]) -> None:
+        try:
+            result = self._execute_streamdeck_command(command, payload)
+        except Exception as exc:
+            result = {"ok": False, "error": str(exc)}
+        if not result.get("ok"):
+            messagebox.showwarning(
+                "Action Stream Deck impossible",
+                str(result.get("error") or "La commande n’a pas pu être exécutée."),
+                parent=self.streamdeck_preview_window or self.root,
+            )
+        self._refresh_streamdeck_preview()
+
+    def _diagnostic_rows(self) -> list[tuple[str, object]]:
+        bridge = self.streamdeck_bridge
+        bridge_running = bool(bridge and bridge.is_running)
+        installed_manifest = installed_plugin_manifest()
+        installed_version = read_manifest_version(installed_manifest)
+        bundled_package = Path(
+            resource_path(
+                "streamdeck-plugin",
+                "com.remyducros.dofuswindowmanager.streamDeckPlugin",
+            )
+        )
+        bundled_version = read_packaged_plugin_version(bundled_package)
+        return [
+            ("Version de l’application", __version__),
+            ("Mode de jeu", self.game_label),
+            ("Thème", self.settings.theme),
+            ("Profil actif", self.selected_profile.get().strip() or "aucun"),
+            ("Fenêtres gérées", len(self._managed_order)),
+            ("Fenêtres ignorées", len(self._ignored)),
+            ("Révision du scan", self._scan_revision),
+            ("API locale Stream Deck", f"active sur le port {bridge.port}" if bridge_running else "inactive"),
+            (
+                "Dernière activité Stream Deck",
+                format_activity(bridge.last_request_at if bridge else None),
+            ),
+            ("Plugin installé", installed_version or "non détecté"),
+            ("Plugin fourni avec l’application", bundled_version or "indisponible"),
+            ("WinEventHook", "actif" if self.win_events and self.win_events.is_running() else "inactif"),
+            (
+                "Privilèges incompatibles suspectés",
+                "oui" if self._privilege_mismatch_suspected else "non",
+            ),
+            ("Démarrage Windows", "activé" if self.settings.start_with_windows else "désactivé"),
+            ("Dossier des données", self.dirs["root"]),
+            ("Dossier des journaux", self.dirs["logs"]),
+        ]
+
+    def open_diagnostics_window(self) -> None:
+        win = Toplevel(self.root)
+        win.title("Diagnostic")
+        win.transient(self.root)
+        win.resizable(False, False)
+
+        content = TtkFrame(win, padding=12)
+        content.pack(fill="both", expand=True)
+        TtkLabel(content, text="État de Dofus Window Manager", style="Header.TLabel").pack(anchor="w")
+        TtkLabel(
+            content,
+            text="Ce rapport peut être copié pour faciliter le dépannage.",
+            style="Muted.TLabel",
+        ).pack(anchor="w", pady=(0, 8))
+
+        report = build_diagnostic_report(self._diagnostic_rows())
+        report_text = Text(content, width=78, height=20, wrap="word")
+        report_text.insert("1.0", report)
+        report_text.configure(state="disabled")
+        report_text.pack(fill="both", expand=True)
+
+        buttons = TtkFrame(content)
+        buttons.pack(fill="x", pady=(10, 0))
+
+        def copy_report() -> None:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(report)
+            self._log("Rapport de diagnostic copié")
+
+        def open_logs() -> None:
+            opener = getattr(os, "startfile", None)
+            if callable(opener):
+                opener(str(self.dirs["logs"]))
+                return
+            messagebox.showinfo("Journaux", str(self.dirs["logs"]), parent=win)
+
+        TtkButton(buttons, text="Copier le rapport", command=copy_report).pack(side="left")
+        TtkButton(buttons, text="Ouvrir les journaux", command=open_logs).pack(side="left", padx=(6, 0))
+        TtkButton(buttons, text="Fermer", command=win.destroy).pack(side="right")
+
+    def open_configuration_manager(self) -> None:
+        win = Toplevel(self.root)
+        win.title("Sauvegarde et restauration")
+        win.transient(self.root)
+        win.resizable(False, False)
+
+        content = TtkFrame(win, padding=12)
+        content.pack(fill="both", expand=True)
+        TtkLabel(content, text="Configuration de l’application", style="Header.TLabel").pack(anchor="w")
+        TtkLabel(
+            content,
+            text=(
+                "La sauvegarde contient les réglages, profils, alias et l’ordre actuel. "
+                "Les préférences internes du logiciel Stream Deck restent gérées par Stream Deck."
+            ),
+            style="Muted.TLabel",
+            wraplength=460,
+            justify="left",
+        ).pack(anchor="w", pady=(0, 12))
+
+        TtkButton(content, text="Exporter une sauvegarde complète…", command=self.export_configuration).pack(
+            fill="x", pady=3
+        )
+        TtkButton(content, text="Importer une sauvegarde…", command=self.import_configuration).pack(
+            fill="x", pady=3
+        )
+        TtkButton(content, text="Réinitialiser les réglages…", command=self.reset_settings).pack(
+            fill="x", pady=3
+        )
+        TtkButton(content, text="Fermer", command=win.destroy).pack(anchor="e", pady=(12, 0))
+
+    def export_configuration(self) -> None:
+        profiles: list[Profile] = []
+        for name in self._get_profiles():
+            try:
+                profiles.append(load_profile(self.dirs["profiles"], name))
+            except Exception as exc:
+                self._log(f"Profil ignoré pendant la sauvegarde ({name}) : {exc}")
+
+        self.settings.auto_refresh = bool(self.auto_refresh_enabled.get())
+        self.settings.last_profile = self.selected_profile.get().strip()
+        current_order = [
+            self._all_windows[hwnd].pseudo for hwnd in self._managed_order if hwnd in self._all_windows
+        ]
+        backup = build_configuration_backup(
+            self.settings,
+            profiles,
+            active_profile=self.selected_profile.get(),
+            current_order=current_order,
+            current_aliases=self.aliases,
+            app_version=__version__,
+        )
+        path = filedialog.asksaveasfilename(
+            title="Exporter la configuration",
+            defaultextension=".json",
+            filetypes=[("Sauvegarde DWM", "*.json")],
+            initialfile=f"DWM_sauvegarde_{datetime.now():%Y-%m-%d}.json",
+        )
+        if not path:
+            return
+        Path(path).write_text(json_dump(backup) + "\n", encoding="utf-8")
+        self._log(f"Configuration sauvegardée : {path}")
+
+    def import_configuration(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Importer une configuration",
+            filetypes=[("Sauvegarde DWM", "*.json"), ("Tous les fichiers", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            restored_settings, profiles, session = parse_configuration_backup(json_load(Path(path)))
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            messagebox.showerror("Sauvegarde invalide", str(exc), parent=self.root)
+            return
+
+        if not messagebox.askyesno(
+            "Restaurer la configuration",
+            (
+                f"Importer {len(profiles)} profil(s) et remplacer les réglages actuels ?\n\n"
+                "Les profils portant le même nom seront mis à jour. Les autres profils locaux seront conservés."
+            ),
+            parent=self.root,
+        ):
+            return
+
+        try:
+            set_startup_enabled(restored_settings.start_with_windows)
+        except OSError as exc:
+            restored_settings.start_with_windows = False
+            messagebox.showwarning(
+                "Démarrage Windows",
+                f"Le démarrage automatique n’a pas pu être restauré : {exc}",
+                parent=self.root,
+            )
+
+        for profile in profiles:
+            save_profile(self.dirs["profiles"], profile)
+
+        restored_settings.game_mode = restored_settings.game_mode or self.game_mode
+        self.settings = restored_settings
+        save_settings(self.settings_path, self.settings)
+        self.auto_refresh_enabled.set(self.settings.auto_refresh)
+        self._apply_window_column_order(list(self.settings.window_column_order or ()), persist=False)
+        self._refresh_profile_combo()
+
+        active_profile = str(session.get("active_profile") or "")
+        order = list(session.get("order") or [])
+        aliases = dict(session.get("aliases") or {})
+        self.selected_profile.set(active_profile)
+        self.aliases.clear()
+        self.aliases.update(aliases)
+        self.desired_order_pseudos = order
+        if order:
+            self.apply_order_by_pseudo(order)
+        self.update_listboxes()
+        self._register_hotkeys()
+        self._log(f"Configuration restaurée depuis {path}")
+        messagebox.showinfo(
+            "Configuration restaurée",
+            "La configuration est restaurée. Redémarrez l’application pour appliquer complètement le thème et les options de détection.",
+            parent=self.root,
+        )
+
+    def reset_settings(self) -> None:
+        if not messagebox.askyesno(
+            "Réinitialiser les réglages",
+            "Revenir aux réglages par défaut ? Les profils et alias enregistrés ne seront pas supprimés.",
+            parent=self.root,
+        ):
+            return
+        try:
+            set_startup_enabled(False)
+        except OSError:
+            pass
+        self.settings = Settings(game_mode=self.game_mode)
+        save_settings(self.settings_path, self.settings)
+        self.auto_refresh_enabled.set(self.settings.auto_refresh)
+        self._apply_window_column_order(list(self.settings.window_column_order or ()), persist=False)
+        self._log("Réglages réinitialisés")
+        messagebox.showinfo(
+            "Réglages réinitialisés",
+            "Les réglages par défaut seront entièrement appliqués au prochain démarrage.",
+            parent=self.root,
+        )
+
+    # ---------------------------- Windows refresh ----------------------------
+
+    def _on_game_mode_selected(self, _event=None) -> None:
+        requested_mode = normalize_game_mode(self.game_mode_var.get(), self.game_mode)
+        self.switch_game_mode(requested_mode)
+
+    def switch_game_mode(self, game_mode: str) -> bool:
+        """Switch Unity/Retro immediately without restarting the application."""
+        new_mode = normalize_game_mode(game_mode, self.game_mode)
+        if new_mode == self.game_mode:
+            self.game_mode_var.set(self.game_label)
+            return False
+
+        previous_label = self.game_label
+        self._stop_win_event_hook()
+        if self.popup_watcher is not None:
+            self._shutdown_popup_watcher()
+
+        self.game_mode = new_mode
+        self.game_label = game_mode_label(new_mode)
+        self.settings.game_mode = new_mode
+        self._game_mode_revision += 1
+        self.game_mode_var.set(self.game_label)
+        self.game_subtitle_var.set(f"Mode {self.game_label} · gestion locale des fenêtres")
+        self.root.title(f"Dofus Window Manager {__version__} ({self.game_label})")
+
+        # Window handles, ignored state and Stream Deck slots belong to the
+        # previous client generation. Profile aliases/order remain available
+        # and will be reapplied to the newly detected characters.
+        self._all_windows.clear()
+        self._managed_order.clear()
+        self._ignored.clear()
+        self._streamdeck_order.clear()
+        self.rotation_index = 0
+        self._windows_sig = tuple()
+        self.update_listboxes()
+        self._publish_streamdeck_state()
+
+        save_settings(self.settings_path, self.settings)
+        self._start_win_event_hook()
+        if self.game_mode == "retro" and self._popup_watch_enabled:
+            self._set_popup_watch_enabled(True)
+
+        self._log(f"Mode Dofus : {previous_label} → {self.game_label}")
+        if self._refresh_inflight:
+            self._refresh_again_requested = True
+        else:
+            self.refresh_windows(force=True)
+        return True
+
+    def _start_win_event_hook(self) -> None:
+        if not getattr(self.settings, "event_hook_enabled", True):
+            return
+        self._stop_win_event_hook()
+        try:
+            classes, keyword_map = win_event_filter(self.game_mode, self.settings.retro_title_keyword)
+            self.win_events = WinEventHook(
+                lambda evt, hwnd: self._queue.put(("wevt", evt, hwnd)),
+                class_names=classes,
+                title_keyword_by_class=keyword_map,
+            )
+            self.win_events.start()
+            error = self.win_events.get_last_error()
+            if error:
+                self._log(f"WinEventHook: {error}")
+        except Exception as exc:
+            self._log(f"WinEventHook: impossible de démarrer ({exc})")
+            self.win_events = None
+
+    def _stop_win_event_hook(self) -> None:
+        hook = getattr(self, "win_events", None)
+        if hook is not None:
+            try:
+                hook.stop()
+            except Exception:
+                pass
+        self.win_events = None
+
+    def refresh_windows(self, quiet: bool = False, force: bool = False) -> bool:
+        """Scan game windows in a background thread.
+
+        - quiet=True avoids extra logs (useful for auto-refresh).
+        - force=True bypasses debounce.
+        """
+        if self._refresh_inflight:
+            if force:
+                self._refresh_again_requested = True
+            return False
+
+        now = time.monotonic()
+        if (not force) and quiet:
+            if (now - self._last_scan_monotonic) < self._min_scan_interval_sec:
+                return False
+
+        self._last_scan_monotonic = now
+        self._refresh_inflight = True
+        mode_revision = self._game_mode_revision
+        scan_mode = self.game_mode
+        game_label = self.game_label
+        if not quiet:
+            self._log(f"Scan des fenêtres {game_label}...")
+
+        def worker():
+            try:
+                wins = list_game_windows(scan_mode, self.settings.retro_title_keyword, self.settings.retro_process_keyword)
+                enum_error = get_last_enum_error()
+                if not wins and enum_error:
+                    self._queue.put(("error", mode_revision, f"Erreur scan Win32: {enum_error}"))
+                else:
+                    self._queue.put(("windows", mode_revision, wins))
+                    if not wins:
+                        candidates = list_visible_dofus_candidates()
+                        if candidates:
+                            sample = "; ".join(
+                                f"{title} [classe={class_name or 'inconnue'}]"
+                                for _hwnd, title, class_name in candidates[:4]
+                            )
+                            self._queue.put(
+                                (
+                                    "notice",
+                                    mode_revision,
+                                    "Fenêtre(s) Dofus visible(s), mais non reconnue(s) par le mode "
+                                    f"{game_label}: {sample}",
+                                )
+                            )
+            except Exception as e:
+                self._queue.put(("error", mode_revision, f"Erreur scan: {e}"))
+
+        threading.Thread(target=worker, daemon=True).start()
+        return True
+
+    def _finish_refresh(self) -> None:
+        """Publish scan completion and run one explicitly queued refresh."""
+        self._refresh_inflight = False
+        self._scan_revision += 1
+        self._publish_streamdeck_state()
+        if self._refresh_again_requested:
+            self._refresh_again_requested = False
+            self.root.after(0, lambda: self.refresh_windows(quiet=True, force=True))
+
+    def _apply_windows(self, wins: list[GameWindow]):
+        # Update map
+        new_map = {w.hwnd: w for w in wins}
+        self._all_windows = new_map
+
+        # Compute a lightweight signature to detect whether the scan changed.
+        new_sig = tuple(sorted((w.hwnd, w.title) for w in wins))
+        unchanged = new_sig == self._windows_sig
+        self._windows_sig = new_sig
+
+        # If nothing changed, just update the timestamp and skip rebuilding the UI.
+        if unchanged:
+            self.last_update_time.set(datetime.now().strftime("Dernier scan: %H:%M:%S"))
+            return
+
+        # Heuristic: detect privilege mismatch (Dofus launched as admin but this tool isn't).
+        # This can make focus/hotkeys feel "random" on some setups.
+        try:
+            suspected = suspect_privilege_mismatch(list(new_map.keys()))
+        except Exception:
+            suspected = False
+        if suspected and not self._privilege_mismatch_suspected:
+            self._log(
+                "Avertissement: possible différence de privilèges (admin/non-admin). "
+                "Lance le manager au même niveau que Dofus si le focus ou les hotkeys semblent capricieux."
+            )
+        self._privilege_mismatch_suspected = bool(suspected)
+
+        # Remove disappeared
+        self._ignored = {hwnd for hwnd in self._ignored if hwnd in new_map}
+        self._managed_order = [hwnd for hwnd in self._managed_order if hwnd in new_map and hwnd not in self._ignored]
+
+        # Add new ones at end (managed)
+        for hwnd in new_map.keys():
+            if hwnd not in self._ignored and hwnd not in self._managed_order:
+                self._managed_order.append(hwnd)
+
+        # Apply current profile order (if loaded)
+        if self.desired_order_pseudos:
+            self.apply_order_by_pseudo(self.desired_order_pseudos)
+
+        self._streamdeck_order = reconcile_streamdeck_order(
+            self._streamdeck_order,
+            self._all_windows,
+            (*self._managed_order, *sorted(self._ignored)),
+        )
+
+        # Reset rotation index if out-of-range
+        if self._managed_order:
+            self.rotation_index %= len(self._managed_order)
+        else:
+            self.rotation_index = 0
+
+        self.last_update_time.set(datetime.now().strftime("Dernier scan: %H:%M:%S"))
+        self._log(f"{len(self._managed_order)} gérées, {len(self._ignored)} ignorées")
+        self.update_listboxes()
+        self._update_popup_watcher_targets()
+
+    def _schedule_refresh(self):
+        if self._stop_event.is_set():
+            return
+        if self.auto_refresh_enabled.get():
+            self.refresh_windows(quiet=True)
+        self.root.after(max(2, int(self.settings.refresh_seconds)) * 1000, self._schedule_refresh)
+
+    def _on_toggle_autorefresh(self):
+        self.settings.auto_refresh = bool(self.auto_refresh_enabled.get())
+        save_settings(self.settings_path, self.settings)
+
+    def _process_queue(self):
+        while True:
+            try:
+                item = self._queue.get_nowait()
+            except queue.Empty:
+                break
+
+            kind = item[0]
+            if kind == "windows":
+                if int(item[1]) == self._game_mode_revision:
+                    self._apply_windows(item[2])
+                self._finish_refresh()
+            elif kind == "error":
+                if int(item[1]) == self._game_mode_revision:
+                    self._log(str(item[2]))
+                self._finish_refresh()
+            elif kind == "notice":
+                if int(item[1]) == self._game_mode_revision:
+                    self._log(str(item[2]))
+            elif kind == "streamdeck":
+                response_queue = item[3]
+                try:
+                    result = self._execute_streamdeck_command(str(item[1]), item[2])
+                except Exception as exc:
+                    result = {"ok": False, "error": str(exc), "_status": 503}
+                try:
+                    response_queue.put_nowait(result)
+                except queue.Full:
+                    pass
+            elif kind == "wevt":
+                # Window event hook notifications (create/destroy/namechange)
+                try:
+                    _evt, _hwnd = item[1], int(item[2])
+                    self._apply_win_event(str(_evt), _hwnd)
+                except Exception:
+                    pass
+            elif kind == "tray":
+                action = str(item[1])
+                if action == "show":
+                    self._show_main_window()
+                elif action == "refresh":
+                    self.refresh_windows(force=True)
+                elif action == "quit":
+                    self.on_close(force=True)
+
+            self._queue.task_done()
+            if self._stop_event.is_set():
+                return
+
+        if not self._stop_event.is_set():
+            self.root.after(100, self._process_queue)
+
+    # ---------------------------- Stream Deck bridge ----------------------------
+
+    def _dispatch_streamdeck_command(self, command: str, payload: dict[str, object]) -> dict[str, object]:
+        """Queue a bridge command so every Tk/Win32 mutation stays on the UI thread."""
+        if self._stop_event.is_set():
+            return {"ok": False, "error": "L'application est en cours de fermeture.", "_status": 503}
+
+        response_queue: "queue.Queue[dict[str, object]]" = queue.Queue(maxsize=1)
+        self._queue.put(("streamdeck", command, payload, response_queue))
+        try:
+            return response_queue.get(timeout=2.0)
+        except queue.Empty as exc:
+            raise TimeoutError("Délai de réponse de l'interface dépassé.") from exc
+
+    def _execute_streamdeck_command(self, command: str, payload: dict[str, object]) -> dict[str, object]:
+        if command == "show":
+            self._show_main_window()
+            return {"ok": True}
+
+        if command == "refresh":
+            revision_before = self._scan_revision
+            was_inflight = self._refresh_inflight
+            started = self.refresh_windows(quiet=True, force=True)
+            target_revision = revision_before + (2 if was_inflight else 1)
+            return {
+                "ok": True,
+                "accepted": started or self._refresh_again_requested,
+                "target_revision": target_revision,
+            }
+
+        if command == "toggle_ignore":
+            return self._toggle_ignore_current_window()
+
+        if command == "reorder":
+            direction = str(payload.get("direction", "")).strip().lower()
+            if direction not in {"up", "down"}:
+                return {"ok": False, "error": "Direction invalide.", "_status": 400}
+            return self._reorder_current_window(direction)
+
+        if command == "rotate":
+            direction = str(payload.get("direction", "")).strip().lower()
+            if direction not in {"forward", "backward"}:
+                return {"ok": False, "error": "Direction invalide.", "_status": 400}
+            if not self.rotate(direction):
+                return {"ok": False, "error": "Aucune fenêtre ne peut être activée.", "_status": 409}
+            return {"ok": True, "direction": direction}
+
+        if command == "focus":
+            raw_hwnd = payload.get("hwnd")
+            slot: int | None = None
+            if raw_hwnd is not None:
+                if isinstance(raw_hwnd, bool):
+                    return {"ok": False, "error": "Identifiant de fenêtre invalide.", "_status": 400}
+                try:
+                    hwnd = int(raw_hwnd)
+                except (TypeError, ValueError):
+                    return {"ok": False, "error": "Identifiant de fenêtre invalide.", "_status": 400}
+                if hwnd not in self._all_windows:
+                    return {"ok": False, "error": "Le personnage attribué n'est plus disponible.", "_status": 410}
+                if hwnd in self._streamdeck_order:
+                    slot = self._streamdeck_order.index(hwnd) + 1
+            else:
+                raw_slot = payload.get("slot")
+                if isinstance(raw_slot, bool):
+                    return {"ok": False, "error": "Numéro de case invalide.", "_status": 400}
+                try:
+                    slot = int(raw_slot)
+                except (TypeError, ValueError):
+                    return {"ok": False, "error": "Numéro de case invalide.", "_status": 400}
+
+                if slot < 1 or slot > len(self._streamdeck_order):
+                    return {"ok": False, "error": f"La case {slot} n'est pas attribuée.", "_status": 404}
+                hwnd = self._streamdeck_order[slot - 1]
+
+            window = self._all_windows.get(hwnd)
+            if window is None or not is_window(hwnd):
+                self.refresh_windows(quiet=True, force=True)
+                return {"ok": False, "error": "La fenêtre n'existe plus.", "_status": 410}
+
+            try:
+                focus_hwnd(hwnd)
+            except FocusError as exc:
+                self._log(f"Stream Deck, focus échoué : {exc}")
+                return {"ok": False, "error": str(exc), "_status": 409}
+
+            if hwnd in self._managed_order:
+                self.rotation_index = self._managed_order.index(hwnd)
+            self.update_listboxes()
+            self._log(f"Stream Deck → {window.title}")
+            return {
+                "ok": True,
+                "slot": slot,
+                "hwnd": hwnd,
+                "name": self.aliases.get(window.pseudo) or window.pseudo,
+                "ignored": hwnd in self._ignored,
+            }
+
+        return {"ok": False, "error": "Commande inconnue.", "_status": 404}
+
+    def _show_main_window(self) -> None:
+        """Restore and foreground the manager when requested from Stream Deck."""
+        try:
+            self.root.deiconify()
+            self.root.state("normal")
+        except Exception:
+            pass
+        try:
+            self.root.lift()
+            self.root.attributes("-topmost", True)
+            self.root.after(180, lambda: self.root.attributes("-topmost", False))
+            self.root.focus_force()
+        except Exception:
+            pass
+
+    def _hide_main_window(self) -> None:
+        if not self.tray.is_running:
+            return
+        try:
+            self.root.withdraw()
+        except Exception:
+            return
+        if not self._tray_notice_shown:
+            self.tray.notify(
+                "L’application continue de gérer les fenêtres et le Stream Deck. "
+                "Utilisez l’icône de notification pour la rouvrir ou la quitter."
+            )
+            self._tray_notice_shown = True
+
+    def _reorder_current_window(self, direction: str) -> dict[str, object]:
+        foreground_hwnd = get_foreground_hwnd()
+        if foreground_hwnd in self._ignored:
+            return {
+                "ok": False,
+                "error": "La fenêtre actuelle est ignorée ; réintègre-la avant de modifier son ordre.",
+                "_status": 409,
+            }
+        if foreground_hwnd in self._managed_order:
+            hwnd = foreground_hwnd
+        elif self._managed_order:
+            self.rotation_index %= len(self._managed_order)
+            hwnd = self._managed_order[self.rotation_index]
+        else:
+            return {"ok": False, "error": "Aucune fenêtre Dofus gérée.", "_status": 404}
+
+        delta = -1 if direction == "up" else 1
+        new_order = move_window_by_delta(self._managed_order, hwnd, delta)
+        if new_order == self._managed_order:
+            boundary = "première" if direction == "up" else "dernière"
+            return {
+                "ok": False,
+                "error": f"Le personnage est déjà en {boundary} position.",
+                "_status": 409,
+            }
+
+        self._managed_order = new_order
+        self.rotation_index = self._managed_order.index(hwnd)
+        self._sync_streamdeck_order_with_managed()
+        self.update_listboxes()
+        self._update_popup_watcher_targets()
+
+        window = self._all_windows.get(hwnd)
+        name = (self.aliases.get(window.pseudo) or window.pseudo) if window else str(hwnd)
+        position = self.rotation_index + 1
+        self._log(f"Stream Deck : {name} déplacé en position {position}")
+        return {
+            "ok": True,
+            "direction": direction,
+            "hwnd": hwnd,
+            "name": name,
+            "position": position,
+        }
+
+    def _publish_streamdeck_state(self) -> None:
+        self._streamdeck_order = reconcile_streamdeck_order(
+            self._streamdeck_order,
+            self._all_windows,
+            (*self._managed_order, *sorted(self._ignored)),
+        )
+
+        foreground_hwnd = get_foreground_hwnd()
+        active_hwnd = foreground_hwnd if foreground_hwnd in self._all_windows else None
+        if active_hwnd is None and self._managed_order:
+            self.rotation_index %= len(self._managed_order)
+            active_hwnd = self._managed_order[self.rotation_index]
+
+        windows = build_streamdeck_windows(
+            self._all_windows,
+            self._streamdeck_order,
+            self._managed_order,
+            self._ignored,
+            self.aliases,
+            active_hwnd,
+        )
+        self._streamdeck_preview_entries = windows
+        self._refresh_streamdeck_preview()
+
+        bridge = self.streamdeck_bridge
+        if bridge is None:
+            return
+
+        bridge.update_snapshot(
+            {
+                "api_version": 1,
+                "app_version": __version__,
+                "game_mode": self.game_mode,
+                "scan_revision": self._scan_revision,
+                "windows": windows,
+            }
+        )
+
+    def _toggle_ignore_current_window(self) -> dict[str, object]:
+        foreground_hwnd = get_foreground_hwnd()
+        if foreground_hwnd in self._all_windows:
+            hwnd = foreground_hwnd
+        elif self._managed_order:
+            self.rotation_index %= len(self._managed_order)
+            hwnd = self._managed_order[self.rotation_index]
+        else:
+            return {"ok": False, "error": "Aucune fenêtre Dofus actuelle.", "_status": 404}
+
+        window = self._all_windows.get(hwnd)
+        if window is None:
+            return {"ok": False, "error": "La fenêtre Dofus n'existe plus.", "_status": 410}
+
+        if hwnd in self._ignored:
+            self._ignored.remove(hwnd)
+            if hwnd not in self._managed_order:
+                self._managed_order.append(hwnd)
+            self.rotation_index = self._managed_order.index(hwnd)
+            ignored = False
+            self._log(f"Stream Deck : fenêtre ré-ajoutée — {window.title}")
+        else:
+            if hwnd not in self._managed_order:
+                return {"ok": False, "error": "La fenêtre actuelle n'est pas gérée.", "_status": 409}
+            removed_index = self._managed_order.index(hwnd)
+            self._managed_order.remove(hwnd)
+            self._ignored.add(hwnd)
+            if self._managed_order:
+                if removed_index < self.rotation_index:
+                    self.rotation_index -= 1
+                self.rotation_index %= len(self._managed_order)
+            else:
+                self.rotation_index = 0
+            ignored = True
+            self._log(f"Stream Deck : fenêtre ignorée — {window.title}")
+
+        self._sync_streamdeck_order_with_managed()
+        self.update_listboxes()
+        self._update_popup_watcher_targets()
+        return {
+            "ok": True,
+            "ignored": ignored,
+            "hwnd": hwnd,
+            "name": window.pseudo,
+        }
+
+    # ---------------------------- WinEventHook sync ----------------------------
+
+    def _request_ui_update(self):
+        """Debounce UI rebuilds (listboxes) when many events arrive quickly."""
+        if self._ui_update_pending:
+            return
+        self._ui_update_pending = True
+        self.root.after(120, self._do_ui_update)
+
+    def _do_ui_update(self):
+        self._ui_update_pending = False
+        self.last_update_time.set(datetime.now().strftime("Maj: %H:%M:%S"))
+        self.update_listboxes()
+        self._update_popup_watcher_targets()
+
+    def _apply_win_event(self, evt: str, hwnd: int):
+        """Apply a single window event (create/destroy/namechange) incrementally.
+
+        This avoids full scans: we only query the single hwnd's class/title.
+        """
+        if self._stop_event.is_set():
+            return
+
+        evt = (evt or "").strip().lower()
+        if not hwnd:
+            return
+
+        changed_structure = False  # add/remove/reorder -> needs UI update
+
+        if evt == "destroy":
+            if hwnd in self._all_windows:
+                self._all_windows.pop(hwnd, None)
+                if hwnd in self._streamdeck_order:
+                    self._streamdeck_order.remove(hwnd)
+                if hwnd in self._ignored:
+                    self._ignored.discard(hwnd)
+                if hwnd in self._managed_order:
+                    try:
+                        self._managed_order.remove(hwnd)
+                    except ValueError:
+                        pass
+                changed_structure = True
+
+        elif evt in ("create", "namechange"):
+            # Validate window still exists
+            try:
+                if not is_window(hwnd):
+                    return
+            except Exception:
+                return
+
+            cn = get_class_name(hwnd)
+            title = get_window_title(hwnd)
+            if not title:
+                return
+
+            if self.game_mode == "unity":
+                if cn != "UnityWndClass":
+                    return
+                pseudo = extract_pseudo_unity(title)
+                gw = GameWindow(
+                    hwnd=hwnd,
+                    title=title,
+                    pseudo=pseudo,
+                    character_class=extract_character_class(title, pseudo),
+                )
+            else:
+                if cn != "Chrome_WidgetWin_1":
+                    return
+                kw = (self.settings.retro_title_keyword or "dofus retro v").lower().strip()
+                if kw and kw not in title.lower():
+                    return
+                pseudo = extract_pseudo_retro(title)
+                gw = GameWindow(
+                    hwnd=hwnd,
+                    title=title,
+                    pseudo=pseudo,
+                    character_class=extract_character_class(title, pseudo),
+                )
+
+            prev = self._all_windows.get(hwnd)
+            if prev is None:
+                self._all_windows[hwnd] = gw
+                if hwnd not in self._streamdeck_order:
+                    self._streamdeck_order.append(hwnd)
+                if hwnd not in self._ignored and hwnd not in self._managed_order:
+                    self._managed_order.append(hwnd)
+                changed_structure = True
+            elif prev.title != gw.title or prev.pseudo != gw.pseudo or prev.character_class != gw.character_class:
+                # A title change also requires updating an optional capture target.
+                self._all_windows[hwnd] = gw
+                changed_structure = True
+
+        else:
+            return
+
+        if not changed_structure:
+            return
+
+        # Keep rotation index valid
+        if self._managed_order:
+            self.rotation_index %= len(self._managed_order)
+        else:
+            self.rotation_index = 0
+
+        # Update scan signature (cheap enough at event rate)
+        try:
+            self._windows_sig = tuple(sorted((w.hwnd, w.title) for w in self._all_windows.values()))
+        except Exception:
+            pass
+
+        self._request_ui_update()
+
+    # ---------------------------- List operations ----------------------------
+
+    def _managed_hwnds_filtered(self) -> list[int]:
+        q = self.search_var.get().strip().lower()
+        if not q:
+            return list(self._managed_order)
+        out = []
+        for hwnd in self._managed_order:
+            w = self._all_windows.get(hwnd)
+            if not w:
+                continue
+            alias = self.aliases.get(w.pseudo, "")
+            if (
+                q in w.title.lower()
+                or q in w.pseudo.lower()
+                or q in (w.character_class or "").lower()
+                or (alias and q in alias.lower())
+            ):
+                out.append(hwnd)
+        return out
+
+    def update_listboxes(self):
+        selected_managed = set(self.managed_tree.selection())
+        selected_ignored = set(self.ignored_tree.selection())
+        managed_items = self.managed_tree.get_children()
+        ignored_items = self.ignored_tree.get_children()
+        if managed_items:
+            self.managed_tree.delete(*managed_items)
+        if ignored_items:
+            self.ignored_tree.delete(*ignored_items)
+
+        filtered = self._managed_hwnds_filtered()
+        active_hwnd = None
+        if self._managed_order:
+            self.rotation_index %= len(self._managed_order)
+            active_hwnd = self._managed_order[self.rotation_index]
+
+        for hwnd in filtered:
+            w = self._all_windows.get(hwnd)
+            if not w:
+                continue
+            alias = self.aliases.get(w.pseudo, "")
+            tags = ("active",) if hwnd == active_hwnd else ()
+            self.managed_tree.insert(
+                "",
+                "end",
+                iid=str(hwnd),
+                values=window_table_values(w, alias),
+                tags=tags,
+            )
+
+        ignored_order = [hwnd for hwnd in self._streamdeck_order if hwnd in self._ignored]
+        ignored_order.extend(hwnd for hwnd in sorted(self._ignored) if hwnd not in ignored_order)
+        for hwnd in ignored_order:
+            w = self._all_windows.get(hwnd)
+            if not w:
+                continue
+            self.ignored_tree.insert(
+                "",
+                "end",
+                iid=str(hwnd),
+                values=window_table_values(w, self.aliases.get(w.pseudo, "")),
+            )
+
+        managed_children = set(self.managed_tree.get_children())
+        managed_selection = next((item for item in selected_managed if item in managed_children), None)
+        if managed_selection is None and active_hwnd is not None and str(active_hwnd) in managed_children:
+            managed_selection = str(active_hwnd)
+        if managed_selection:
+            self.managed_tree.selection_set(managed_selection)
+            self.managed_tree.see(managed_selection)
+
+        ignored_children = set(self.ignored_tree.get_children())
+        ignored_selection = next((item for item in selected_ignored if item in ignored_children), None)
+        if ignored_selection:
+            self.ignored_tree.selection_set(ignored_selection)
+            self.ignored_tree.see(ignored_selection)
+
+        self._publish_streamdeck_state()
+
+    def _selected_managed_hwnd(self) -> int | None:
+        selection = self.managed_tree.selection()
+        if not selection:
+            return None
+        try:
+            return int(selection[0])
+        except ValueError:
+            return None
+
+    def _selected_ignored_hwnd(self) -> int | None:
+        selection = self.ignored_tree.selection()
+        if not selection:
+            return None
+        try:
+            return int(selection[0])
+        except ValueError:
+            return None
+
+    def rotate(self, direction: str) -> bool:
+        if not self._managed_order:
+            return False
+
+        previous_hwnd = self._managed_order[self.rotation_index % len(self._managed_order)]
+        delta = 1 if direction == "forward" else -1
+        attempts = 0
+        focused = False
+
+        while self._managed_order and attempts < max(1, len(self._managed_order) + 1):
+            self.rotation_index = (self.rotation_index + delta) % len(self._managed_order)
+            hwnd = self._managed_order[self.rotation_index]
+            w = self._all_windows.get(hwnd)
+
+            # Window may have disappeared between scans; prune and rescan.
+            if (not w) or (not is_window(hwnd)):
+                self._log("Fenêtre fermée détectée, mise à jour de la liste…")
+                try:
+                    self._managed_order.remove(hwnd)
+                except Exception:
+                    pass
+                self._ignored.discard(hwnd)
+                if not self._managed_order:
+                    self.rotation_index = 0
+                    self.update_listboxes()
+                    self.refresh_windows()
+                    return False
+                self.rotation_index %= len(self._managed_order)
+                attempts += 1
+                continue
+
+            try:
+                focus_hwnd(hwnd)
+                self._log(f"Focus → {w.title}")
+                focused = True
+            except FocusError as e:
+                if previous_hwnd in self._managed_order:
+                    self.rotation_index = self._managed_order.index(previous_hwnd)
+                msg = f"Focus échoué: {e}"
+                if self._privilege_mismatch_suspected and "bloqu" in str(e).lower():
+                    msg += " (Astuce: lance le manager au même niveau de privilèges que Dofus.)"
+                self._log(msg)
+            break
+
+        self.update_listboxes()
+        return focused
+
+    def ignore_selected(self):
+        hwnd = self._selected_managed_hwnd()
+        if hwnd is None:
+            # fallback: ignore current rotation
+            if not self._managed_order:
+                return
+            hwnd = self._managed_order[self.rotation_index]
+
+        if hwnd in self._managed_order:
+            self._managed_order.remove(hwnd)
+        self._ignored.add(hwnd)
+
+        if self._managed_order:
+            self.rotation_index %= len(self._managed_order)
+        else:
+            self.rotation_index = 0
+
+        self._sync_streamdeck_order_with_managed()
+        self._log("Fenêtre ignorée")
+        self.update_listboxes()
+        self._update_popup_watcher_targets()
+
+    def unignore_selected(self):
+        hwnd = self._selected_ignored_hwnd()
+        if hwnd is None:
+            return
+        if hwnd in self._ignored:
+            self._ignored.remove(hwnd)
+        if hwnd not in self._managed_order and hwnd in self._all_windows:
+            self._managed_order.append(hwnd)
+        self._sync_streamdeck_order_with_managed()
+        self._log("Fenêtre ré-ajoutée")
+        self.update_listboxes()
+        self._update_popup_watcher_targets()
+
+    def move_selected(self, delta: int):
+        hwnd = self._selected_managed_hwnd()
+        if hwnd is None:
+            return
+        try:
+            idx = self._managed_order.index(hwnd)
+        except ValueError:
+            return
+        new_idx = idx + delta
+        if not (0 <= new_idx < len(self._managed_order)):
+            return
+        self._managed_order.pop(idx)
+        self._managed_order.insert(new_idx, hwnd)
+
+        # keep rotation index consistent
+        if self.rotation_index == idx:
+            self.rotation_index = new_idx
+        elif idx < self.rotation_index <= new_idx:
+            self.rotation_index -= 1
+        elif new_idx <= self.rotation_index < idx:
+            self.rotation_index += 1
+
+        self._sync_streamdeck_order_with_managed()
+        self.update_listboxes()
+
+    def _move_managed_window(self, hwnd: int, target_hwnd: int, *, after: bool) -> None:
+        if hwnd not in self._managed_order or target_hwnd not in self._managed_order:
+            return
+        active_hwnd = self._managed_order[self.rotation_index] if self._managed_order else None
+        new_order = move_window(self._managed_order, hwnd, target_hwnd, after=after)
+        if new_order == self._managed_order:
+            self.update_listboxes()
+            return
+
+        self._managed_order = new_order
+        if active_hwnd in self._managed_order:
+            self.rotation_index = self._managed_order.index(active_hwnd)
+        self._sync_streamdeck_order_with_managed()
+        self.update_listboxes()
+        item = str(hwnd)
+        if item in self.managed_tree.get_children():
+            self.managed_tree.selection_set(item)
+            self.managed_tree.see(item)
+        self._log("Ordre des personnages modifié")
+
+    def _sync_streamdeck_order_with_managed(self) -> None:
+        self._streamdeck_order = align_streamdeck_slots_with_managed(
+            self._streamdeck_order,
+            self._managed_order,
+            self._ignored,
+        )
+
+    def rename_alias(self):
+        hwnd = self._selected_managed_hwnd()
+        if hwnd is None:
+            return
+        w = self._all_windows.get(hwnd)
+        if not w:
+            return
+        current = self.aliases.get(w.pseudo, "")
+        new = simpledialog.askstring(
+            "Alias facultatif",
+            (
+                f"Alias pour {w.pseudo} :\n\n"
+                "Exemples : Terre, Feu, Eau, Air, Mineur, Alchimiste…\n"
+                "Laissez le champ vide pour supprimer l’alias."
+            ),
+            initialvalue=current,
+            parent=self.root,
+        )
+        if new is None:
+            return
+        alias = new.strip()
+        if alias:
+            self.aliases[w.pseudo] = alias
+            self._log(f"Alias « {alias} » défini pour {w.pseudo}")
+        else:
+            self.aliases.pop(w.pseudo, None)
+            self._log(f"Alias supprimé pour {w.pseudo}")
+        self.update_listboxes()
+
+    def apply_order_by_pseudo(self, pseudos: list[str]):
+        # Build mapping pseudo -> list of hwnds
+        buckets: dict[str, list[int]] = {}
+        for hwnd in self._managed_order:
+            w = self._all_windows.get(hwnd)
+            if not w:
+                continue
+            buckets.setdefault(w.pseudo, []).append(hwnd)
+
+        new_order: list[int] = []
+        used = set()
+
+        for p in pseudos:
+            lst = buckets.get(p, [])
+            for hwnd in lst:
+                if hwnd not in used:
+                    new_order.append(hwnd)
+                    used.add(hwnd)
+
+        # Append remaining managed
+        for hwnd in self._managed_order:
+            if hwnd not in used:
+                new_order.append(hwnd)
+                used.add(hwnd)
+
+        self._managed_order = new_order
+        self.rotation_index = 0
+        self._sync_streamdeck_order_with_managed()
+
+    # ---------------------------- Settings ----------------------------
+
+    def open_settings_window(self):
+        win = Toplevel(self.root)
+        win.title("Paramètres")
+        win.transient(self.root)
+        win.grab_set()
+        win.resizable(False, False)
+
+        selected_theme_label = (
+            MODERN_DARK_THEME_LABEL if self.settings.theme == MODERN_DARK_THEME else self.settings.theme
+        )
+        theme_var = StringVar(value=selected_theme_label)
+        refresh_var = StringVar(value=str(self.settings.refresh_seconds))
+        hk_fwd = StringVar(value=self.settings.hotkeys.get("forward", "F5"))
+        hk_bwd = StringVar(value=self.settings.hotkeys.get("backward", "F6"))
+        hk_ign = StringVar(value=self.settings.hotkeys.get("ignore", "F7"))
+        hk_ref = StringVar(value=self.settings.hotkeys.get("refresh", "Ctrl+Alt+R"))
+        evt_hook = BooleanVar(value=bool(getattr(self.settings, "event_hook_enabled", True)))
+        popup_watch = BooleanVar(value=bool(getattr(self.settings, "popup_watch_enabled", False)))
+        minimize_to_tray = BooleanVar(value=bool(self.settings.minimize_to_tray))
+        start_with_windows = BooleanVar(value=bool(self.settings.start_with_windows))
+
+        # Tk/Ttk compatibility: on some Tk builds (e.g. Tk 8.7), the Tcl command `ttk::theme` does not exist.
+        # Use the official style interface instead.
+        try:
+            themes = list(self.style.theme_names())
+        except Exception:
+            try:
+                themes = list(self.root.tk.call("ttk::style", "theme", "names"))
+            except Exception:
+                themes = []
+        if MODERN_DARK_THEME not in themes:
+            themes.append(MODERN_DARK_THEME)
+        theme_labels = [
+            MODERN_DARK_THEME_LABEL,
+            *(sorted(theme for theme in set(themes) if theme != MODERN_DARK_THEME)),
+        ]
+
+        content = TtkFrame(win, padding=12)
+        content.pack(fill="both", expand=True)
+
+        general = TtkLabelFrame(content, text=f"Général · mode {self.game_label}", padding=10)
+        general.pack(fill="x", pady=(0, 8))
+        general.columnconfigure(1, weight=1)
+        TtkLabel(general, text="Thème").grid(row=0, column=0, sticky="w", padx=(0, 12), pady=4)
+        Combobox(general, values=theme_labels, state="readonly", textvariable=theme_var).grid(
+            row=0, column=1, sticky="ew", pady=4
+        )
+        TtkLabel(general, text="Intervalle d’actualisation").grid(
+            row=1, column=0, sticky="w", padx=(0, 12), pady=4
+        )
+        refresh_row = TtkFrame(general)
+        refresh_row.grid(row=1, column=1, sticky="w", pady=4)
+        Spinbox(refresh_row, from_=2, to=300, textvariable=refresh_var, width=6).pack(side="left")
+        TtkLabel(refresh_row, text=" secondes", style="Muted.TLabel").pack(side="left")
+        TtkCheckbutton(
+            general,
+            text="Réduire dans la zone de notification à la fermeture",
+            variable=minimize_to_tray,
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 2))
+        TtkCheckbutton(
+            general,
+            text="Lancer avec Windows, directement dans la zone de notification",
+            variable=start_with_windows,
+        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=2)
+
+        hotkeys = TtkLabelFrame(content, text="Raccourcis clavier", padding=10)
+        hotkeys.pack(fill="x", pady=(0, 8))
+        hotkeys.columnconfigure(1, weight=1)
+        hotkey_rows = (
+            ("Personnage suivant", hk_fwd),
+            ("Personnage précédent", hk_bwd),
+            ("Ignorer la fenêtre", hk_ign),
+            ("Actualiser la liste", hk_ref),
+        )
+        for row_index, (label, variable) in enumerate(hotkey_rows):
+            TtkLabel(hotkeys, text=label).grid(row=row_index, column=0, sticky="w", padx=(0, 12), pady=3)
+            TtkEntry(hotkeys, textvariable=variable, width=22).grid(
+                row=row_index, column=1, sticky="ew", pady=3
+            )
+        TtkLabel(
+            hotkeys,
+            text="Exemples : F5, Ctrl+Alt+R, Shift+F6 ou Win+F7",
+            style="Muted.TLabel",
+        ).grid(row=len(hotkey_rows), column=0, columnspan=2, sticky="w", pady=(6, 0))
+
+        detection = TtkLabelFrame(content, text="Détection des fenêtres", padding=10)
+        detection.pack(fill="x")
+        TtkCheckbutton(
+            detection,
+            text="Mise à jour en temps réel avec WinEventHook",
+            variable=evt_hook,
+        ).pack(anchor="w")
+
+        # This Retro-only option is intentionally absent in Unity mode.
+        if self.game_mode == "retro":
+            popup_label = "Rotation automatique sur les invitations de groupe ou d’échange"
+            if not _POPUP_WATCH_AVAILABLE:
+                popup_label += " — module optionnel absent"
+            popup_button = TtkCheckbutton(detection, text=popup_label, variable=popup_watch)
+            popup_button.pack(anchor="w", pady=(4, 0))
+            if not _POPUP_WATCH_AVAILABLE:
+                popup_button.configure(state="disabled")
+
+        def apply():
+            selected_theme = theme_var.get().strip()
+            new_theme = MODERN_DARK_THEME if selected_theme == MODERN_DARK_THEME_LABEL else selected_theme
+            new_theme = new_theme or MODERN_DARK_THEME
+            try:
+                if new_theme == MODERN_DARK_THEME:
+                    apply_dark_theme(self.root, new_theme)
+                else:
+                    self.style.theme_use(new_theme)
+                    apply_dark_theme(self.root, new_theme)
+                self.settings.theme = new_theme
+            except Exception:
+                messagebox.showwarning("Thème", f"Thème non disponible: {new_theme}")
+
+            try:
+                sec = int(refresh_var.get())
+                self.settings.refresh_seconds = max(2, min(300, sec))
+            except Exception:
+                self.settings.refresh_seconds = 10
+
+            # Validate hotkeys early (gives immediate feedback)
+            fwd = hk_fwd.get().strip() or "F5"
+            bwd = hk_bwd.get().strip() or "F6"
+            ign = hk_ign.get().strip() or "F7"
+            ref = hk_ref.get().strip() or "Ctrl+Alt+R"
+            try:
+                parse_hotkey(fwd)
+                parse_hotkey(bwd)
+                parse_hotkey(ign)
+                parse_hotkey(ref)
+            except ValueError as e:
+                messagebox.showerror("Hotkeys", str(e))
+                return
+
+            self.settings.hotkeys["forward"] = fwd
+            self.settings.hotkeys["backward"] = bwd
+            self.settings.hotkeys["ignore"] = ign
+            self.settings.hotkeys["refresh"] = ref
+
+            self.settings.event_hook_enabled = bool(evt_hook.get())
+            requested_startup = bool(start_with_windows.get())
+            if requested_startup != self.settings.start_with_windows:
+                try:
+                    set_startup_enabled(requested_startup)
+                except OSError as exc:
+                    messagebox.showerror("Démarrage Windows", str(exc), parent=win)
+                    return
+            self.settings.start_with_windows = requested_startup
+            self.settings.minimize_to_tray = bool(minimize_to_tray.get())
+
+            # Keep the remembered Retro preference untouched while configuring Unity.
+            if self.game_mode == "retro":
+                self._set_popup_watch_enabled(bool(popup_watch.get()))
+
+            # Start/stop WinEventHook immediately for convenience.
+            if self.settings.event_hook_enabled:
+                self._start_win_event_hook()
+            else:
+                self._stop_win_event_hook()
+
+            try:
+                self._register_hotkeys()
+                # If Windows refuses a hotkey (already in use, etc.), show it quickly.
+                self.root.after(250, self._report_hotkey_error_popup)
+            except Exception as e:
+                messagebox.showerror("Hotkeys", f"Impossible d'appliquer les hotkeys: {e}")
+                return
+
+            save_settings(self.settings_path, self.settings)
+            self._log("Paramètres appliqués")
+            win.destroy()
+
+        buttons = TtkFrame(content)
+        buttons.pack(fill="x", pady=(10, 0))
+        TtkButton(buttons, text="Annuler", command=win.destroy).pack(side="right")
+        TtkButton(buttons, text="Appliquer", command=apply, style="Accent.TButton").pack(
+            side="right", padx=(0, 6)
+        )
+
+    def _report_hotkey_error_popup(self):
+        try:
+            err = self.hotkeys.consume_last_error()
+            if err:
+                messagebox.showwarning("Hotkeys", err)
+        except Exception:
+            pass
+
+    # ---------------------------- Popup watcher (Retro) ----------------------------
+
+    def _set_popup_watch_enabled(self, enabled: bool):
+        """Enable/disable the Retro in-game popup watcher."""
+        self._popup_watch_enabled = bool(enabled)
+        try:
+            self.settings.popup_watch_enabled = self._popup_watch_enabled
+        except Exception:
+            pass
+
+        if self.game_mode != "retro":
+            return
+
+        # Lazy-init if user enables it later
+        if self._popup_watch_enabled and self.popup_watcher is None and _POPUP_WATCH_AVAILABLE:
+            try:
+                self.popup_watcher = RetroPopupWatcher(
+                    emit=lambda evt: self._popup_queue.put(evt),
+                    max_fps_per_window=4.0,
+                    cooldown_sec=2.0,
+                )
+                self.popup_watcher.set_enabled(True)
+                self._ensure_popup_event_pump()
+            except Exception as e:
+                try:
+                    self.logger.error("PopupWatcher init failed", e)
+                except Exception:
+                    pass
+                self._log(f"PopupWatcher: impossible de démarrer ({e})")
+                self.popup_watcher = None
+                return
+
+        if self.popup_watcher is not None:
+            try:
+                self.popup_watcher.set_enabled(self._popup_watch_enabled)
+            except Exception:
+                pass
+            if self._popup_watch_enabled:
+                self._update_popup_watcher_targets()
+            else:
+                # Release Graphics Capture sessions while the option is disabled.
+                try:
+                    self.popup_watcher.update_targets([])
+                except Exception:
+                    pass
+            try:
+                self._log(f"PopupWatch enabled: {self._popup_watch_enabled}")
+            except Exception:
+                pass
+
+    def _ensure_popup_event_pump(self) -> None:
+        if self._popup_event_pump_started:
+            return
+        self._popup_event_pump_started = True
+        self.root.after(50, self._process_popup_events)
+
+    def _shutdown_popup_watcher(self) -> None:
+        watcher = self.popup_watcher
+        self.popup_watcher = None
+        if watcher is None:
+            return
+        try:
+            watcher.shutdown()
+        except Exception:
+            pass
+
+    def _update_popup_watcher_targets(self):
+        """Update the watcher target windows (managed order)."""
+        if self.popup_watcher is None:
+            return
+        if not getattr(self, "_popup_watch_enabled", False):
+            # Keep targets untouched while disabled to avoid capture churn.
+            return
+
+        targets = []
+        for hwnd in list(self._managed_order):
+            if hwnd in self._ignored:
+                continue
+            w = self._all_windows.get(hwnd)
+            if not w:
+                continue
+
+            # Prefer the current Win32 title; fall back to the cached title.
+            title = (get_window_title(int(hwnd)) or w.title or "").strip()
+
+            if not title:
+                continue
+
+            targets.append(WatchedWindow(hwnd=int(hwnd), title=title))
+
+        try:
+            self.popup_watcher.update_targets(targets)
+            # Keep a short target summary in the UI log for diagnostics.
+            sample = ", ".join([t.title for t in targets[:3]])
+            more = " ..." if len(targets) > 3 else ""
+            self._log(f"PopupWatch targets: {len(targets)} [{sample}{more}]")
+        except Exception as e:
+            try:
+                self._log(f"PopupWatch update_targets FAILED: {repr(e)}")
+            except Exception:
+                pass
+            try:
+                self.logger.error("PopupWatch update_targets failed", e)
+            except Exception:
+                pass
+
+    def _process_popup_events(self):
+        """Poll popup events emitted by the watcher; runs on Tk thread."""
+        # If app is closing, stop polling
+        if self._stop_event.is_set():
+            return
+
+        while True:
+            try:
+                evt = self._popup_queue.get_nowait()
+            except Exception:
+                break
+
+            try:
+                self.logger.action(f"Popup detected -> focusing | hwnd={evt.hwnd} | title={evt.title}")
+            except Exception:
+                pass
+
+            try:
+                self._handle_popup_event(evt)
+            except Exception:
+                pass
+
+        # keep polling
+        self.root.after(50, self._process_popup_events)
+
+    def _handle_popup_event(self, evt: PopupEvent) -> None:
+        if not self._popup_watch_enabled:
+            return
+
+        hwnd = int(evt.hwnd)
+        if hwnd not in self._managed_order or hwnd in self._ignored:
+            return
+
+        # Avoid ping-pong when several clients display a popup together.
+        now = time.monotonic()
+        if now < self._popup_global_cooldown_until:
+            return
+
+        try:
+            self.rotation_index = self._managed_order.index(hwnd)
+            focus_hwnd(hwnd)
+            self._popup_global_cooldown_until = now + self._popup_global_cooldown_sec
+            self.update_listboxes()
+            self._log(f"Popup détecté → focus {evt.title}")
+        except (FocusError, ValueError) as exc:
+            self._log(f"PopupWatch focus échoué: {exc}")
+
+    def _register_hotkeys(self):
+        # IDs must be stable
+        try:
+            self.hotkeys.set_hotkey(1, self.settings.hotkeys.get("forward", "F5"), lambda: self.root.after(0, lambda: self.rotate("forward")))
+            self.hotkeys.set_hotkey(2, self.settings.hotkeys.get("backward", "F6"), lambda: self.root.after(0, lambda: self.rotate("backward")))
+            self.hotkeys.set_hotkey(3, self.settings.hotkeys.get("ignore", "F7"), lambda: self.root.after(0, self.ignore_selected))
+            self.hotkeys.set_hotkey(4, self.settings.hotkeys.get("refresh", "Ctrl+Alt+R"), lambda: self.root.after(0, lambda: self.refresh_windows(quiet=True, force=True)))
+            self._log(
+                f"Hotkeys: {self.settings.hotkeys.get('forward')} / {self.settings.hotkeys.get('backward')} / {self.settings.hotkeys.get('ignore')} / {self.settings.hotkeys.get('refresh')}"
+            )
+        except Exception as e:
+            self._log(f"Hotkeys non appliqués: {e}")
+
+    def _check_hotkey_errors(self):
+        if self._stop_event.is_set():
+            return
+
+        # Watchdog: restart the listener if it stopped.
+        try:
+            if not self.hotkeys.is_alive():
+                if not self._hotkey_dead_logged:
+                    self._log("Hotkeys: listener arrêté, redémarrage…")
+                    self._hotkey_dead_logged = True
+                self.hotkeys.start()
+                self._register_hotkeys()
+            else:
+                self._hotkey_dead_logged = False
+        except Exception:
+            pass
+        try:
+            err = self.hotkeys.consume_last_error()
+            if err:
+                self._log(f"Hotkeys: {err}")
+        except Exception:
+            pass
+        self.root.after(1000, self._check_hotkey_errors)
+
+# ---------------------------- Lifecycle ----------------------------
+
+    def on_close(self, *, force: bool = False):
+        if not force and self.settings.minimize_to_tray and self.tray.is_running:
+            self._hide_main_window()
+            return
+
+        self._stop_event.set()
+        try:
+            self.settings.auto_refresh = bool(self.auto_refresh_enabled.get())
+            self.settings.last_profile = self.selected_profile.get().strip()
+            save_settings(self.settings_path, self.settings)
+        except Exception:
+            pass
+
+        try:
+            if self.streamdeck_bridge is not None:
+                self.streamdeck_bridge.stop()
+        except Exception:
+            pass
+
+        try:
+            self.hotkeys.stop()
+        except Exception:
+            pass
+
+        self._stop_win_event_hook()
+        self._shutdown_popup_watcher()
+
+        self.tray.stop()
+
+        self.root.destroy()
+
+
+    def run(self):
+        self.root.mainloop()
+
+
+# -------- JSON helpers (avoid unicode issues) --------
+
+
+def json_dump(obj: object) -> str:
+    return json.dumps(obj, indent=2, ensure_ascii=False)
+
+
+def json_load(path: Path) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def run(game_mode: str = "unity", *, start_minimized: bool = False) -> None:
+    app = WindowManagerApp(game_mode=game_mode, start_minimized=start_minimized)
+    # Auto-load last profile if available
+    last = app.selected_profile.get().strip()
+    if last:
+        try:
+            pr = load_profile(app.dirs["profiles"], last)
+            app.aliases.update(pr.aliases)
+            app.desired_order_pseudos = list(pr.order)
+            app._log(f"Profil auto-chargé: '{last}'")
+        except Exception:
+            pass
+    app.run()

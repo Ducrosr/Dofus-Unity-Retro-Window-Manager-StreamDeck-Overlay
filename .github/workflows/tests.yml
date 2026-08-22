@@ -1,0 +1,63 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - main
+      - "codex/**"
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Application Python
+    runs-on: windows-latest
+    steps:
+      - name: Récupérer les sources
+        uses: actions/checkout@v4
+
+      - name: Installer Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installer les dépendances
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Exécuter les tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Contrôler le code
+        run: python -m ruff check .
+
+  streamdeck:
+    name: Plugin Stream Deck
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: streamdeck-plugin
+    steps:
+      - name: Récupérer les sources
+        uses: actions/checkout@v4
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: streamdeck-plugin/package-lock.json
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Exécuter les tests
+        run: npm test
+
+      - name: Contrôler TypeScript
+        run: npm run typecheck
+
+      - name: Compiler le plugin
+        run: npm run build

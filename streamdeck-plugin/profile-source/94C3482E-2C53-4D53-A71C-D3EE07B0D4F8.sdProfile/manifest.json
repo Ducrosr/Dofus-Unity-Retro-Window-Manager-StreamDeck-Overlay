@@ -1,0 +1,15 @@
+{
+    "Device": {
+        "Model": "20GAA9901",
+        "UUID": ""
+    },
+    "Name": "Dofus Window Manager",
+    "Pages": {
+        "Current": "feeb2543-a68d-4ad0-949a-a331dcbb3fbd",
+        "Default": "fc13f4f8-4e56-4d38-b2ca-91764e3b18c9",
+        "Pages": [
+            "feeb2543-a68d-4ad0-949a-a331dcbb3fbd"
+        ]
+    },
+    "Version": "2.0"
+}

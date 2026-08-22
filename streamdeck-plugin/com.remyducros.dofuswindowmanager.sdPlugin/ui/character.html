@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="fr">
+	<head>
+		<title>Personnage Dofus</title>
+		<meta charset="utf-8" />
+		<script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
+		<style>
+			.hint {
+				color: #b7b7b7;
+				font:
+					12px/1.4 system-ui,
+					sans-serif;
+				margin: 12px;
+			}
+		</style>
+	</head>
+	<body>
+		<sdpi-item label="Personnage">
+			<sdpi-select
+				setting="slot"
+				datasource="getCharacters"
+				loading="Lecture des fenêtres…"
+				placeholder="Choisir un personnage"
+				hot-reload
+			>
+			</sdpi-select>
+		</sdpi-item>
+		<sdpi-item label="Numéro">
+			<sdpi-select setting="positionLine" default="1">
+				<option value="hidden">Masqué</option>
+				<option value="1">Ligne 1</option>
+				<option value="2">Ligne 2</option>
+				<option value="3">Ligne 3</option>
+				<option value="4">Ligne 4</option>
+			</sdpi-select>
+		</sdpi-item>
+		<sdpi-item label="Nom">
+			<sdpi-select setting="nameLine" default="2">
+				<option value="hidden">Masqué</option>
+				<option value="1">Ligne 1</option>
+				<option value="2">Ligne 2</option>
+				<option value="3">Ligne 3</option>
+				<option value="4">Ligne 4</option>
+			</sdpi-select>
+		</sdpi-item>
+		<sdpi-item label="Alias">
+			<sdpi-select setting="aliasLine" default="4">
+				<option value="hidden">Masqué</option>
+				<option value="1">Ligne 1</option>
+				<option value="2">Ligne 2</option>
+				<option value="3">Ligne 3</option>
+				<option value="4">Ligne 4</option>
+			</sdpi-select>
+		</sdpi-item>
+		<sdpi-item label="Classe">
+			<sdpi-select setting="classLine" default="3">
+				<option value="hidden">Masqué</option>
+				<option value="1">Ligne 1</option>
+				<option value="2">Ligne 2</option>
+				<option value="3">Ligne 3</option>
+				<option value="4">Ligne 4</option>
+			</sdpi-select>
+		</sdpi-item>
+		<sdpi-item label="Couleur">
+			<sdpi-select setting="accentColor" default="auto">
+				<option value="auto">Automatique</option>
+				<option value="earth">Terre</option>
+				<option value="fire">Feu</option>
+				<option value="water">Eau</option>
+				<option value="air">Air</option>
+				<option value="neutral">Neutre</option>
+				<option value="violet">Violet</option>
+			</sdpi-select>
+		</sdpi-item>
+		<p class="hint">
+			Chaque élément peut être masqué ou placé sur l'une des quatre lignes. Plusieurs éléments sur la même ligne sont
+			regroupés. La mise en page est mémorisée par personnage et le suit si l'ordre change. Sans alias, « — » est
+			affiché. Un alias court comme l’élément joué (Terre, Feu, Eau, Air) ou un métier (Mineur, Alchimiste…) aide à
+			distinguer les pseudos proches et les classes en doublon. La couleur choisie suit elle aussi le personnage. Une
+			fenêtre ignorée reste liée à son bouton, mais affiche « — » à la place de sa position dans la rotation.
+		</p>
+	</body>
+</html>
