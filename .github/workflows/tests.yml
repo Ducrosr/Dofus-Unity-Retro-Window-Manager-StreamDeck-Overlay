@@ -11,6 +11,27 @@ permissions:
   contents: read
 
 jobs:
+  distribution:
+    name: Distribution Windows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer les sources
+        uses: actions/checkout@v4
+
+      - name: Vérifier le binaire et son empreinte
+        run: |
+          cd release/v2.19.0-beta
+          sha256sum -c SHA256SUMS.txt
+          file DofusWindowManager.exe | grep -F "PE32+ executable"
+
+      - name: Valider le manifeste de publication
+        run: |
+          jq -e '.tag == "v2.19.0-beta.1"' release/manifest.json >/dev/null
+          jq -e '.prerelease == true' release/manifest.json >/dev/null
+          jq -r '.assets[]' release/manifest.json | while read -r path; do
+            test -f "$path"
+          done
+
   python:
     name: Application Python
     runs-on: windows-latest

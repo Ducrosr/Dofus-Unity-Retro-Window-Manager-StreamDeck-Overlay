@@ -53,7 +53,7 @@ Les préférences visuelles suivent le personnage lorsqu’il change de position
 
 Pour utiliser l'application sans installer Python ni compiler le projet :
 
-1. téléchargez **[DofusWindowManager.exe](release/v2.19.0-beta/DofusWindowManager.exe)** depuis ce dépôt officiel ;
+1. ouvrez la **[préversion officielle v2.19.0-beta.1](https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager/releases/tag/v2.19.0-beta.1)** puis téléchargez `DofusWindowManager.exe` ;
 2. vérifiez si possible son empreinte SHA-256 à l'aide du fichier [SHA256SUMS.txt](release/v2.19.0-beta/SHA256SUMS.txt) ;
 3. placez l'exécutable dans un dossier permanent puis lancez-le.
 
