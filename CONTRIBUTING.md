@@ -2,6 +2,8 @@
 
 Merci de contribuer à la bêta de Dofus Window Manager. Les rapports reproductibles et les retours d’ergonomie sont aussi utiles que les contributions de code.
 
+Pour une session de vérification structurée, commencez par le [guide de test bêta](docs/BETA_TESTING.md). Si aucun bug précis n'est apparu, utilisez le formulaire **Partager un retour de bêta** afin d'indiquer les configurations et fonctions validées.
+
 ## Avant d’ouvrir un ticket
 
 1. utilisez la dernière version disponible sur le dépôt officiel ;

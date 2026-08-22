@@ -1,0 +1,113 @@
+name: Partager un retour de bêta
+description: Résumer une session de test, même si tout a fonctionné
+title: "[Bêta 2.19.0] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de tester Dofus Window Manager. Ce formulaire accepte aussi les retours positifs : savoir qu'une configuration fonctionne aide à mesurer la compatibilité.
+
+        Pour un bug précis et reproductible, préférez le formulaire **Signaler un bug**. Ne publiez aucun identifiant Ankama, mot de passe, code 2FA ou jeton de session.
+
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Méthode d'installation
+      options:
+        - Exécutable v2.19.0-beta.1
+        - Installation depuis les sources
+        - Autre méthode
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Version de Windows
+      placeholder: "Windows 11 25H2"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: game_modes
+    attributes:
+      label: Modes testés
+      options:
+        - label: Dofus Unity
+        - label: Dofus Retro
+        - label: Passage Unity/Retro dans l'application
+
+  - type: input
+    id: windows_count
+    attributes:
+      label: Nombre de fenêtres Dofus
+      placeholder: "8"
+    validations:
+      required: true
+
+  - type: input
+    id: streamdeck
+    attributes:
+      label: Stream Deck utilisé
+      description: Modèle et version du logiciel, ou « non utilisé ».
+      placeholder: "Stream Deck 15 touches, logiciel 7.x"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: features
+    attributes:
+      label: Fonctions essayées
+      options:
+        - label: Détection et scan manuel des fenêtres
+        - label: Activation directe d'un personnage
+        - label: Rotation suivante/précédente
+        - label: Fenêtres ignorées
+        - label: Réorganisation par glisser-déposer
+        - label: Profils, alias et préférences
+        - label: Sauvegarde et restauration
+        - label: Installation du plugin Stream Deck
+        - label: Profil Stream Deck proposé à l'installation
+        - label: Touches Personnage et commandes Stream Deck
+        - label: Lancement de l'application depuis Stream Deck
+
+  - type: dropdown
+    id: result
+    attributes:
+      label: Résultat global
+      options:
+        - Tout fonctionne
+        - Fonctionne avec quelques gênes
+        - Problème important mais contournable
+        - Utilisation bloquée
+    validations:
+      required: true
+
+  - type: textarea
+    id: positives
+    attributes:
+      label: Ce qui a bien fonctionné
+      description: Indiquez les fonctions fiables ou particulièrement pratiques.
+
+  - type: textarea
+    id: difficulties
+    attributes:
+      label: Difficultés ou améliorations souhaitées
+      description: Décrivez les points confus, lents ou peu visibles, même sans bug.
+
+  - type: textarea
+    id: diagnostic
+    attributes:
+      label: Rapport de diagnostic nettoyé
+      description: Facultatif. Copiez le rapport depuis Diagnostic… et retirez les pseudos et chemins personnels.
+      render: text
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Vérifications
+      options:
+        - label: J'ai utilisé une version provenant du dépôt officiel.
+          required: true
+        - label: J'ai retiré les secrets et données personnelles de ce retour.
+          required: true
