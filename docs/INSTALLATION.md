@@ -5,7 +5,31 @@ Ce guide installe la version 2.19.0 depuis le dépôt officiel.
 > [!CAUTION]
 > Utilisez uniquement <https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager>. Le programme officiel ne demande jamais d’identifiant Ankama, de mot de passe, de code de double authentification ou de jeton de session. N’exécutez pas une copie reçue en message privé et ne désactivez pas votre antivirus pour l’installer.
 
-## Prérequis
+## Méthode A — exécutable Windows
+
+Cette méthode ne nécessite ni Python, ni Git, ni compilation.
+
+1. Téléchargez [DofusWindowManager.exe](../release/v2.19.0-beta/DofusWindowManager.exe) depuis le dépôt officiel.
+2. Vérifiez si possible son empreinte avec la commande PowerShell suivante :
+
+~~~powershell
+Get-FileHash .\DofusWindowManager.exe -Algorithm SHA256
+~~~
+
+La valeur attendue pour cette bêta est :
+
+~~~text
+01f9c139acaebdcca8ca4df85daa8c4e034b24be1859728b39788658b34840f9
+~~~
+
+3. Déplacez le fichier dans un dossier permanent, par exemple `%LOCALAPPDATA%\Programs\DofusWindowManager\`.
+4. Lancez `DofusWindowManager.exe`.
+
+Le binaire n'est pas encore signé numériquement. SmartScreen peut donc demander une confirmation au premier lancement. Cela ne constitue pas une garantie de sécurité : vérifiez toujours l'adresse du dépôt et l'empreinte du fichier.
+
+## Installation depuis les sources
+
+### Prérequis
 
 - Windows 10 ou 11 64 bits ;
 - Python 3.12 ou ultérieur ;
@@ -18,7 +42,7 @@ Pour vérifier Python dans PowerShell :
 py --version
 ~~~
 
-## Méthode A — télécharger le ZIP officiel
+### Méthode B — télécharger le ZIP officiel
 
 1. Ouvrez la page officielle du dépôt.
 2. Sélectionnez **Code → Download ZIP**.
@@ -35,7 +59,7 @@ py -3.14 -m venv .venv
 
 Remplacez 3.14 par votre version de Python si nécessaire, sans descendre sous Python 3.12.
 
-## Méthode B — cloner avec Git
+### Méthode C — cloner avec Git
 
 ~~~powershell
 git clone https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager.git

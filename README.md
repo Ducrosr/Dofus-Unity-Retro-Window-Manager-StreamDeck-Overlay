@@ -47,7 +47,19 @@ Le plugin 0.4.1 fourni avec le projet comprend :
 
 Les préférences visuelles suivent le personnage lorsqu’il change de position. Une fenêtre ignorée reste associée à sa touche et directement activable ; elle est seulement retirée de la rotation automatique.
 
-## Installation rapide depuis les sources
+## Installation rapide
+
+### Exécutable Windows — méthode recommandée
+
+Pour utiliser l'application sans installer Python ni compiler le projet :
+
+1. téléchargez **[DofusWindowManager.exe](release/v2.19.0-beta/DofusWindowManager.exe)** depuis ce dépôt officiel ;
+2. vérifiez si possible son empreinte SHA-256 à l'aide du fichier [SHA256SUMS.txt](release/v2.19.0-beta/SHA256SUMS.txt) ;
+3. placez l'exécutable dans un dossier permanent puis lancez-le.
+
+Cette bêta n'est pas encore signée numériquement. Windows SmartScreen peut donc afficher un avertissement, même pour le fichier officiel. Ne contournez jamais cet avertissement pour une copie obtenue ailleurs que sur ce dépôt.
+
+### Installation depuis les sources
 
 ### Prérequis
 
@@ -71,7 +83,7 @@ Python 3.14 peut être remplacé par une autre version installée à partir de P
 
 Pour installer le plugin Stream Deck, lancez d’abord le gestionnaire puis utilisez **Application → Installer le plugin Stream Deck**. Acceptez ensuite le profil proposé par Stream Deck. Aucun téléchargement supplémentaire du plugin n’est nécessaire.
 
-Le guide détaillé couvre l’installation depuis un ZIP, les mises à jour, la fonction Retro facultative et les problèmes les plus courants : **[Guide d’installation](docs/INSTALLATION.md)**.
+Le guide détaillé couvre l'exécutable, l’installation depuis un ZIP, les mises à jour, la fonction Retro facultative et les problèmes les plus courants : **[Guide d’installation](docs/INSTALLATION.md)**.
 
 ## Premiers pas
 

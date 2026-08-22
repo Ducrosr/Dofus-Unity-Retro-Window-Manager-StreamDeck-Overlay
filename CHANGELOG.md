@@ -2,6 +2,9 @@
 
 ## 2.19.0
 
+- ajout d'un exécutable Windows 64 bits prêt à l'emploi pour les utilisateurs ne souhaitant pas installer Python ;
+- publication de l'empreinte SHA-256 du binaire et ajout des instructions de vérification ;
+
 - ajout d’un défilement vertical global pour conserver l’accès à tous les boutons lorsque la fenêtre est réduite ou que l’affichage Windows utilise une mise à l’échelle élevée ;
 - la molette fait défiler l’interface sauf lorsqu’elle se trouve au-dessus d’un tableau ou du journal, qui conservent leur propre défilement ;
 - ajout d’un aperçu interactif du profil Stream Deck 15 touches depuis le panneau Application ;
