@@ -1,0 +1,54 @@
+name: Proposer une amélioration
+description: Suggérer une fonction ou une amélioration d’ergonomie
+title: "[Amélioration] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Le projet reste un gestionnaire local de fenêtres. Les demandes d’injection, de lecture mémoire, d’interception réseau ou d’automatisation d’actions en jeu sont hors périmètre.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Besoin rencontré
+      description: Décrivez la situation et la difficulté avant de proposer une solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Comportement souhaité
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Solutions actuellement utilisées
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Partie concernée
+      options:
+        - Interface de l’application
+        - Détection Unity
+        - Détection Retro
+        - Focus et rotation
+        - Profils et sauvegardes
+        - Stream Deck
+        - Installation et compilation
+        - Autre
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Vérifications
+      options:
+        - label: J’ai recherché une proposition similaire.
+          required: true
+        - label: La proposition n’exige pas d’identifiants Ankama ni d’interaction automatisée avec le jeu.
+          required: true

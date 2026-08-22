@@ -1,7 +1,3 @@
-asyncio
-pywinauto
-pygetwindow
-pyautogui
-Pillow
-pynput
-ttkthemes
+ttkthemes>=3.3.0,<4
+Pillow>=10.0,<13
+pystray>=0.19,<1

@@ -1,0 +1,1 @@
+01f9c139acaebdcca8ca4df85daa8c4e034b24be1859728b39788658b34840f9  DofusWindowManager.exe

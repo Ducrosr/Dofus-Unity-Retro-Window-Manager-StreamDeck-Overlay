@@ -1,0 +1,95 @@
+name: Signaler un bug
+description: Décrire un problème reproductible dans Dofus Window Manager
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de ne publier aucun identifiant Ankama, mot de passe, code d’authentification ou jeton de session. Nettoyez les pseudos et chemins personnels si nécessaire. Pour une vulnérabilité, consultez SECURITY.md au lieu de détailler le problème publiquement.
+
+  - type: input
+    id: app_version
+    attributes:
+      label: Version de Dofus Window Manager
+      placeholder: "2.19.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: game_mode
+    attributes:
+      label: Version de Dofus
+      options:
+        - Unity
+        - Retro
+        - Les deux
+        - Sans rapport avec la détection
+    validations:
+      required: true
+
+  - type: input
+    id: windows_version
+    attributes:
+      label: Version de Windows
+      placeholder: "Windows 11 25H2"
+    validations:
+      required: true
+
+  - type: input
+    id: streamdeck_version
+    attributes:
+      label: Stream Deck et version du plugin
+      description: Indiquez « non concerné » si le problème ne concerne pas Stream Deck.
+      placeholder: "Stream Deck 7.x, plugin 0.4.1"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Étapes de reproduction
+      placeholder: |
+        1. Ouvrir…
+        2. Cliquer sur…
+        3. Observer…
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Résultat attendu
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Résultat obtenu
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostic
+    attributes:
+      label: Rapport de diagnostic nettoyé
+      description: Copiez le rapport depuis Diagnostic… puis retirez toute information personnelle.
+      render: text
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Informations complémentaires
+      description: Nombre de fenêtres, application au premier plan, privilèges administrateur, captures nettoyées, fréquence du problème.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Vérifications
+      options:
+        - label: J’utilise une copie provenant du dépôt officiel.
+          required: true
+        - label: J’ai retiré les identifiants, secrets et données personnelles de ce rapport.
+          required: true
+        - label: J’ai recherché un ticket similaire.
+          required: true
