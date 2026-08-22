@@ -146,6 +146,8 @@ Le résultat PyInstaller est créé dans **dist\DofusWindowManager.exe**. La com
 
 ## Participer à la bêta
 
+Téléchargez la [préversion v2.19.0-beta.1](https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager/releases/tag/v2.19.0-beta.1), puis suivez le **[guide de test bêta](docs/BETA_TESTING.md)**. Vous pouvez transmettre un **[retour de session](https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager/issues/new?template=beta_feedback.yml)** même si tout a fonctionné.
+
 Avant de signaler un problème :
 
 1. vérifiez qu’il existe toujours en version 2.19.0 ;
