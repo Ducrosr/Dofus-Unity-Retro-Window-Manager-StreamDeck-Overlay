@@ -1,0 +1,86 @@
+name: Publier une version
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "release/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publication-version
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Créer la GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer les sources
+        uses: actions/checkout@v4
+
+      - name: Valider le manifeste et les fichiers
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -e '
+            (.tag | test("^v[0-9]+\\.[0-9]+\\.[0-9]+-[0-9A-Za-z.-]+$")) and
+            (.title | type == "string" and length > 0) and
+            (.prerelease | type == "boolean") and
+            (.notes | type == "string" and length > 0) and
+            (.checksum_file | type == "string" and length > 0) and
+            (.assets | type == "array" and length > 0)
+          ' release/manifest.json >/dev/null
+
+          mapfile -t files < <(jq -r '.notes, .checksum_file, .assets[]' release/manifest.json)
+          for path in "${files[@]}"; do
+            if [[ "$path" == /* || "$path" == *".."* || ! -f "$path" ]]; then
+              echo "Chemin de publication invalide ou absent : $path" >&2
+              exit 1
+            fi
+          done
+
+          checksum_file="$(jq -r '.checksum_file' release/manifest.json)"
+          checksum_dir="$(dirname "$checksum_file")"
+          checksum_name="$(basename "$checksum_file")"
+          (cd "$checksum_dir" && sha256sum -c "$checksum_name")
+
+      - name: Créer ou actualiser la préversion
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="$(jq -r '.tag' release/manifest.json)"
+          title="$(jq -r '.title' release/manifest.json)"
+          notes="$(jq -r '.notes' release/manifest.json)"
+          prerelease="$(jq -r '.prerelease' release/manifest.json)"
+          mapfile -t assets < <(jq -r '.assets[]' release/manifest.json)
+
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$tag" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$title" \
+              --notes-file "$notes" \
+              --prerelease="$prerelease"
+            gh release upload "$tag" "${assets[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
+          else
+            release_args=(
+              "$tag"
+              "${assets[@]}"
+              --repo "$GITHUB_REPOSITORY"
+              --target "$GITHUB_SHA"
+              --title "$title"
+              --notes-file "$notes"
+            )
+            if [[ "$prerelease" == "true" ]]; then
+              release_args+=(--prerelease)
+            fi
+            gh release create "${release_args[@]}"
+          fi

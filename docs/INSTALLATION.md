@@ -9,7 +9,7 @@ Ce guide installe la version 2.19.0 depuis le dépôt officiel.
 
 Cette méthode ne nécessite ni Python, ni Git, ni compilation.
 
-1. Téléchargez [DofusWindowManager.exe](../release/v2.19.0-beta/DofusWindowManager.exe) depuis le dépôt officiel.
+1. Ouvrez la [préversion officielle v2.19.0-beta.1](https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager/releases/tag/v2.19.0-beta.1) puis téléchargez `DofusWindowManager.exe`.
 2. Vérifiez si possible son empreinte avec la commande PowerShell suivante :
 
 ~~~powershell
