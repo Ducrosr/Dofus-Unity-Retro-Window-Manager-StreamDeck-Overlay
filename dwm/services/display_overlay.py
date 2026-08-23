@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Collection, Mapping, Sequence
 
@@ -23,6 +24,10 @@ DEFAULT_ROTATION_OVERLAY_LAYOUT = {
     "line2_left": "class",
     "line2_right": "alias",
 }
+
+_TK_GEOMETRY_PATTERN = re.compile(
+    r"^(?P<width>\d+)x(?P<height>\d+)(?P<x>[+-]\d+)(?P<y>[+-]\d+)$"
+)
 
 
 @dataclass(frozen=True)
@@ -245,6 +250,70 @@ def place_inside_rect(
     max_x = max(left, right - width)
     max_y = max(top, bottom - height)
     return max(left, min(x, max_x)), max(top, min(y, max_y))
+
+
+def parse_tk_geometry(value: object) -> tuple[int, int, int, int] | None:
+    """Parse a complete Tk geometry string into width, height, x and y."""
+    match = _TK_GEOMETRY_PATTERN.fullmatch(str(value or "").strip())
+    if match is None:
+        return None
+    width = int(match.group("width"))
+    height = int(match.group("height"))
+    if width <= 0 or height <= 0:
+        return None
+    return width, height, int(match.group("x")), int(match.group("y"))
+
+
+def recover_window_position(
+    width: object,
+    height: object,
+    x: object,
+    y: object,
+    display_rects: Sequence[tuple[int, int, int, int]],
+    *,
+    min_visible_width: int = 64,
+    min_visible_height: int = 32,
+) -> tuple[int, int]:
+    """Keep a saved position when visible, otherwise center it on the nearest display."""
+    try:
+        safe_width = max(1, int(width))
+        safe_height = max(1, int(height))
+        safe_x = int(x)
+        safe_y = int(y)
+    except (TypeError, ValueError):
+        safe_width, safe_height, safe_x, safe_y = 300, 80, 0, 0
+
+    valid_displays = [
+        (int(left), int(top), int(right), int(bottom))
+        for left, top, right, bottom in display_rects
+        if int(right) > int(left) and int(bottom) > int(top)
+    ]
+    if not valid_displays:
+        return safe_x, safe_y
+
+    required_width = min(safe_width, max(1, int(min_visible_width)))
+    required_height = min(safe_height, max(1, int(min_visible_height)))
+    for left, top, right, bottom in valid_displays:
+        visible_width = max(0, min(safe_x + safe_width, right) - max(safe_x, left))
+        visible_height = max(0, min(safe_y + safe_height, bottom) - max(safe_y, top))
+        if visible_width >= required_width and visible_height >= required_height:
+            return safe_x, safe_y
+
+    center_x = safe_x + safe_width / 2
+    center_y = safe_y + safe_height / 2
+
+    def distance_to_display(rect: tuple[int, int, int, int]) -> float:
+        left, top, right, bottom = rect
+        nearest_x = max(left, min(center_x, right))
+        nearest_y = max(top, min(center_y, bottom))
+        return (center_x - nearest_x) ** 2 + (center_y - nearest_y) ** 2
+
+    left, top, right, bottom = min(valid_displays, key=distance_to_display)
+    display_width = right - left
+    display_height = bottom - top
+    recovered_x = left if safe_width >= display_width else left + (display_width - safe_width) // 2
+    recovered_y = top if safe_height >= display_height else top + (display_height - safe_height) // 2
+    return recovered_x, recovered_y
 
 
 def format_tk_geometry(width: int, height: int, x: int, y: int) -> str:

@@ -14,7 +14,9 @@ from dwm.services.display_overlay import (
     format_tk_geometry,
     normalize_overlay_anchor,
     normalize_overlay_layout,
+    parse_tk_geometry,
     place_inside_rect,
+    recover_window_position,
 )
 
 
@@ -55,6 +57,35 @@ class DisplayOverlayTests(unittest.TestCase):
         self.assertEqual(clamp_notification_duration(100), 600)
         self.assertEqual(clamp_notification_duration(9000), 5000)
         self.assertEqual(format_tk_geometry(320, 90, -25, 40), "320x90-25+40")
+
+    def test_tk_geometry_parser_supports_negative_monitor_coordinates(self) -> None:
+        self.assertEqual(parse_tk_geometry("340x260-1250+40"), (340, 260, -1250, 40))
+        self.assertIsNone(parse_tk_geometry("340x260"))
+        self.assertIsNone(parse_tk_geometry("0x260+20+40"))
+
+    def test_visible_position_on_secondary_monitor_is_preserved(self) -> None:
+        displays = ((-1920, 0, 0, 1080), (0, 0, 1920, 1080))
+
+        self.assertEqual(
+            recover_window_position(300, 120, -1500, 180, displays),
+            (-1500, 180),
+        )
+
+    def test_offscreen_position_is_centered_on_nearest_monitor(self) -> None:
+        displays = ((-1920, 0, 0, 1080), (0, 0, 1920, 1080))
+
+        self.assertEqual(
+            recover_window_position(300, 120, 5000, 180, displays),
+            (810, 480),
+        )
+
+    def test_partially_visible_position_is_not_needlessly_moved(self) -> None:
+        displays = ((0, 0, 1920, 1080),)
+
+        self.assertEqual(
+            recover_window_position(300, 120, 1850, 1020, displays),
+            (1850, 1020),
+        )
 
     def test_default_overlay_layout_matches_requested_two_line_design(self) -> None:
         window = GameWindow(40, "Nealla - Dofus", "Nealla", "Pandawa")

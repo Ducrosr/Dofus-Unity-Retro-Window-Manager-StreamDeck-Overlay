@@ -94,6 +94,8 @@ Exporter une copie JSON sert au transfert vers un autre PC. Ce n’est pas un se
 
 Les préférences internes des touches Stream Deck restent gérées par Stream Deck et ne sont pas incluses.
 
+Les réglages, les profils et les exports JSON sont écrits dans un fichier temporaire puis remplacés en une seule opération : une fermeture ou une interruption pendant l’enregistrement ne peut donc pas laisser un fichier partiellement écrit. L’application conserve aussi la dernière version JSON valide des réglages dans `settings.json.bak`. Si `settings.json` devient illisible, cette copie est chargée automatiquement au prochain démarrage.
+
 ## Paramètres et zone de notification
 
 Les paramètres permettent notamment de personnaliser les raccourcis, l’actualisation, le thème, la réduction dans la zone de notification et le démarrage avec Windows.
@@ -124,6 +126,8 @@ Par défaut, fermer la fenêtre réduit l’application dans la zone de notifica
 - déplacez et redimensionnez normalement la fenêtre ; sa géométrie est mémorisée ;
 - utilisez **Quitter le mode compact** ou fermez la fenêtre pour revenir à l’interface complète.
 
+Si le moniteur qui contenait le mode compact n’est plus disponible au prochain lancement, la fenêtre est automatiquement recentrée sur l’écran le plus proche et sa position corrigée est mémorisée.
+
 ## Notification après un changement de fenêtre
 
 Après un changement réussi depuis les raccourcis, l’application, le Stream Deck, le mode compact ou l’overlay, une courte notification affiche par défaut :
@@ -151,6 +155,8 @@ Les paramètres permettent aussi de saisir les coordonnées X/Y, de régler l’
 Le contenu de chaque ligne est personnalisable avec les champs **Numéro**, **Nom**, **Classe**, **Alias** ou **Masqué**. La disposition par défaut place le numéro à gauche, le nom sur la première ligne et `classe · alias` sur la seconde. Lorsqu’un alias n’est pas renseigné, un tiret est affiché.
 
 La largeur automatique est activée par défaut et suit le texte, les portraits et les icônes réellement visibles. Elle peut être désactivée dans les paramètres ou par un redimensionnement direct. Le portrait et l’icône de l’overlay peuvent chacun être activés ou masqués. Une fenêtre demandant l’attention passe en orange ; cet état est prioritaire sur la couleur du personnage actif.
+
+Après un retrait de moniteur ou une modification de la disposition Windows, un overlay qui n’a plus de zone suffisamment visible est recentré sur l’écran le plus proche. Une position négative reste inchangée lorsqu’elle correspond encore à un moniteur placé à gauche ou au-dessus de l’écran principal.
 
 Lorsque l’overlay ou le mode compact est visible, un changement manuel vers une autre fenêtre Dofus actualise également le personnage mis en évidence, sans déclencher de notification supplémentaire.
 

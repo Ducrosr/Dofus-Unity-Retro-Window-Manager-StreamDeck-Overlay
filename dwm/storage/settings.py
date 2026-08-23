@@ -18,6 +18,7 @@ from ..services.themes import (
     default_theme_for_mode,
     normalize_theme,
 )
+from .atomic import atomic_write_text
 
 
 SETTINGS_SCHEMA_VERSION = 16
@@ -315,19 +316,38 @@ class Settings:
         )
 
 
+def settings_backup_path(path: Path) -> Path:
+    return path.with_name(f"{path.name}.bak")
+
+
+def _read_settings(path: Path) -> Settings:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("settings root must be a JSON object")
+    return Settings.from_dict(data)
+
+
 def load_settings(path: Path) -> Settings:
-    try:
-        if path.exists():
-            data = json.loads(path.read_text(encoding="utf-8"))
-            return Settings.from_dict(data)
-    except Exception:
-        pass
+    for candidate in (path, settings_backup_path(path)):
+        try:
+            if candidate.exists():
+                return _read_settings(candidate)
+        except Exception:
+            continue
     return Settings()
 
 
 def save_settings(path: Path, settings: Settings) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(settings.to_dict(), indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    serialized = json.dumps(settings.to_dict(), indent=2, ensure_ascii=False)
+
+    try:
+        current = path.read_text(encoding="utf-8")
+        if not isinstance(json.loads(current), dict):
+            raise ValueError("settings root must be a JSON object")
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
+        pass
+    else:
+        atomic_write_text(settings_backup_path(path), current)
+
+    atomic_write_text(path, serialized)

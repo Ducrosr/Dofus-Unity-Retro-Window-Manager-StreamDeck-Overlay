@@ -5,6 +5,7 @@ import unittest
 import pickle
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 
 from dwm.storage.profiles import Profile, list_profiles, load_profile, migrate_pickles, profile_path, save_profile
 
@@ -42,6 +43,23 @@ class ProfileTests(unittest.TestCase):
             names = list_profiles(profiles_dir)
 
         self.assertEqual(names, ["Alpha", "zeta"])
+
+    def test_failed_profile_replacement_preserves_previous_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp)
+            now = datetime.now().isoformat(timespec="seconds")
+            original = Profile("Équipe", ["Iop"], {}, now, now)
+            save_profile(profiles_dir, original)
+            path = profile_path(profiles_dir, original.name)
+            previous_contents = path.read_text(encoding="utf-8")
+
+            updated = Profile("Équipe", ["Eni"], {}, now, now)
+            with patch("dwm.storage.atomic.os.replace", side_effect=OSError("disk busy")):
+                with self.assertRaises(OSError):
+                    save_profile(profiles_dir, updated)
+
+            self.assertEqual(path.read_text(encoding="utf-8"), previous_contents)
+            self.assertEqual(list(profiles_dir.glob("*.tmp")), [])
 
     def test_migrate_primitive_legacy_pickle(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

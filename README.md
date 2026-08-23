@@ -36,12 +36,14 @@ Le code source 2.20.0 est proposé en **bêta publique**. Il réunit l’interfa
 - actualisation automatique par événements Windows et scan manuel ;
 - fonctionnement dans la zone de notification et démarrage Windows facultatif ;
 - sauvegarde/restauration des réglages, profils, alias et ordre courant ;
+- enregistrement atomique des réglages et profils, avec copie de secours automatique des derniers réglages valides ;
 - rapport de diagnostic copiable pour les bêta-testeurs ;
 - vérification facultative des nouvelles Releases officielles, sans téléchargement automatique ;
 - douze thèmes disponibles dans les deux modes : Standard, Bonta, Brakmar, Tribute, Gold and Steel, Belladone, Unicorn, Emerald Mine, Sufokia, Pandala, Wabbit et Retro ;
 - interface en français par défaut, anglais ou espagnol, sélectionnable en un clic avec les trois drapeaux ;
 - réinitialisation séparée de l’affichage, sans supprimer les profils ni les personnalisations des personnages ;
 - mode compact toujours visible avec uniquement la rotation active et un bouton de retour explicite ;
+- remise à l’écran automatique du mode compact et de l’overlay après un changement de moniteur ;
 - notification de changement de personnage et overlay de rotation transparent, configurables, désactivables et ajustés automatiquement à la largeur de leur contenu ;
 - contenu de l’overlay et de la notification personnalisable : numéro, nom, classe et alias peuvent être déplacés ou masqués ;
 - portraits et icônes affichables ou masquables indépendamment dans la notification, l’overlay et le Stream Deck ;

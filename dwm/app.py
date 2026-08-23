@@ -129,6 +129,7 @@ from .storage.settings import (
     load_settings,
     save_settings,
 )
+from .storage.atomic import atomic_write_text
 from .storage.profiles import Profile, delete_profile, list_profiles, load_profile, migrate_pickles, save_profile
 from .utils.paths import application_dir, ensure_dirs, resource_path
 from .utils.logging import AppLogger, install_excepthook
@@ -1745,7 +1746,7 @@ class WindowManagerApp:
         )
         if not path:
             return
-        Path(path).write_text(json_dump(pr.to_dict()), encoding="utf-8")
+        atomic_write_text(Path(path), json_dump(pr.to_dict()))
         self._log(f"Profil exporté: {path}")
 
     def import_profile_json(self):
@@ -2185,7 +2186,7 @@ class WindowManagerApp:
         )
         if not path:
             return
-        Path(path).write_text(json_dump(backup) + "\n", encoding="utf-8")
+        atomic_write_text(Path(path), json_dump(backup) + "\n")
         self._log(f"Configuration sauvegardée : {path}")
 
     def import_configuration(self) -> None:

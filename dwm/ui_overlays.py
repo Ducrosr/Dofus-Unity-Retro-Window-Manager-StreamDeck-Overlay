@@ -23,7 +23,9 @@ from .services.display_overlay import (
     compose_overlay_row,
     format_tk_geometry,
     normalize_overlay_layout,
+    parse_tk_geometry,
     place_inside_rect,
+    recover_window_position,
 )
 from .services.character_visuals import build_avatar_image, build_badge_tile_image
 from .services.i18n import tr
@@ -111,6 +113,56 @@ def _get_window_rect(hwnd: int) -> tuple[int, int, int, int] | None:
         return int(rect.left), int(rect.top), int(rect.right), int(rect.bottom)
     except Exception:
         return None
+
+
+def _get_display_rects(root) -> tuple[tuple[int, int, int, int], ...]:
+    """Return every Windows monitor rectangle, including negative coordinates."""
+    if os.name == "nt":
+        class Rect(ctypes.Structure):
+            _fields_ = (
+                ("left", ctypes.c_long),
+                ("top", ctypes.c_long),
+                ("right", ctypes.c_long),
+                ("bottom", ctypes.c_long),
+            )
+
+        try:
+            displays: list[tuple[int, int, int, int]] = []
+            callback_type = ctypes.WINFUNCTYPE(
+                wintypes.BOOL,
+                wintypes.HANDLE,
+                wintypes.HDC,
+                ctypes.POINTER(Rect),
+                wintypes.LPARAM,
+            )
+
+            @callback_type
+            def collect_display(_monitor, _device_context, rect_pointer, _data):
+                rect = rect_pointer.contents
+                displays.append(
+                    (int(rect.left), int(rect.top), int(rect.right), int(rect.bottom))
+                )
+                return True
+
+            if ctypes.windll.user32.EnumDisplayMonitors(None, None, collect_display, 0):
+                if displays:
+                    return tuple(displays)
+        except Exception:
+            pass
+
+    try:
+        left = int(root.winfo_vrootx())
+        top = int(root.winfo_vrooty())
+        width = int(root.winfo_vrootwidth())
+        height = int(root.winfo_vrootheight())
+        if width > 0 and height > 0:
+            return ((left, top, left + width, top + height),)
+    except Exception:
+        pass
+    try:
+        return ((0, 0, int(root.winfo_screenwidth()), int(root.winfo_screenheight())),)
+    except Exception:
+        return ()
 
 
 def _apply_non_activating_style(window: Toplevel, *, click_through: bool) -> None:
@@ -369,14 +421,25 @@ class OverlayUI:
         window.title("Dofus Window Manager — Mode compact")
         window.attributes("-topmost", True)
         window.minsize(280, 120)
-        if geometry:
-            try:
-                window.geometry(geometry)
-            except Exception:
-                window.geometry("340x260+40+120")
-        else:
-            height = max(140, min(380, 54 + len(self.entries) * 31))
-            window.geometry(f"340x{height}+40+120")
+        fallback_height = max(140, min(380, 54 + len(self.entries) * 31))
+        requested = parse_tk_geometry(geometry) or (340, fallback_height, 40, 120)
+        width, height, x, y = requested
+        recovered_x, recovered_y = recover_window_position(
+            width,
+            height,
+            x,
+            y,
+            _get_display_rects(self.root),
+        )
+        recovered_geometry = format_tk_geometry(
+            width,
+            height,
+            recovered_x,
+            recovered_y,
+        )
+        window.geometry(recovered_geometry)
+        if geometry and (recovered_x, recovered_y) != (x, y):
+            self.save_compact_geometry(recovered_geometry)
 
         toolbar = TtkFrame(window, padding=(6, 6, 6, 0))
         toolbar.pack(fill="x")
@@ -823,11 +886,25 @@ class OverlayUI:
             if self.persistent_height > 0
             else max(46, body.winfo_reqheight() + 2)
         )
-        window.geometry(format_tk_geometry(width, height, self.persistent_x, self.persistent_y))
+        recovered_x, recovered_y = recover_window_position(
+            width,
+            height,
+            self.persistent_x,
+            self.persistent_y,
+            _get_display_rects(self.root),
+        )
+        position_changed = (recovered_x, recovered_y) != (
+            self.persistent_x,
+            self.persistent_y,
+        )
+        self.persistent_x, self.persistent_y = recovered_x, recovered_y
+        window.geometry(format_tk_geometry(width, height, recovered_x, recovered_y))
         self._apply_persistent_text_scale(width, height)
         window.attributes("-alpha", self.persistent_opacity / 100)
         _apply_non_activating_style(window, click_through=self.persistent_locked)
         window.deiconify()
+        if position_changed:
+            self.save_overlay_position(recovered_x, recovered_y)
         if not self.persistent_locked:
             grip = TkLabel(
                 window,

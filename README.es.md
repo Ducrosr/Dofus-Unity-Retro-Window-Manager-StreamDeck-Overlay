@@ -25,8 +25,10 @@ La versión 2.20.0 es la beta pública actual. Reúne la interfaz multilingüe, 
 - alias, retrato personalizado o de clase incluido, 39 iconos oficiales de características y 20 iconos oficiales de oficios por personaje;
 - las ventanas ignoradas conservan su tecla de Stream Deck, pero salen de la rotación automática;
 - perfiles JSON y copia completa de la configuración;
+- escritura atómica de ajustes y perfiles, con copia automática de los últimos ajustes válidos;
 - cambio instantáneo entre Unity y Retro;
 - modo compacto siempre visible;
+- recuperación automática del modo compacto y del overlay tras un cambio de monitores;
 - notificación de cambio personalizable con anchura automática según el contenido, posición, duración y opacidad;
 - overlay de rotación transparente, desplazable y redimensionable, con anchura automática opcional;
 - retratos e iconos visibles u ocultables de forma independiente en la notificación, el overlay y Stream Deck;

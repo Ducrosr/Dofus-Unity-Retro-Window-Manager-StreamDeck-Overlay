@@ -8,6 +8,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
 
+from .atomic import atomic_write_text
+
 PROFILE_SCHEMA_VERSION = 1
 
 
@@ -88,7 +90,10 @@ def save_profile(profiles_dir: Path, profile: Profile) -> None:
         profile.created_at = now
     profile.updated_at = now
     path = profile_path(profiles_dir, profile.name)
-    path.write_text(json.dumps(profile.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
+    atomic_write_text(
+        path,
+        json.dumps(profile.to_dict(), indent=2, ensure_ascii=False),
+    )
 
 
 def delete_profile(profiles_dir: Path, name: str) -> None:

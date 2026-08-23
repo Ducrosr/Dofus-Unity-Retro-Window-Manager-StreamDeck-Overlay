@@ -2,6 +2,9 @@
 
 ## 2.20.0-beta.2 — en préparation
 
+- écritures atomiques des réglages, des profils et des exports JSON afin qu’une interruption ne laisse jamais un fichier partiellement remplacé ;
+- conservation automatique de la dernière version valide des réglages dans `settings.json.bak` et restauration transparente depuis cette copie si le fichier principal est illisible ;
+- récupération automatique du mode compact et de l’overlay lorsqu’un changement d’écran ou de disposition les place hors de toute zone visible, tout en conservant les coordonnées négatives valides des configurations multi-écrans ;
 - adaptation automatique de la largeur de l’overlay et de la notification à leur contenu, avec conservation d’un mode manuel pour l’overlay ;
 - réglages indépendants, activés par défaut, pour afficher ou masquer les portraits et les icônes dans la notification, l’overlay et le Stream Deck ;
 - mise à jour en place du focus dans l’application, le mode compact et l’overlay afin d’éviter leur reconstruction et le clignotement visible à chaque changement de personnage ;

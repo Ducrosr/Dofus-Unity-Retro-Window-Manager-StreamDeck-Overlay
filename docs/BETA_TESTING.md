@@ -57,6 +57,7 @@ Il n'est pas nécessaire de tout tester. Indiquez simplement les parties réelle
 - masquer indépendamment portrait et icône dans chacun des deux affichages, puis vérifier leur largeur automatique ;
 - déplacer l’overlay par son en-tête, réordonner une ligne par glisser-déposer et par ▲/▼ ;
 - redimensionner l’overlay avec la poignée ◢ puis relancer l’application pour vérifier la persistance ;
+- saisir temporairement des coordonnées X/Y très éloignées pour l’overlay, puis vérifier qu’il revient automatiquement sur un écran visible et que cette position est conservée ;
 - provoquer si possible un clignotement réel d’une fenêtre Dofus dans la barre des tâches ;
 - vérifier le repère orange dans l’overlay et sur le Stream Deck, puis sa disparition après focus.
 - désactiver le clignotement et vérifier que la couleur orange et le repère `!` restent visibles.

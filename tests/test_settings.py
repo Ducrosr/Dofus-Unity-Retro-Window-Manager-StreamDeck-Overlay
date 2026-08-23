@@ -3,13 +3,16 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from dwm.storage.atomic import atomic_write_text
 from dwm.storage.settings import (
     DEFAULT_WINDOW_COLUMN_ORDER,
     MODERN_DARK_THEME,
     Settings,
     load_settings,
     save_settings,
+    settings_backup_path,
 )
 from dwm.services.display_overlay import DEFAULT_ROTATION_OVERLAY_LAYOUT
 from dwm.services.themes import RETRO_THEME, UNITY_STANDARD_THEME
@@ -169,6 +172,32 @@ class SettingsTests(unittest.TestCase):
                 "line2_right": "none",
             },
         )
+
+    def test_corrupt_settings_fall_back_to_last_valid_backup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            save_settings(path, Settings(language="en", refresh_seconds=6))
+            save_settings(path, Settings(language="es", refresh_seconds=12))
+
+            backup = settings_backup_path(path)
+            self.assertTrue(backup.exists())
+            path.write_text('{"schema_version":', encoding="utf-8")
+            recovered = load_settings(path)
+
+        self.assertEqual(recovered.language, "en")
+        self.assertEqual(recovered.refresh_seconds, 6)
+
+    def test_atomic_write_failure_preserves_original_and_cleans_temporary_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            path.write_text("original", encoding="utf-8")
+
+            with patch("dwm.storage.atomic.os.replace", side_effect=OSError("disk busy")):
+                with self.assertRaises(OSError):
+                    atomic_write_text(path, "replacement")
+
+            self.assertEqual(path.read_text(encoding="utf-8"), "original")
+            self.assertEqual(list(Path(tmp).glob("*.tmp")), [])
 
     def test_overlay_values_are_clamped(self) -> None:
         settings = Settings(
