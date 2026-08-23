@@ -44,6 +44,8 @@ DEFAULT_PALETTE = {
 }
 
 SWAP_NOTIFICATION_DEBOUNCE_MS = 55
+DISPLAY_MIN_WIDTH = 80
+DISPLAY_MAX_WIDTH = 900
 
 
 @dataclass(frozen=True)
@@ -55,6 +57,22 @@ class _SwapNotificationRequest:
     layout: Mapping[str, str] | None
     show_portrait: bool
     show_badge: bool
+
+
+def _adaptive_display_width(
+    requested_width: object,
+    available_width: object = DISPLAY_MAX_WIDTH,
+) -> int:
+    try:
+        requested = int(requested_width)
+        available = int(available_width)
+    except (TypeError, ValueError):
+        requested = 300
+        available = DISPLAY_MAX_WIDTH
+    return max(
+        DISPLAY_MIN_WIDTH,
+        min(DISPLAY_MAX_WIDTH, max(DISPLAY_MIN_WIDTH, available), requested),
+    )
 
 
 def _blend_hex(foreground: str, background: str, ratio: float) -> str:
@@ -164,7 +182,7 @@ class OverlayUI:
         focus_character: Callable[[int], None],
         save_overlay_position: Callable[[int, int], None],
         save_compact_geometry: Callable[[str], None],
-        save_overlay_size: Callable[[int, int], None] | None = None,
+        save_overlay_size: Callable[..., None] | None = None,
         reorder_character: Callable[[int, str | int], None] | None = None,
         focus_next_attention: Callable[[], bool] | None = None,
         palette: Mapping[str, str] | None = None,
@@ -173,7 +191,9 @@ class OverlayUI:
         self.focus_character = focus_character
         self.save_overlay_position = save_overlay_position
         self.save_compact_geometry = save_compact_geometry
-        self.save_overlay_size = save_overlay_size or (lambda _width, _height: None)
+        self.save_overlay_size = save_overlay_size or (
+            lambda _width, _height, **_kwargs: None
+        )
         self.reorder_character = reorder_character or (lambda _hwnd, _direction: None)
         self.focus_next_attention = focus_next_attention or (lambda: False)
         self.palette = dict(DEFAULT_PALETTE)
@@ -198,6 +218,7 @@ class OverlayUI:
         self.persistent_locked = False
         self.persistent_layout = dict(DEFAULT_ROTATION_OVERLAY_LAYOUT)
         self.persistent_width = 300
+        self.persistent_auto_width = True
         self.persistent_height = 0
         self.show_portraits = True
         self.show_badges = True
@@ -211,6 +232,7 @@ class OverlayUI:
         self._drag_target_hwnd: int | None = None
         self._resize_pointer: tuple[int, int] | None = None
         self._resize_window_size: tuple[int, int] | None = None
+        self._resize_changed = False
         self._persistent_rows: dict[int, TkFrame] = {}
         self._persistent_secondary_widgets: dict[int, object] = {}
         self._persistent_text_widgets: list[tuple[object, int, bool]] = []
@@ -500,6 +522,7 @@ class OverlayUI:
         locked: bool,
         layout: Mapping[str, str] | None = None,
         width: int = 300,
+        auto_width: bool = True,
         height: int = 0,
         show_portrait: bool = True,
         show_badge: bool = True,
@@ -511,7 +534,8 @@ class OverlayUI:
         self.persistent_opacity = clamp_overlay_opacity(opacity)
         self.persistent_locked = bool(locked)
         self.persistent_layout = normalize_overlay_layout(layout)
-        self.persistent_width = max(240, min(900, int(width)))
+        self.persistent_width = max(DISPLAY_MIN_WIDTH, min(DISPLAY_MAX_WIDTH, int(width)))
+        self.persistent_auto_width = bool(auto_width)
         requested_height = int(height)
         self.persistent_height = 0 if requested_height <= 0 else max(80, min(1600, requested_height))
         self.show_portraits = bool(show_portrait)
@@ -546,7 +570,6 @@ class OverlayUI:
         )
         window.update_idletasks()
         _apply_non_activating_style(window, click_through=self.persistent_locked)
-        window.deiconify()
 
     def _destroy_persistent(self) -> None:
         window = self.persistent_window
@@ -586,7 +609,11 @@ class OverlayUI:
             header.pack(fill="x")
             drag_label = TkLabel(
                 header,
-                text=tr("ROTATION  ·  déplacer ici  ·  glisser une ligne = ordre"),
+                text=(
+                    tr("ROTATION")
+                    if self.persistent_auto_width
+                    else tr("ROTATION  ·  déplacer ici  ·  glisser une ligne = ordre")
+                ),
                 background=self.palette["bg3"],
                 foreground=self.palette["on_dark"],
                 anchor="w",
@@ -702,7 +729,7 @@ class OverlayUI:
                     position = TkLabel(
                         row,
                         text=left_text,
-                        width=(3 if self.persistent_layout["left"] == "position" else 12),
+                        width=(3 if self.persistent_layout["left"] == "position" else 0),
                         background=background,
                         foreground=foreground,
                         anchor="center",
@@ -786,12 +813,21 @@ class OverlayUI:
                         self._bind_drag(widget, entry.hwnd)
 
         window.update_idletasks()
-        width = self.persistent_width
-        height = self.persistent_height if self.persistent_height > 0 else max(46, window.winfo_reqheight())
+        width = (
+            _adaptive_display_width(body.winfo_reqwidth() + 2)
+            if self.persistent_auto_width
+            else self.persistent_width
+        )
+        height = (
+            self.persistent_height
+            if self.persistent_height > 0
+            else max(46, body.winfo_reqheight() + 2)
+        )
         window.geometry(format_tk_geometry(width, height, self.persistent_x, self.persistent_y))
         self._apply_persistent_text_scale(width, height)
         window.attributes("-alpha", self.persistent_opacity / 100)
         _apply_non_activating_style(window, click_through=self.persistent_locked)
+        window.deiconify()
         if not self.persistent_locked:
             grip = TkLabel(
                 window,
@@ -809,7 +845,7 @@ class OverlayUI:
 
     def _persistent_scale(self, width: int, height: int) -> float:
         return calculate_overlay_text_scale(
-            width,
+            300 if self.persistent_auto_width else width,
             height,
             len(self.entries),
             locked=self.persistent_locked,
@@ -922,13 +958,22 @@ class OverlayUI:
             return
         self._resize_pointer = (int(event.x_root), int(event.y_root))
         self._resize_window_size = (window.winfo_width(), window.winfo_height())
+        self._resize_changed = False
 
     def _resize_motion(self, event) -> None:
         window = self.persistent_window
         if window is None or self._resize_pointer is None or self._resize_window_size is None:
             return
-        width = max(240, min(900, self._resize_window_size[0] + int(event.x_root) - self._resize_pointer[0]))
+        width = max(
+            DISPLAY_MIN_WIDTH,
+            min(
+                DISPLAY_MAX_WIDTH,
+                self._resize_window_size[0] + int(event.x_root) - self._resize_pointer[0],
+            ),
+        )
         height = max(80, min(1600, self._resize_window_size[1] + int(event.y_root) - self._resize_pointer[1]))
+        self.persistent_auto_width = False
+        self._resize_changed = True
         self.persistent_width = width
         self.persistent_height = height
         window.geometry(format_tk_geometry(width, height, self.persistent_x, self.persistent_y))
@@ -937,7 +982,14 @@ class OverlayUI:
     def _resize_release(self, _event) -> None:
         self._resize_pointer = None
         self._resize_window_size = None
-        self.save_overlay_size(self.persistent_width, self.persistent_height)
+        if not self._resize_changed:
+            return
+        self._resize_changed = False
+        self.save_overlay_size(
+            self.persistent_width,
+            self.persistent_height,
+            auto_width=False,
+        )
         self._render_persistent()
 
     # ---------------------------- Swap notification ----------------------------
@@ -1030,7 +1082,7 @@ class OverlayUI:
             TkLabel(
                 body,
                 text=left_text,
-                width=3 if normalize_overlay_layout(layout)["left"] == "position" else 11,
+                width=3 if normalize_overlay_layout(layout)["left"] == "position" else 0,
                 background=self.palette["bg3"],
                 foreground=self.palette["on_dark"],
                 anchor="center",
@@ -1060,13 +1112,18 @@ class OverlayUI:
                 font=("Segoe UI", 10),
             ).pack(fill="x", expand=True)
 
-        width, height = 420, 94
+        window.update_idletasks()
         target_rect = _get_window_rect(entry.hwnd)
         if target_rect is None:
             target_rect = (0, 0, self.root.winfo_screenwidth(), self.root.winfo_screenheight())
+        available_width = max(DISPLAY_MIN_WIDTH, target_rect[2] - target_rect[0] - 16)
+        width = _adaptive_display_width(
+            body.winfo_reqwidth() + 4,
+            available_width,
+        )
+        height = max(48, min(240, int(body.winfo_reqheight()) + 4))
         x, y = place_inside_rect(target_rect, (width, height), anchor)
         window.geometry(format_tk_geometry(width, height, x, y))
-        window.update_idletasks()
         _apply_non_activating_style(window, click_through=True)
         window.deiconify()
         self.toast_job = self.root.after(

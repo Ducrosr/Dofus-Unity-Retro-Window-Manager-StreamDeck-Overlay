@@ -24,6 +24,14 @@ class I18nTests(unittest.TestCase):
         self.assertEqual(tr("Réinitialiser l’affichage…", language="es"), "Restablecer visualización…")
         self.assertEqual(tr("Dépôt GitHub officiel", language="en"), "Official GitHub repository")
         self.assertEqual(tr("Conseils anti-phishing Ankama", language="es"), "Consejos anti-phishing de Ankama")
+        self.assertEqual(
+            tr("Adapter automatiquement la largeur de l’overlay au contenu", language="en"),
+            "Automatically fit the overlay width to its content",
+        )
+        self.assertEqual(
+            tr("Afficher les icônes dans la notification", language="es"),
+            "Mostrar iconos en la notificación",
+        )
 
     def test_translated_text_can_be_mapped_back_to_its_source(self) -> None:
         self.assertEqual(translation_source("Settings"), "Paramètres")

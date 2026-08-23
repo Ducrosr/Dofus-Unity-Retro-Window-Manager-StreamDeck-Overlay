@@ -42,8 +42,9 @@ Le code source 2.20.0 est proposé en **bêta publique**. Il réunit l’interfa
 - interface en français par défaut, anglais ou espagnol, sélectionnable en un clic avec les trois drapeaux ;
 - réinitialisation séparée de l’affichage, sans supprimer les profils ni les personnalisations des personnages ;
 - mode compact toujours visible avec uniquement la rotation active et un bouton de retour explicite ;
-- notification de changement de personnage et overlay de rotation transparent, configurables et désactivables ;
+- notification de changement de personnage et overlay de rotation transparent, configurables, désactivables et ajustés automatiquement à la largeur de leur contenu ;
 - contenu de l’overlay et de la notification personnalisable : numéro, nom, classe et alias peuvent être déplacés ou masqués ;
+- portraits et icônes affichables ou masquables indépendamment dans la notification, l’overlay et le Stream Deck ;
 - signalement orange avec `!` et léger clignotement facultatif des fenêtres demandant l’attention ;
 - file d’attente chronologique `!1`, `!2`… et action **Prochaine alerte** dans l’application, l’overlay, le raccourci F8 et le Stream Deck ;
 - portrait local, 38 portraits de classes, 39 icônes officielles de caractéristiques et 20 icônes officielles de métiers personnalisables par personnage ;

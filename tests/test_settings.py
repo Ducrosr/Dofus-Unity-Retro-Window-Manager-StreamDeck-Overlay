@@ -39,9 +39,12 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.rotation_overlay_layout, DEFAULT_ROTATION_OVERLAY_LAYOUT)
         self.assertEqual(settings.swap_notification_layout, DEFAULT_ROTATION_OVERLAY_LAYOUT)
         self.assertEqual((settings.rotation_overlay_width, settings.rotation_overlay_height), (300, 0))
+        self.assertTrue(settings.rotation_overlay_auto_width)
         self.assertTrue(settings.attention_blink_enabled)
         self.assertTrue(settings.show_popup_portraits)
+        self.assertTrue(settings.show_popup_badges)
         self.assertTrue(settings.show_overlay_portraits)
+        self.assertTrue(settings.show_overlay_badges)
         self.assertTrue(settings.show_character_portraits)
         self.assertTrue(settings.show_character_badges)
         self.assertEqual(settings.character_visuals, {})
@@ -101,10 +104,13 @@ class SettingsTests(unittest.TestCase):
                 rotation_overlay_opacity=72,
                 rotation_overlay_locked=True,
                 rotation_overlay_width=440,
+                rotation_overlay_auto_width=False,
                 rotation_overlay_height=520,
                 attention_blink_enabled=False,
                 show_popup_portraits=False,
+                show_popup_badges=False,
                 show_overlay_portraits=True,
+                show_overlay_badges=True,
                 show_character_portraits=False,
                 show_character_badges=False,
                 character_visuals={"Nealla": {"portrait": "", "badge": "ankama_force"}},
@@ -145,9 +151,12 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(actual.rotation_overlay_opacity, 72)
         self.assertTrue(actual.rotation_overlay_locked)
         self.assertEqual((actual.rotation_overlay_width, actual.rotation_overlay_height), (440, 520))
+        self.assertFalse(actual.rotation_overlay_auto_width)
         self.assertFalse(actual.attention_blink_enabled)
         self.assertFalse(actual.show_popup_portraits)
+        self.assertFalse(actual.show_popup_badges)
         self.assertTrue(actual.show_overlay_portraits)
+        self.assertTrue(actual.show_overlay_badges)
         self.assertFalse(actual.show_character_portraits)
         self.assertFalse(actual.show_character_badges)
         self.assertEqual(actual.character_visuals, {"Nealla": {"portrait": "", "badge": "ankama_force"}})
@@ -175,7 +184,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.swap_notification_duration_ms, 600)
         self.assertEqual(settings.swap_notification_opacity, 35)
         self.assertEqual(settings.rotation_overlay_opacity, 100)
-        self.assertEqual((settings.rotation_overlay_width, settings.rotation_overlay_height), (240, 1600))
+        self.assertEqual((settings.rotation_overlay_width, settings.rotation_overlay_height), (80, 1600))
 
     def test_themes_are_remembered_per_game_mode(self) -> None:
         settings = Settings(
@@ -214,6 +223,21 @@ class SettingsTests(unittest.TestCase):
         self.assertFalse(settings.show_overlay_portraits)
         self.assertFalse(settings.show_character_portraits)
 
+    def test_legacy_badge_preference_migrates_to_each_display(self) -> None:
+        settings = Settings.from_dict({"schema_version": 15, "show_character_badges": False})
+
+        self.assertFalse(settings.show_popup_badges)
+        self.assertFalse(settings.show_overlay_badges)
+        self.assertFalse(settings.show_character_badges)
+
+    def test_legacy_custom_overlay_width_remains_manual(self) -> None:
+        settings = Settings.from_dict(
+            {"schema_version": 15, "rotation_overlay_width": 460}
+        )
+
+        self.assertEqual(settings.rotation_overlay_width, 460)
+        self.assertFalse(settings.rotation_overlay_auto_width)
+
     def test_display_reset_preserves_user_data_and_restores_safe_geometry(self) -> None:
         settings = Settings(
             game_mode="unity",
@@ -241,8 +265,12 @@ class SettingsTests(unittest.TestCase):
         self.assertFalse(settings.rotation_overlay_enabled)
         self.assertEqual((settings.rotation_overlay_x, settings.rotation_overlay_y), (24, 160))
         self.assertEqual((settings.rotation_overlay_width, settings.rotation_overlay_height), (300, 0))
+        self.assertTrue(settings.rotation_overlay_auto_width)
         self.assertTrue(settings.attention_blink_enabled)
         self.assertTrue(settings.show_popup_portraits)
+        self.assertTrue(settings.show_popup_badges)
+        self.assertTrue(settings.show_overlay_portraits)
+        self.assertTrue(settings.show_overlay_badges)
 
 
 if __name__ == "__main__":

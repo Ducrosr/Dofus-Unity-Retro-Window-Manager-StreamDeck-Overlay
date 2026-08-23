@@ -54,6 +54,7 @@ Il n'est pas nécessaire de tout tester. Indiquez simplement les parties réelle
 ### Overlay, notification et attention
 
 - personnaliser séparément le contenu de l’overlay et de la notification ;
+- masquer indépendamment portrait et icône dans chacun des deux affichages, puis vérifier leur largeur automatique ;
 - déplacer l’overlay par son en-tête, réordonner une ligne par glisser-déposer et par ▲/▼ ;
 - redimensionner l’overlay avec la poignée ◢ puis relancer l’application pour vérifier la persistance ;
 - provoquer si possible un clignotement réel d’une fenêtre Dofus dans la barre des tâches ;

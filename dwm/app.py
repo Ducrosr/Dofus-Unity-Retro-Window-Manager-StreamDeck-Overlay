@@ -1299,9 +1299,10 @@ class WindowManagerApp:
             locked=self.settings.rotation_overlay_locked,
             layout=self.settings.rotation_overlay_layout,
             width=self.settings.rotation_overlay_width,
+            auto_width=self.settings.rotation_overlay_auto_width,
             height=self.settings.rotation_overlay_height,
             show_portrait=self.settings.show_overlay_portraits,
-            show_badge=self.settings.show_character_badges,
+            show_badge=self.settings.show_overlay_badges,
         )
         self.overlay_button_text.set(
             tr("Masquer l’overlay") if self.settings.rotation_overlay_enabled else tr("Afficher l’overlay")
@@ -1347,14 +1348,16 @@ class WindowManagerApp:
         self.settings.rotation_overlay_y = int(y)
         save_settings(self.settings_path, self.settings)
 
-    def _save_overlay_size(self, width: int, height: int) -> None:
-        normalized = (max(240, min(900, int(width))), max(80, min(1600, int(height))))
-        if normalized == (
+    def _save_overlay_size(self, width: int, height: int, *, auto_width: bool = False) -> None:
+        normalized = (max(80, min(900, int(width))), max(80, min(1600, int(height))))
+        if (*normalized, bool(auto_width)) == (
             self.settings.rotation_overlay_width,
             self.settings.rotation_overlay_height,
+            self.settings.rotation_overlay_auto_width,
         ):
             return
         self.settings.rotation_overlay_width, self.settings.rotation_overlay_height = normalized
+        self.settings.rotation_overlay_auto_width = bool(auto_width)
         save_settings(self.settings_path, self.settings)
 
     def _reorder_from_overlay(self, hwnd: int, destination: str | int) -> None:
@@ -1419,7 +1422,7 @@ class WindowManagerApp:
             opacity=self.settings.swap_notification_opacity,
             layout=self.settings.swap_notification_layout,
             show_portrait=self.settings.show_popup_portraits,
-            show_badge=self.settings.show_character_badges,
+            show_badge=self.settings.show_popup_badges,
         )
 
     def _focus_from_auxiliary_display(self, hwnd: int) -> None:
@@ -3664,10 +3667,13 @@ class WindowManagerApp:
         overlay_y = StringVar(value=str(self.settings.rotation_overlay_y))
         overlay_locked = BooleanVar(value=bool(self.settings.rotation_overlay_locked))
         overlay_width = StringVar(value=str(self.settings.rotation_overlay_width))
+        overlay_auto_width = BooleanVar(value=bool(self.settings.rotation_overlay_auto_width))
         overlay_height = StringVar(value=str(self.settings.rotation_overlay_height))
         show_portraits = BooleanVar(value=bool(self.settings.show_character_portraits))
         show_popup_portraits = BooleanVar(value=bool(self.settings.show_popup_portraits))
+        show_popup_badges = BooleanVar(value=bool(self.settings.show_popup_badges))
         show_overlay_portraits = BooleanVar(value=bool(self.settings.show_overlay_portraits))
+        show_overlay_badges = BooleanVar(value=bool(self.settings.show_overlay_badges))
         attention_blink = BooleanVar(value=bool(self.settings.attention_blink_enabled))
         show_badges = BooleanVar(value=bool(self.settings.show_character_badges))
         overlay_layout = dict(
@@ -3875,15 +3881,20 @@ class WindowManagerApp:
         TtkLabel(position_row, text=" / ", style="Muted.TLabel").pack(side="left")
         Spinbox(position_row, from_=-10000, to=10000, textvariable=overlay_y, width=7).pack(side="left")
 
-        TtkLabel(in_game_display, text="Largeur / hauteur").grid(
+        TtkLabel(in_game_display, text="Largeur manuelle / hauteur").grid(
             row=7, column=0, sticky="w", padx=(22, 12), pady=3
         )
         size_row = TtkFrame(in_game_display)
         size_row.grid(row=7, column=1, sticky="w", pady=3)
-        Spinbox(size_row, from_=240, to=900, textvariable=overlay_width, width=7).pack(side="left")
+        Spinbox(size_row, from_=80, to=900, textvariable=overlay_width, width=7).pack(side="left")
         TtkLabel(size_row, text=" / ", style="Muted.TLabel").pack(side="left")
         Spinbox(size_row, from_=0, to=1600, textvariable=overlay_height, width=7).pack(side="left")
         TtkLabel(size_row, text=" px · hauteur 0 = automatique", style="Muted.TLabel").pack(side="left")
+        TtkCheckbutton(
+            in_game_display,
+            text="Adapter automatiquement la largeur de l’overlay au contenu",
+            variable=overlay_auto_width,
+        ).grid(row=8, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=(2, 4))
 
         overlay_content = TtkLabelFrame(
             in_game_display,
@@ -3891,7 +3902,7 @@ class WindowManagerApp:
             padding=8,
         )
         overlay_content.grid(
-            row=8,
+            row=9,
             column=0,
             columnspan=2,
             sticky="ew",
@@ -3943,7 +3954,7 @@ class WindowManagerApp:
             in_game_display,
             text="Verrouiller et ignorer les clics",
             variable=overlay_locked,
-        ).grid(row=9, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=(4, 2))
+        ).grid(row=10, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=(4, 2))
         TtkLabel(
             in_game_display,
             text=(
@@ -3952,27 +3963,37 @@ class WindowManagerApp:
             ),
             style="Muted.TLabel",
             wraplength=560,
-        ).grid(row=10, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=(0, 2))
+        ).grid(row=11, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=(0, 2))
         TtkCheckbutton(
             in_game_display,
             text="Afficher les portraits dans la notification",
             variable=show_popup_portraits,
-        ).grid(row=11, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=(6, 2))
+        ).grid(row=12, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=(6, 2))
+        TtkCheckbutton(
+            in_game_display,
+            text="Afficher les icônes dans la notification",
+            variable=show_popup_badges,
+        ).grid(row=13, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=2)
         TtkCheckbutton(
             in_game_display,
             text="Afficher les portraits dans l’overlay",
             variable=show_overlay_portraits,
-        ).grid(row=12, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=2)
+        ).grid(row=14, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=2)
+        TtkCheckbutton(
+            in_game_display,
+            text="Afficher les icônes dans l’overlay",
+            variable=show_overlay_badges,
+        ).grid(row=15, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=2)
         TtkCheckbutton(
             in_game_display,
             text="Afficher les portraits sur le Stream Deck",
             variable=show_portraits,
-        ).grid(row=13, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=2)
+        ).grid(row=16, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=2)
         TtkCheckbutton(
             in_game_display,
-            text="Afficher les icônes officielles de caractéristiques ou de métiers sur ces mêmes affichages",
+            text="Afficher les icônes officielles de caractéristiques ou de métiers sur le Stream Deck",
             variable=show_badges,
-        ).grid(row=14, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=2)
+        ).grid(row=17, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=2)
 
         hotkeys = TtkLabelFrame(content, text="Raccourcis clavier", padding=10)
         hotkeys.pack(fill="x", pady=(0, 8))
@@ -4026,7 +4047,7 @@ class WindowManagerApp:
             try:
                 overlay_x_value = int(overlay_x.get())
                 overlay_y_value = int(overlay_y.get())
-                overlay_width_value = max(240, min(900, int(overlay_width.get())))
+                overlay_width_value = max(80, min(900, int(overlay_width.get())))
                 requested_height = int(overlay_height.get())
                 overlay_height_value = 0 if requested_height <= 0 else max(80, min(1600, requested_height))
             except ValueError:
@@ -4108,6 +4129,7 @@ class WindowManagerApp:
             self.settings.rotation_overlay_x = overlay_x_value
             self.settings.rotation_overlay_y = overlay_y_value
             self.settings.rotation_overlay_width = overlay_width_value
+            self.settings.rotation_overlay_auto_width = bool(overlay_auto_width.get())
             self.settings.rotation_overlay_height = overlay_height_value
             self.settings.rotation_overlay_locked = bool(overlay_locked.get())
             self.settings.rotation_overlay_layout = {
@@ -4118,7 +4140,9 @@ class WindowManagerApp:
             }
             self.settings.show_character_portraits = bool(show_portraits.get())
             self.settings.show_popup_portraits = bool(show_popup_portraits.get())
+            self.settings.show_popup_badges = bool(show_popup_badges.get())
             self.settings.show_overlay_portraits = bool(show_overlay_portraits.get())
+            self.settings.show_overlay_badges = bool(show_overlay_badges.get())
             self.settings.attention_blink_enabled = bool(attention_blink.get())
             self.settings.show_character_badges = bool(show_badges.get())
 

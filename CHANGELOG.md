@@ -2,6 +2,8 @@
 
 ## 2.20.0-beta.2 — en préparation
 
+- adaptation automatique de la largeur de l’overlay et de la notification à leur contenu, avec conservation d’un mode manuel pour l’overlay ;
+- réglages indépendants, activés par défaut, pour afficher ou masquer les portraits et les icônes dans la notification, l’overlay et le Stream Deck ;
 - mise à jour en place du focus dans l’application, le mode compact et l’overlay afin d’éviter leur reconstruction et le clignotement visible à chaque changement de personnage ;
 - regroupement des rafales de navigation vers leur destination finale et remplacement des notifications en attente par la plus récente, sans accumulation retardée ;
 - ajout d’une file chronologique des demandes d’attention : `!1` désigne la plus ancienne, les signaux répétés ne modifient pas l’ordre et un focus échoué conserve l’alerte ;

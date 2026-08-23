@@ -27,8 +27,9 @@ La versión 2.20.0 es la beta pública actual. Reúne la interfaz multilingüe, 
 - perfiles JSON y copia completa de la configuración;
 - cambio instantáneo entre Unity y Retro;
 - modo compacto siempre visible;
-- notificación de cambio personalizable: contenido, posición, duración y opacidad;
-- overlay de rotación transparente, desplazable y redimensionable;
+- notificación de cambio personalizable con anchura automática según el contenido, posición, duración y opacidad;
+- overlay de rotación transparente, desplazable y redimensionable, con anchura automática opcional;
+- retratos e iconos visibles u ocultables de forma independiente en la notificación, el overlay y Stream Deck;
 - indicador naranja `!` de solicitud de atención, con parpadeo suave opcional, en la aplicación, el overlay y Stream Deck;
 - cola cronológica `!1`, `!2`… con acción **Siguiente alerta** en la aplicación, el overlay, el atajo F8 y Stream Deck;
 - doce temas disponibles en ambos modos: Standard, Bonta, Brakmar, Tribute, Gold and Steel, Belladone, Unicorn, Emerald Mine, Sufokia, Pandala, Wabbit y Retro;

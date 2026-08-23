@@ -132,7 +132,7 @@ Après un changement réussi depuis les raccourcis, l’application, le Stream D
 - le nom ou l’alias lorsqu’il existe ;
 - le pseudo et la classe en complément.
 
-La notification est activée par défaut. Elle ne prend pas le focus, ignore les clics et disparaît automatiquement. Dans **Paramètres → Affichage en jeu**, elle peut être désactivée, placée dans l’un des six emplacements de la fenêtre Dofus ciblée, affichée entre 600 et 5 000 ms et réglée entre 35 et 100 % d’opacité. Son emplacement gauche et ses deux lignes utilisent les mêmes choix **Numéro**, **Nom**, **Classe**, **Alias** ou **Masqué** que l’overlay. L’affichage du portrait peut être activé ou masqué indépendamment de celui de l’overlay et du Stream Deck ; l’icône reste disponible seule si les portraits sont masqués.
+La notification est activée par défaut. Elle ne prend pas le focus, ignore les clics, adapte automatiquement sa largeur aux informations visibles et disparaît automatiquement. Dans **Paramètres → Affichage en jeu**, elle peut être désactivée, placée dans l’un des six emplacements de la fenêtre Dofus ciblée, affichée entre 600 et 5 000 ms et réglée entre 35 et 100 % d’opacité. Son emplacement gauche et ses deux lignes utilisent les mêmes choix **Numéro**, **Nom**, **Classe**, **Alias** ou **Masqué** que l’overlay. Le portrait et l’icône peuvent chacun être activés ou masqués ; l’un peut rester visible sans l’autre.
 
 ## Overlay de rotation
 
@@ -142,7 +142,7 @@ Lorsqu’il est déverrouillé :
 
 - glissez l’en-tête pour déplacer l’overlay ;
 - glissez une ligne vers une autre position, ou utilisez ses flèches ▲/▼, pour modifier l’ordre de rotation ;
-- étirez la poignée ◢ dans l’angle inférieur droit pour ajuster sa largeur et sa hauteur ;
+- étirez la poignée ◢ dans l’angle inférieur droit pour passer en largeur manuelle et ajuster ses dimensions ;
 - cliquez brièvement sur un personnage pour activer sa fenêtre ;
 - la position, l’ordre et les dimensions sont mémorisés automatiquement.
 
@@ -150,7 +150,7 @@ Les paramètres permettent aussi de saisir les coordonnées X/Y, de régler l’
 
 Le contenu de chaque ligne est personnalisable avec les champs **Numéro**, **Nom**, **Classe**, **Alias** ou **Masqué**. La disposition par défaut place le numéro à gauche, le nom sur la première ligne et `classe · alias` sur la seconde. Lorsqu’un alias n’est pas renseigné, un tiret est affiché.
 
-Le texte s’adapte automatiquement à la largeur et à la hauteur disponibles lorsque l’overlay est redimensionné. Son portrait peut être activé ou masqué indépendamment de celui de la notification et du Stream Deck ; l’icône reste disponible seule si les portraits sont masqués. Une fenêtre demandant l’attention passe en orange ; cet état est prioritaire sur la couleur du personnage actif.
+La largeur automatique est activée par défaut et suit le texte, les portraits et les icônes réellement visibles. Elle peut être désactivée dans les paramètres ou par un redimensionnement direct. Le portrait et l’icône de l’overlay peuvent chacun être activés ou masqués. Une fenêtre demandant l’attention passe en orange ; cet état est prioritaire sur la couleur du personnage actif.
 
 Lorsque l’overlay ou le mode compact est visible, un changement manuel vers une autre fenêtre Dofus actualise également le personnage mis en évidence, sans déclencher de notification supplémentaire.
 

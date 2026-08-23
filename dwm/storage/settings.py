@@ -20,7 +20,7 @@ from ..services.themes import (
 )
 
 
-SETTINGS_SCHEMA_VERSION = 15
+SETTINGS_SCHEMA_VERSION = 16
 MODERN_DARK_THEME = UNITY_STANDARD_THEME  # Backward-compatible public name.
 DEFAULT_WINDOW_COLUMN_ORDER = ("class", "name", "alias", "hwnd")
 
@@ -50,10 +50,13 @@ class Settings:
     rotation_overlay_locked: bool = False
     rotation_overlay_layout: dict[str, str] | None = None
     rotation_overlay_width: int = 300
+    rotation_overlay_auto_width: bool = True
     rotation_overlay_height: int = 0
     attention_blink_enabled: bool = True
     show_popup_portraits: bool = True
+    show_popup_badges: bool = True
     show_overlay_portraits: bool = True
+    show_overlay_badges: bool = True
     show_character_portraits: bool = True
     show_character_badges: bool = True
     character_visuals: dict[str, dict[str, str]] | None = None
@@ -109,10 +112,13 @@ class Settings:
         self.rotation_overlay_locked = False
         self.rotation_overlay_layout = dict(DEFAULT_ROTATION_OVERLAY_LAYOUT)
         self.rotation_overlay_width = 300
+        self.rotation_overlay_auto_width = True
         self.rotation_overlay_height = 0
         self.attention_blink_enabled = True
         self.show_popup_portraits = True
+        self.show_popup_badges = True
         self.show_overlay_portraits = True
+        self.show_overlay_badges = True
         self.show_character_portraits = True
         self.show_character_badges = True
 
@@ -170,7 +176,7 @@ class Settings:
         self.rotation_overlay_opacity = clamp_overlay_opacity(self.rotation_overlay_opacity)
         self.rotation_overlay_layout = normalize_overlay_layout(self.rotation_overlay_layout)
         try:
-            self.rotation_overlay_width = max(240, min(900, int(self.rotation_overlay_width)))
+            self.rotation_overlay_width = max(80, min(900, int(self.rotation_overlay_width)))
             requested_height = int(self.rotation_overlay_height)
             self.rotation_overlay_height = 0 if requested_height <= 0 else max(80, min(1600, requested_height))
         except (TypeError, ValueError):
@@ -213,10 +219,13 @@ class Settings:
                 self.rotation_overlay_layout or DEFAULT_ROTATION_OVERLAY_LAYOUT
             ),
             "rotation_overlay_width": int(self.rotation_overlay_width),
+            "rotation_overlay_auto_width": bool(self.rotation_overlay_auto_width),
             "rotation_overlay_height": int(self.rotation_overlay_height),
             "attention_blink_enabled": bool(self.attention_blink_enabled),
             "show_popup_portraits": bool(self.show_popup_portraits),
+            "show_popup_badges": bool(self.show_popup_badges),
             "show_overlay_portraits": bool(self.show_overlay_portraits),
+            "show_overlay_badges": bool(self.show_overlay_badges),
             "show_character_portraits": bool(self.show_character_portraits),
             "show_character_badges": bool(self.show_character_badges),
             "character_visuals": sanitize_character_visuals(self.character_visuals),
@@ -255,6 +264,9 @@ class Settings:
             theme = UNITY_STANDARD_THEME
 
         legacy_portraits = bool(d.get("show_character_portraits", True))
+        legacy_badges = bool(d.get("show_character_badges", True))
+        legacy_overlay_width = int(d.get("rotation_overlay_width", 300))
+        auto_width_default = not (schema < 16 and legacy_overlay_width != 300)
 
         return Settings(
             theme=theme,
@@ -278,13 +290,18 @@ class Settings:
             rotation_overlay_opacity=int(d.get("rotation_overlay_opacity", 88)),
             rotation_overlay_locked=bool(d.get("rotation_overlay_locked", False)),
             rotation_overlay_layout=d.get("rotation_overlay_layout") or None,
-            rotation_overlay_width=int(d.get("rotation_overlay_width", 300)),
+            rotation_overlay_width=legacy_overlay_width,
+            rotation_overlay_auto_width=bool(
+                d.get("rotation_overlay_auto_width", auto_width_default)
+            ),
             rotation_overlay_height=int(d.get("rotation_overlay_height", 0)),
             attention_blink_enabled=bool(d.get("attention_blink_enabled", True)),
             show_popup_portraits=bool(d.get("show_popup_portraits", legacy_portraits)),
+            show_popup_badges=bool(d.get("show_popup_badges", legacy_badges)),
             show_overlay_portraits=bool(d.get("show_overlay_portraits", legacy_portraits)),
+            show_overlay_badges=bool(d.get("show_overlay_badges", legacy_badges)),
             show_character_portraits=legacy_portraits,
-            show_character_badges=bool(d.get("show_character_badges", True)),
+            show_character_badges=legacy_badges,
             character_visuals=d.get("character_visuals") or None,
             auto_refresh=bool(d.get("auto_refresh", True)),
             refresh_seconds=int(d.get("refresh_seconds", 10)),

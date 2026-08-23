@@ -27,8 +27,9 @@ Version 2.20.0 is the current public beta. It brings together the multilingual i
 - saved JSON profiles and complete configuration backups;
 - instant Unity/Retro switching;
 - compact always-on-top mode;
-- customizable switch notification, including content, position, duration and opacity;
-- transparent, movable and resizable rotation overlay;
+- customizable switch notification with content-based automatic width, position, duration and opacity;
+- transparent, movable and resizable rotation overlay with optional automatic width;
+- portraits and icons can be shown or hidden independently in the notification, overlay and Stream Deck;
 - orange `!` attention request indicator with optional subtle blinking in the app, overlay and Stream Deck;
 - chronological `!1`, `!2`… queue with a **Next alert** action in the app, overlay, F8 shortcut and Stream Deck;
 - twelve themes available in both game modes: Standard, Bonta, Brakmar, Tribute, Gold and Steel, Belladone, Unicorn, Emerald Mine, Sufokia, Pandala, Wabbit and Retro;
