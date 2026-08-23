@@ -1,15 +1,15 @@
 {
     "name": "dofus-window-manager-streamdeck",
-    "version": "0.4.1",
+    "version": "0.6.1",
     "private": true,
     "type": "module",
     "scripts": {
         "build": "rolldown -c rolldown.config.ts",
-        "test": "node --test src/appearance-preferences.test.ts src/character-selection.test.ts src/display-preferences.test.ts src/launcher.test.ts src/streamdeck-foreground.test.ts src/text-layout.test.ts",
+        "test": "node --test src/appearance-preferences.test.ts src/character-selection.test.ts src/display-preferences.test.ts src/launcher.test.ts src/streamdeck-foreground.test.ts src/text-layout.test.ts src/theme.test.ts",
         "watch": "rolldown -c rolldown.config.ts -w",
         "typecheck": "tsc --noEmit",
         "validate": "streamdeck validate com.remyducros.dofuswindowmanager.sdPlugin --no-update-check",
-        "pack": "streamdeck pack com.remyducros.dofuswindowmanager.sdPlugin --no-update-check"
+        "pack": "streamdeck pack com.remyducros.dofuswindowmanager.sdPlugin --no-update-check --force"
     },
     "prettier": "@elgato/prettier-config",
     "dependencies": {

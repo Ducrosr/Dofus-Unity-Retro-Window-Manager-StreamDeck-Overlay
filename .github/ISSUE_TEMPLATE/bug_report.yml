@@ -11,7 +11,7 @@ body:
     id: app_version
     attributes:
       label: Version de Dofus Window Manager
-      placeholder: "2.19.0"
+      placeholder: "2.20.0-beta.1"
     validations:
       required: true
 
@@ -40,7 +40,7 @@ body:
     attributes:
       label: Stream Deck et version du plugin
       description: Indiquez « non concerné » si le problème ne concerne pas Stream Deck.
-      placeholder: "Stream Deck 7.x, plugin 0.4.1"
+      placeholder: "Stream Deck 7.x, plugin 0.6.1"
     validations:
       required: true
 

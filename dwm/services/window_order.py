@@ -39,6 +39,17 @@ def move_window_by_delta(order: Iterable[int], hwnd: int, delta: int) -> list[in
     return result
 
 
+def move_window_to_index(order: Iterable[int], hwnd: int, target_index: int) -> list[int]:
+    """Move one hwnd to a zero-based index, clamped to the available range."""
+    result = list(order)
+    if hwnd not in result:
+        return result
+    result.remove(hwnd)
+    destination = max(0, min(len(result), int(target_index)))
+    result.insert(destination, hwnd)
+    return result
+
+
 def align_streamdeck_slots_with_managed(
     streamdeck_order: Iterable[int], managed_order: Iterable[int], ignored: set[int]
 ) -> list[int]:

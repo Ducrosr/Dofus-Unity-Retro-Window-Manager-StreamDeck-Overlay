@@ -255,7 +255,20 @@ export class CharacterAction extends SingletonAction<CharacterSettings> {
 			await this.setCharacterAccent(characterKey, accent);
 		}
 		await this.syncActionSettings(action, settings, window.slot, characterKey, display, layout, accent);
-		const image = svgToDataUrl(buildCharacterKeySvg(window, window.slot, layout, window.active, accent));
+		const image = svgToDataUrl(
+			buildCharacterKeySvg(
+				window,
+				window.slot,
+				layout,
+				window.active,
+				accent,
+				state.status.show_character_portraits !== false,
+				state.status.show_character_badges !== false,
+				state.status.theme,
+				state.status.attention_blink_enabled !== false,
+				state.status.attention_blink_phase !== false,
+			),
+		);
 		await action.setState(window.active ? 1 : 0);
 		await action.setTitle("");
 		await action.setImage(image);
@@ -263,21 +276,28 @@ export class CharacterAction extends SingletonAction<CharacterSettings> {
 
 	private async publishCharacterOptions(state: BridgeState): Promise<void> {
 		const items: DataSourceItem[] = [];
+		const language = state.status?.language === "en" || state.status?.language === "es" ? state.status.language : "fr";
+		const text = {
+			fr: { disconnected: "Dofus Window Manager non connecté", empty: "Aucune fenêtre Dofus détectée", alias: "alias", ignored: "ignorée", attention: "demande votre attention" },
+			en: { disconnected: "Dofus Window Manager is not connected", empty: "No Dofus window detected", alias: "alias", ignored: "ignored", attention: "needs your attention" },
+			es: { disconnected: "Dofus Window Manager no está conectado", empty: "No se detectó ninguna ventana de Dofus", alias: "alias", ignored: "ignorada", attention: "requiere tu atención" },
+		}[language];
 
 		if (!state.connected || !state.status) {
-			items.push({ label: "Dofus Window Manager non connecté", value: "", disabled: true });
+			items.push({ label: text.disconnected, value: "", disabled: true });
 		} else if (state.status.windows.length === 0) {
-			items.push({ label: "Aucune fenêtre Dofus détectée", value: "", disabled: true });
+			items.push({ label: text.empty, value: "", disabled: true });
 		} else {
 			for (const window of state.status.windows) {
 				const characterName = resolveCharacterName(window);
 				const classSuffix = window.character_class ? ` (${window.character_class})` : "";
 				const alias = window.alias?.trim();
-				const aliasSuffix = alias && alias !== characterName ? ` · alias : ${alias}` : "";
+				const aliasSuffix = alias && alias !== characterName ? ` · ${text.alias} : ${alias}` : "";
 				const position = window.position == null ? "—" : String(window.position);
-				const ignoredSuffix = window.ignored ? " · ignorée" : "";
+				const ignoredSuffix = window.ignored ? ` · ${text.ignored}` : "";
+				const attentionSuffix = window.attention ? ` · ${text.attention}` : "";
 				items.push({
-					label: `${position} — ${characterName}${classSuffix}${aliasSuffix}${ignoredSuffix}`,
+					label: `${position} — ${characterName}${classSuffix}${aliasSuffix}${ignoredSuffix}${attentionSuffix}`,
 					value: String(window.slot),
 				});
 			}

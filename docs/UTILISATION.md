@@ -7,11 +7,13 @@ L’interface principale comporte deux tableaux et quatre groupes de commandes :
 - **Fenêtres gérées** : personnages inclus dans la rotation ;
 - **Fenêtres ignorées** : personnages toujours détectés mais exclus de Suivant/Précédent ;
 - **Navigation** : rotation et changement d’ordre ;
-- **Fenêtre sélectionnée** : alias et statut ignoré ;
+- **Fenêtre sélectionnée** : alias, portrait, icône et statut ignoré ;
 - **Profils** : enregistrement et restauration d’une formation ;
-- **Application** : mode Unity/Retro, paramètres, aperçu Stream Deck, diagnostic, sauvegarde et installation du plugin.
+- **Application** : mode Unity/Retro, mode compact, overlay, paramètres, aperçu Stream Deck, diagnostic, sauvegarde, installation du plugin et mises à jour.
 
 La barre verticale à droite conserve l’accès aux commandes lorsque la fenêtre est courte ou que Windows utilise une mise à l’échelle élevée. La molette garde la priorité au tableau ou au journal lorsqu’elle se trouve au-dessus.
+
+Chaque tableau possède aussi une barre horizontale lorsque ses colonnes dépassent la largeur disponible. Si un tableau vide ne peut pas défiler, la molette reprend automatiquement le défilement vertical de l’interface complète.
 
 ## Détecter les personnages
 
@@ -30,19 +32,22 @@ Le mode Unity cible les fenêtres Unity. Le mode Retro combine la classe de fen�
 
 La ligne active est mise en évidence dans l’application. Le bouton Stream Deck actif utilise un état vert.
 
+Lorsqu’une fenêtre Dofus fait clignoter son bouton dans la barre des tâches Windows, elle passe en orange avec un repère `!` dans l’application, le mode compact, l’overlay et le Stream Deck. Un léger clignotement rend l’alerte plus visible ; il peut être désactivé dans **Paramètres → Affichage en jeu** sans retirer la couleur orange ni le `!`. Ce signal reste visible jusqu’à ce que la fenêtre obtienne réellement le focus. La détection est volontairement limitée aux demandes d’attention Windows : un événement affiché uniquement à l’intérieur du jeu, sans clignotement ni événement d’accessibilité, peut ne pas être détecté.
+
 ## Modifier l’ordre
 
-Trois méthodes sont disponibles :
+Quatre méthodes sont disponibles :
 
 - glisser une ligne dans **Fenêtres gérées** ;
 - sélectionner une ligne puis utiliser **Monter** ou **Descendre** ;
 - utiliser les touches Monter/Descendre du Stream Deck.
+- utiliser les flèches ou glisser une ligne dans l’overlay déverrouillé.
 
 Pendant un glisser-déposer, la destination est surlignée et la barre d’état précise si le dépôt se fera avant ou après. L’ordre est immédiatement transmis au Stream Deck : les personnages changent donc de touche pour rester cohérents avec la liste.
 
-## Alias
+## Alias, portrait et icône
 
-Sélectionnez un personnage puis choisissez **Modifier l’alias…**. L’alias possède sa propre colonne et ne remplace ni le nom ni la classe.
+Sélectionnez un personnage puis choisissez **Personnaliser…**. L’alias possède sa propre colonne et ne remplace ni le nom ni la classe.
 
 Un alias court améliore la lecture sur le Stream Deck, notamment :
 
@@ -52,6 +57,10 @@ Un alias court améliore la lecture sur le Stream Deck, notamment :
 - une indication distinguant deux personnages de même classe.
 
 Supprimer le contenu rend l’alias vierge. La touche Stream Deck affiche alors un tiret lorsque la ligne Alias est visible.
+
+Le même panneau permet de choisir un portrait PNG, JPEG, WebP ou BMP, ou l’un des 38 portraits de classes fournis. L’image est recadrée en carré, réduite puis enregistrée localement dans les réglages ; elle n’est envoyée à aucun service. **Retirer** restaure la vignette générée avec l’initiale du personnage.
+
+Une icône peut compléter le portrait : le catalogue comprend uniquement les ressources officielles fournies, soit 39 icônes de caractéristiques et 20 icônes de métiers issues de l’univers Dofus. Les anciens symboles génériques créés pour le projet ont été retirés. Les illustrations et icônes de jeu intégrées sont la propriété d’**Ankama Games** ; Dofus Window Manager reste un projet communautaire indépendant, non affilié à Ankama. Ces ressources sont isolées dans `assets/ankama` et ne sont pas couvertes par la licence GPL-3.0 du code. Les portraits personnalisés doivent être des images que l’utilisateur est autorisé à employer.
 
 ## Ignorer une fenêtre
 
@@ -88,7 +97,61 @@ Les préférences internes des touches Stream Deck restent gérées par Stream D
 
 Les paramètres permettent notamment de personnaliser les raccourcis, l’actualisation, le thème, la réduction dans la zone de notification et le démarrage avec Windows.
 
+La section **Demandes d’attention**, placée près du haut des paramètres, permet d’activer ou de désactiver le léger clignotement. La couleur orange et le repère `!` restent actifs dans les deux cas.
+
+Trois petits drapeaux en haut de l’interface sélectionnent immédiatement le français, l’anglais ou l’espagnol. Le français reste la langue par défaut. Les traductions anglaise et espagnole ont été réalisées avec l’aide d’une IA et peuvent contenir des erreurs ; un avertissement le rappelle lors de leur sélection.
+
+Les douze thèmes sont disponibles dans les deux modes : **Standard**, **Bonta**, **Brakmar**, **Tribute**, **Gold and Steel**, **Belladone**, **Unicorn**, **Emerald Mine**, **Sufokia**, **Pandala**, **Wabbit** et **Retro**. **Standard** reste le choix par défaut en Unity et **Retro** en Dofus Retro. L’application mémorise un choix distinct pour chaque version du jeu.
+
+Le thème **Retro — parchemin et orange** reprend les tons historiques de l’interface : crème parchemin, beige/kaki, brun-charbon et orange vif. Il ne contient aucune image ou ressource extraite du jeu.
+
+La fenêtre des paramètres possède son propre défilement vertical. La molette permet donc d’atteindre les options d’affichage en jeu même avec une mise à l’échelle Windows élevée.
+
+Le bouton **Réinitialiser l’affichage…**, disponible dans le panneau Application et dans le pied fixe des paramètres, restaure le thème, l’ordre des colonnes, la notification et la géométrie de l’overlay. Il conserve les profils, alias, portraits, icônes et raccourcis. La réinitialisation complète reste disponible dans **Sauvegarder/restaurer…**.
+
+La recherche automatique des mises à jour est différée au démarrage et limitée à une tentative toutes les 24 heures. Elle peut être désactivée. L’option **Inclure les versions bêta** détermine le canal consulté aussi bien pour la recherche automatique que manuelle.
+
+Le bouton **Rechercher une mise à jour…** interroge uniquement les Releases du dépôt GitHub officiel. Une nouvelle version détectée est signalée dans l’application ; le gestionnaire ne télécharge et n’installe jamais de fichier automatiquement. Il ouvre la page officielle uniquement après confirmation.
+
 Par défaut, fermer la fenêtre réduit l’application dans la zone de notification pour conserver les raccourcis et le pont Stream Deck. Le menu de l’icône permet d’afficher, d’actualiser ou de quitter réellement l’application.
+
+## Mode compact
+
+**Application → Mode compact** masque l’interface complète et ouvre une petite fenêtre toujours au premier plan. Elle contient uniquement les personnages inclus dans la rotation, avec le personnage actuel en surbrillance.
+
+- double-cliquez sur une ligne, ou sélectionnez-la puis appuyez sur Entrée, pour activer le personnage ;
+- déplacez et redimensionnez normalement la fenêtre ; sa géométrie est mémorisée ;
+- utilisez **Quitter le mode compact** ou fermez la fenêtre pour revenir à l’interface complète.
+
+## Notification après un changement de fenêtre
+
+Après un changement réussi depuis les raccourcis, l’application, le Stream Deck, le mode compact ou l’overlay, une courte notification affiche par défaut :
+
+- la position dans la rotation ;
+- le nom ou l’alias lorsqu’il existe ;
+- le pseudo et la classe en complément.
+
+La notification est activée par défaut. Elle ne prend pas le focus, ignore les clics et disparaît automatiquement. Dans **Paramètres → Affichage en jeu**, elle peut être désactivée, placée dans l’un des six emplacements de la fenêtre Dofus ciblée, affichée entre 600 et 5 000 ms et réglée entre 35 et 100 % d’opacité. Son emplacement gauche et ses deux lignes utilisent les mêmes choix **Numéro**, **Nom**, **Classe**, **Alias** ou **Masqué** que l’overlay. L’affichage du portrait peut être activé ou masqué indépendamment de celui de l’overlay et du Stream Deck ; l’icône reste disponible seule si les portraits sont masqués.
+
+## Overlay de rotation
+
+**Afficher l’overlay** ouvre une liste transparente toujours visible, comparable à une liste de participants en communication. Il est masqué par défaut. Seuls les personnages inclus dans la rotation apparaissent et le personnage actuel est mis en évidence.
+
+Lorsqu’il est déverrouillé :
+
+- glissez l’en-tête pour déplacer l’overlay ;
+- glissez une ligne vers une autre position, ou utilisez ses flèches ▲/▼, pour modifier l’ordre de rotation ;
+- étirez la poignée ◢ dans l’angle inférieur droit pour ajuster sa largeur et sa hauteur ;
+- cliquez brièvement sur un personnage pour activer sa fenêtre ;
+- la position, l’ordre et les dimensions sont mémorisés automatiquement.
+
+Les paramètres permettent aussi de saisir les coordonnées X/Y, de régler l’opacité entre 35 et 100 % et de verrouiller l’overlay. Une fois verrouillé, il ignore les clics afin de ne pas gêner le jeu ; repassez par les paramètres pour le déverrouiller.
+
+Le contenu de chaque ligne est personnalisable avec les champs **Numéro**, **Nom**, **Classe**, **Alias** ou **Masqué**. La disposition par défaut place le numéro à gauche, le nom sur la première ligne et `classe · alias` sur la seconde. Lorsqu’un alias n’est pas renseigné, un tiret est affiché.
+
+Le texte s’adapte automatiquement à la largeur et à la hauteur disponibles lorsque l’overlay est redimensionné. Son portrait peut être activé ou masqué indépendamment de celui de la notification et du Stream Deck ; l’icône reste disponible seule si les portraits sont masqués. Une fenêtre demandant l’attention passe en orange ; cet état est prioritaire sur la couleur du personnage actif.
+
+Lorsque l’overlay ou le mode compact est visible, un changement manuel vers une autre fenêtre Dofus actualise également le personnage mis en évidence, sans déclencher de notification supplémentaire.
 
 ## Stream Deck
 
@@ -107,12 +170,12 @@ Pour chaque personnage, la position, le nom, la classe et l’alias peuvent êtr
 - classe ligne 3 ;
 - alias ligne 4.
 
-La disposition et la couleur de bordure sont mémorisées par personnage et le suivent lorsqu’il change de touche.
+La disposition et la couleur de bordure sont mémorisées par personnage et le suivent lorsqu’il change de touche. Le portrait et l’icône définis dans l’application sont également repris par le plugin 0.6.1. Le fond et l’accent des touches suivent le thème actif de l’application ; leurs libellés courts suivent sa langue. Une demande d’attention utilise temporairement une bordure orange épaisse et un repère `!`.
 
 L’option **Aperçu Stream Deck…** reproduit la disposition dans l’application et permet de tester le focus, la rotation, l’ordre, l’actualisation et l’exclusion temporaire. Les préférences visuelles avancées restent configurées dans Stream Deck.
 
 ## Diagnostic et journal
 
-**Diagnostic…** affiche la version de l’application, la version du plugin installé et fourni, l’état du pont local, la dernière communication Stream Deck, la détection des fenêtres et les dossiers de journaux.
+**Diagnostic…** affiche la version de l’application et son tag de publication, la version du plugin installé et fourni, l’état du pont local, la dernière communication Stream Deck, la dernière recherche de mise à jour, la détection des fenêtres et les dossiers de journaux.
 
 Le journal principal est masqué par défaut. Activez **Afficher le journal** pour suivre les scans, changements de focus et erreurs. Avant de publier un rapport, retirez les noms ou chemins personnels si nécessaire et ne publiez jamais de donnée de connexion.

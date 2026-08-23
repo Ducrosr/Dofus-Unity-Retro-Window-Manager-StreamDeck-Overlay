@@ -9,13 +9,16 @@ from dwm.services.windows_startup import set_startup_enabled
 from dwm.storage.settings import load_settings, save_settings
 
 
-def choose_game_dialog(default_mode: str = "unity") -> tuple[str, bool]:
+def choose_game_dialog(default_mode: str = "unity", language: str = "fr") -> tuple[str, bool]:
     """Small startup dialog to pick Unity vs Retro.
 
     Returns: (game_mode, remember_choice)
     """
     import tkinter as tk
     from tkinter import ttk
+    from dwm.services.i18n import set_language, tr
+
+    set_language(language)
 
     gm = (default_mode or "unity").strip().lower()
     if gm not in ("unity", "retro"):
@@ -24,7 +27,7 @@ def choose_game_dialog(default_mode: str = "unity") -> tuple[str, bool]:
     result = {"mode": gm, "remember": True, "ok": False}
 
     root = tk.Tk()
-    root.title("Choisir le jeu")
+    root.title(tr("Choisir le jeu"))
     root.resizable(False, False)
 
     # Center-ish
@@ -43,12 +46,12 @@ def choose_game_dialog(default_mode: str = "unity") -> tuple[str, bool]:
     frm = ttk.Frame(root, padding=12)
     frm.pack(fill="both", expand=True)
 
-    ttk.Label(frm, text="Sélectionne la version de Dofus :", font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(0, 8))
+    ttk.Label(frm, text=tr("Sélectionne la version de Dofus :"), font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(0, 8))
 
     ttk.Radiobutton(frm, text="Dofus Unity", value="unity", variable=mode_var).pack(anchor="w")
     ttk.Radiobutton(frm, text="Dofus Retro", value="retro", variable=mode_var).pack(anchor="w", pady=(0, 6))
 
-    ttk.Checkbutton(frm, text="Mémoriser ce choix (pré-sélection au prochain lancement)", variable=remember_var).pack(anchor="w", pady=(6, 10))
+    ttk.Checkbutton(frm, text=tr("Mémoriser ce choix (pré-sélection au prochain lancement)"), variable=remember_var).pack(anchor="w", pady=(6, 10))
 
     btns = ttk.Frame(frm)
     btns.pack(fill="x")
@@ -63,7 +66,7 @@ def choose_game_dialog(default_mode: str = "unity") -> tuple[str, bool]:
         root.destroy()
 
     ttk.Button(btns, text="OK", command=on_ok).pack(side="right")
-    ttk.Button(btns, text="Annuler", command=on_cancel).pack(side="right", padx=(0, 8))
+    ttk.Button(btns, text=tr("Annuler"), command=on_cancel).pack(side="right", padx=(0, 8))
 
     root.bind("<Return>", lambda e: on_ok())
     root.bind("<Escape>", lambda e: on_cancel())
@@ -110,7 +113,7 @@ def main() -> None:
     if args.use_saved_mode:
         mode = settings.game_mode
     else:
-        mode, remember = choose_game_dialog(settings.game_mode)
+        mode, remember = choose_game_dialog(settings.game_mode, settings.language)
         if remember:
             settings.game_mode = mode
             save_settings(settings_path, settings)

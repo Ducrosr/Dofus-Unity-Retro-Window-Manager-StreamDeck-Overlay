@@ -1,7 +1,7 @@
 """Windows event hook (SetWinEventHook) for near-zero polling.
 
 This module provides WinEventHook: a small helper that listens to
-window creation/destruction and title changes.
+window creation/destruction, title changes, focus and system alerts.
 
 Important:
 - Windows-only.
@@ -97,6 +97,8 @@ class WinEventHook:
             EVENT_OBJECT_CREATE = 0x8000
             EVENT_OBJECT_DESTROY = 0x8001
             EVENT_OBJECT_NAMECHANGE = 0x800C
+            EVENT_SYSTEM_ALERT = 0x0002
+            EVENT_SYSTEM_FOREGROUND = 0x0003
 
             WINEVENT_OUTOFCONTEXT = 0x0000
             WINEVENT_SKIPOWNPROCESS = 0x0002
@@ -189,6 +191,10 @@ class WinEventHook:
                     return "destroy"
                 if ev == EVENT_OBJECT_NAMECHANGE:
                     return "namechange"
+                if ev == EVENT_SYSTEM_ALERT:
+                    return "attention"
+                if ev == EVENT_SYSTEM_FOREGROUND:
+                    return "foreground"
                 return None
 
             @WinEventProcType
@@ -201,7 +207,10 @@ class WinEventHook:
                     if not name:
                         return
 
-                    if int(idObject) != OBJID_WINDOW or int(idChild) != CHILDID_SELF:
+                    is_system_event = int(event) in {EVENT_SYSTEM_ALERT, EVENT_SYSTEM_FOREGROUND}
+                    if not is_system_event and (
+                        int(idObject) != OBJID_WINDOW or int(idChild) != CHILDID_SELF
+                    ):
                         return
 
                     ihwnd = int(hwnd)
@@ -240,7 +249,13 @@ class WinEventHook:
 
             # Install one hook per event for clarity.
             self._hooks = []
-            for ev in (EVENT_OBJECT_CREATE, EVENT_OBJECT_DESTROY, EVENT_OBJECT_NAMECHANGE):
+            for ev in (
+                EVENT_OBJECT_CREATE,
+                EVENT_OBJECT_DESTROY,
+                EVENT_OBJECT_NAMECHANGE,
+                EVENT_SYSTEM_ALERT,
+                EVENT_SYSTEM_FOREGROUND,
+            ):
                 h = SetWinEventHook(
                     wintypes.DWORD(ev),
                     wintypes.DWORD(ev),

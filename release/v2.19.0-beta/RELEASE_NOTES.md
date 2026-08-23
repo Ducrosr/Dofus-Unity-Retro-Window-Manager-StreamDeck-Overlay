@@ -34,8 +34,8 @@ Dofus Window Manager ne demande jamais d'identifiant Ankama, de mot de passe, de
 
 ## Signaler un problème
 
-Suivez le [guide de test bêta](https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager/blob/main/docs/BETA_TESTING.md). Vous pouvez partager un [retour de session](https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager/issues/new?template=beta_feedback.yml), même si tout a fonctionné.
+Suivez le [guide de test bêta](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/blob/main/docs/BETA_TESTING.md). Vous pouvez partager un [retour de session](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/issues/new?template=beta_feedback.yml), même si tout a fonctionné.
 
-Pour un problème précis, utilisez le bouton **Diagnostic… → Copier** puis ouvrez un [rapport de bug](https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager/issues/new?template=bug_report.yml). Retirez les noms de personnages et chemins personnels que vous ne souhaitez pas publier.
+Pour un problème précis, utilisez le bouton **Diagnostic… → Copier** puis ouvrez un [rapport de bug](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/issues/new?template=bug_report.yml). Retirez les noms de personnages et chemins personnels que vous ne souhaitez pas publier.
 
 Le comportement Retro complet et l'import du profil sur différents modèles de Stream Deck restent parmi les principaux points à tester.

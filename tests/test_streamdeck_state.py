@@ -52,6 +52,36 @@ class StreamDeckStateTests(unittest.TestCase):
         self.assertEqual(entries[0]["alias"], "")
         self.assertEqual(entries[0]["name"], "Nealla")
 
+    def test_attention_portrait_and_badge_are_published(self) -> None:
+        entries = build_streamdeck_windows(
+            self.windows,
+            [101],
+            [101],
+            set(),
+            {},
+            None,
+            {101},
+            {"Nealla": {"portrait": "portrait-data", "badge": "ankama_force"}},
+        )
+
+        self.assertTrue(entries[0]["attention"])
+        self.assertEqual(entries[0]["portrait"], "portrait-data")
+        self.assertEqual(entries[0]["badge"], "ankama_force")
+        self.assertTrue(str(entries[0]["badge_image"]).startswith("data:image/png;base64,"))
+
+    def test_bundled_game_icon_is_published_as_a_local_png(self) -> None:
+        entries = build_streamdeck_windows(
+            self.windows,
+            [101],
+            [101],
+            set(),
+            {},
+            None,
+            character_visuals={"Nealla": {"portrait": "", "badge": "ankama_force"}},
+        )
+
+        self.assertTrue(str(entries[0]["badge_image"]).startswith("data:image/png;base64,"))
+
 
 if __name__ == "__main__":
     unittest.main()

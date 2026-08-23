@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import unittest
 
-from dwm.services.window_order import align_streamdeck_slots_with_managed, move_column, move_window, move_window_by_delta
+from dwm.services.window_order import (
+    align_streamdeck_slots_with_managed,
+    move_column,
+    move_window,
+    move_window_by_delta,
+    move_window_to_index,
+)
 
 
 class WindowOrderTests(unittest.TestCase):
@@ -25,6 +31,10 @@ class WindowOrderTests(unittest.TestCase):
     def test_streamdeck_buttons_do_not_wrap_at_the_edges(self) -> None:
         self.assertEqual(move_window_by_delta([101, 102, 103], 101, -1), [101, 102, 103])
         self.assertEqual(move_window_by_delta([101, 102, 103], 103, 1), [101, 102, 103])
+
+    def test_overlay_drag_moves_a_window_to_an_exact_index(self) -> None:
+        self.assertEqual(move_window_to_index([101, 102, 103, 104], 104, 1), [101, 104, 102, 103])
+        self.assertEqual(move_window_to_index([101, 102, 103, 104], 101, 99), [102, 103, 104, 101])
 
     def test_streamdeck_follows_managed_order_while_ignored_slot_stays_anchored(self) -> None:
         actual = align_streamdeck_slots_with_managed(

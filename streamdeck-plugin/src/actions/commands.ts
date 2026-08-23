@@ -1,11 +1,10 @@
 import type { KeyDownEvent } from "@elgato/streamdeck";
-import streamDeck, { action, SingletonAction } from "@elgato/streamdeck";
+import streamDeck, { action } from "@elgato/streamdeck";
 
+import { type ActionKind, type EmptySettings, ThemeAwareAction } from "../action-key";
 import { dwmClient } from "../dwm-client";
 
-type EmptySettings = Record<string, never>;
-
-abstract class CommandAction extends SingletonAction<EmptySettings> {
+abstract class CommandAction extends ThemeAwareAction {
 	protected async execute(ev: KeyDownEvent<EmptySettings>, command: () => Promise<unknown>): Promise<void> {
 		try {
 			await command();
@@ -19,6 +18,7 @@ abstract class CommandAction extends SingletonAction<EmptySettings> {
 
 @action({ UUID: "com.remyducros.dofuswindowmanager.next" })
 export class NextAction extends CommandAction {
+	protected readonly actionKind: ActionKind = "next";
 	override async onKeyDown(ev: KeyDownEvent<EmptySettings>): Promise<void> {
 		await this.execute(ev, () => dwmClient.rotate("forward"));
 	}
@@ -26,6 +26,7 @@ export class NextAction extends CommandAction {
 
 @action({ UUID: "com.remyducros.dofuswindowmanager.previous" })
 export class PreviousAction extends CommandAction {
+	protected readonly actionKind: ActionKind = "previous";
 	override async onKeyDown(ev: KeyDownEvent<EmptySettings>): Promise<void> {
 		await this.execute(ev, () => dwmClient.rotate("backward"));
 	}
@@ -33,6 +34,7 @@ export class PreviousAction extends CommandAction {
 
 @action({ UUID: "com.remyducros.dofuswindowmanager.move-up" })
 export class MoveUpAction extends CommandAction {
+	protected readonly actionKind: ActionKind = "move-up";
 	override async onKeyDown(ev: KeyDownEvent<EmptySettings>): Promise<void> {
 		await this.execute(ev, () => dwmClient.reorder("up"));
 	}
@@ -40,6 +42,7 @@ export class MoveUpAction extends CommandAction {
 
 @action({ UUID: "com.remyducros.dofuswindowmanager.move-down" })
 export class MoveDownAction extends CommandAction {
+	protected readonly actionKind: ActionKind = "move-down";
 	override async onKeyDown(ev: KeyDownEvent<EmptySettings>): Promise<void> {
 		await this.execute(ev, () => dwmClient.reorder("down"));
 	}
@@ -47,6 +50,7 @@ export class MoveDownAction extends CommandAction {
 
 @action({ UUID: "com.remyducros.dofuswindowmanager.refresh" })
 export class RefreshAction extends CommandAction {
+	protected readonly actionKind: ActionKind = "refresh";
 	override async onKeyDown(ev: KeyDownEvent<EmptySettings>): Promise<void> {
 		await this.execute(ev, () => dwmClient.refresh());
 	}
@@ -54,6 +58,7 @@ export class RefreshAction extends CommandAction {
 
 @action({ UUID: "com.remyducros.dofuswindowmanager.toggle-ignore" })
 export class ToggleIgnoreAction extends CommandAction {
+	protected readonly actionKind: ActionKind = "toggle-ignore";
 	override async onKeyDown(ev: KeyDownEvent<EmptySettings>): Promise<void> {
 		await this.execute(ev, () => dwmClient.toggleIgnore());
 	}

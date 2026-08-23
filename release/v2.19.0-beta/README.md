@@ -17,6 +17,6 @@ Get-FileHash .\DofusWindowManager.exe -Algorithm SHA256
 ~~~
 
 Téléchargez le programme uniquement depuis le dépôt officiel :
-<https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager>
+<https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay>
 
 L'application officielle ne demande jamais d'identifiant Ankama, de mot de passe, de code de double authentification ou de jeton de session.

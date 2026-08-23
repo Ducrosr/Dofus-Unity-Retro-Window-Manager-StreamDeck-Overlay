@@ -1,13 +1,13 @@
 import type { KeyDownEvent } from "@elgato/streamdeck";
-import streamDeck, { action, SingletonAction } from "@elgato/streamdeck";
+import streamDeck, { action } from "@elgato/streamdeck";
 
+import { type ActionKind, type EmptySettings, ThemeAwareAction } from "../action-key";
 import { dwmClient } from "../dwm-client";
 import { launchRegisteredApp } from "../launcher";
 
-type EmptySettings = Record<string, never>;
-
 @action({ UUID: "com.remyducros.dofuswindowmanager.launch" })
-export class LaunchAction extends SingletonAction<EmptySettings> {
+export class LaunchAction extends ThemeAwareAction {
+	protected readonly actionKind: ActionKind = "launch";
 	override async onKeyDown(ev: KeyDownEvent<EmptySettings>): Promise<void> {
 		try {
 			try {

@@ -1,5 +1,55 @@
 # Historique
 
+## 2.20.0-beta.1 — bêta source
+
+- correction de la mise en page sans fenêtre détectée : la vignette vide est désormais contrainte en pixels et ne peut plus étirer l’interface ;
+- rééquilibrage des largeurs entre les tableaux et les commandes, avec défilement horizontal propre à chaque tableau et défilement vertical global amélioré ;
+- ajout d’états explicites **Aucune fenêtre détectée**, **Aucune fenêtre ignorée** et **Aucun résultat** ;
+- mise à disposition des douze thèmes dans les deux modes : les palettes Unity peuvent être utilisées en Retro et le thème Retro en Unity ; Standard reste le défaut Unity et Retro le défaut Dofus Retro ;
+- déplacement du réglage de clignotement dans une section **Demandes d’attention** immédiatement visible ;
+- ajout d’un bouton **Réinitialiser l’affichage…** dans l’interface principale et dans le pied fixe des paramètres, sans suppression des profils, alias, portraits, icônes ou raccourcis ;
+- ajout d’un léger clignotement pour les demandes d’attention, désactivable sans retirer la couleur orange ni le repère `!` ;
+- mise à l’échelle dynamique du texte de l’overlay selon sa largeur, sa hauteur et le nombre de personnages ;
+- réglages indépendants pour afficher les portraits dans la notification, l’overlay et le Stream Deck ;
+- ajout de 38 portraits de classes, 39 icônes officielles de caractéristiques et 20 icônes officielles de métiers fournies par l’utilisateur, sélectionnables depuis la personnalisation des personnages ;
+- suppression du catalogue de symboles génériques créé pour le projet : seules les icônes officielles intégrées sont désormais proposées ;
+- ajout dans l’application et la documentation d’une attribution explicite à Ankama Games pour les illustrations et icônes de jeu intégrées ;
+- ajout d’un réglage d’opacité indépendant pour la notification de changement de fenêtre ;
+- ajout des langues français, anglais et espagnol avec sélection directe par drapeaux ;
+- avertissement explicite indiquant que les traductions anglaise et espagnole ont été réalisées avec l’aide d’une IA et peuvent contenir des erreurs ;
+- ajout de onze palettes Unity : Standard, Bonta, Brakmar, Tribute, Gold and Steel, Belladone, Unicorn, Emerald Mine, Sufokia, Pandala et Wabbit ;
+- suppression des anciens thèmes externes ; Standard devient le défaut Unity et Retro le défaut Retro, avec une préférence mémorisée séparément pour chaque version du jeu ;
+- transmission du thème et de la langue au plugin Stream Deck 0.6.1 ; les touches Personnage et les actions dynamiques reprennent automatiquement la palette active ;
+- ajout dans l’application de liens directs vers le dépôt GitHub officiel et la page anti-phishing du support Ankama ;
+- renommage du dépôt en **Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay** afin de refléter les deux versions du jeu, le plugin Stream Deck et les overlays ;
+- mise à jour des README français, anglais et espagnol avec les fonctions 2.20, les thèmes, les visuels et les recommandations de sécurité ;
+
+- refonte du thème **Retro — parchemin et orange** d’après la palette historique : fonds crème/kaki, en-têtes brun-charbon et actions orange, sans reprendre d’élément graphique du jeu ;
+- ajout d’un **mode compact** toujours au premier plan, limité aux personnages inclus dans la rotation et directement cliquable ;
+- ajout d’un bouton **Quitter le mode compact** restaurant immédiatement l’interface complète ;
+- ajout d’une notification non interactive après chaque changement de fenêtre, affichant la position, le nom ou alias et la classe du personnage ;
+- choix de la position de la notification dans la fenêtre Dofus ciblée et de sa durée d’affichage ;
+- ajout d’un overlay transparent permanent présentant la rotation et mettant en évidence le personnage actif ;
+- déplacement de l’overlay par glisser-déposer, coordonnées et opacité personnalisables, ainsi qu’un verrouillage permettant aux clics de traverser l’overlay ;
+- contenu de l’overlay personnalisable sur quatre emplacements ; par défaut : numéro à gauche, nom ligne 1, classe et alias ligne 2 ;
+- suivi du premier plan lorsque le mode compact ou l’overlay est visible afin de refléter aussi un changement manuel de fenêtre ;
+- ajout d’un défilement vertical dans les paramètres pour conserver l’accès aux nouvelles options sur les écrans courts ou avec une mise à l’échelle élevée ;
+- ajout d’un vérificateur de mise à jour facultatif, limité aux Releases du dépôt GitHub officiel ;
+- vérification automatique différée et silencieuse, au maximum une fois toutes les 24 heures ;
+- ajout d’une recherche manuelle dans le panneau Application et de préférences pour désactiver le contrôle automatique ou exclure les versions bêta ;
+- aucun téléchargement ni aucune installation automatique : l’utilisateur choisit explicitement s’il souhaite ouvrir la Release officielle ;
+- validation stricte des numéros de version et reconstruction locale de l’adresse officielle afin de ne jamais suivre un lien arbitraire reçu du réseau ;
+- ajout de la version de publication et de l’état du vérificateur dans le diagnostic.
+- détection au mieux des demandes d’attention Windows par événement d’accessibilité et clignotement de la barre des tâches ; l’état reste actif jusqu’au focus réel de la fenêtre ;
+- signalement orange avec repère `!` dans l’application, le mode compact, l’overlay et le plugin Stream Deck ;
+- ajout d’un portrait local par personnage, recadré et stocké dans les réglages, sans envoi réseau ;
+- remplacement de l’ancien catalogue de symboles génériques par les icônes officielles intégrées ;
+- affichage facultatif des portraits et icônes dans l’application, la notification, l’overlay et le Stream Deck ;
+- personnalisation du contenu de la notification avec les mêmes quatre emplacements que l’overlay ;
+- réorganisation des personnages directement dans l’overlay par flèches ou glisser-déposer avec aperçu de destination ;
+- redimensionnement direct de l’overlay par une poignée et mémorisation des dimensions ;
+- plugin Stream Deck 0.6.1.
+
 ## 2.19.0
 
 - ajout d'un exécutable Windows 64 bits standard, sans détection visuelle Retro facultative, pour les utilisateurs ne souhaitant pas installer Python ;

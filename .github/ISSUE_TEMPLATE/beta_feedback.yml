@@ -1,6 +1,6 @@
 name: Partager un retour de bêta
 description: Résumer une session de test, même si tout a fonctionné
-title: "[Bêta 2.19.0] "
+title: "[Bêta source 2.20.0] "
 body:
   - type: markdown
     attributes:
@@ -14,8 +14,8 @@ body:
     attributes:
       label: Méthode d'installation
       options:
-        - Exécutable v2.19.0-beta.1
-        - Installation depuis les sources
+        - Installation 2.20.0 depuis les sources
+        - Ancien exécutable v2.19.0-beta.1
         - Autre méthode
     validations:
       required: true
@@ -70,6 +70,11 @@ body:
         - label: Profil Stream Deck proposé à l'installation
         - label: Touches Personnage et commandes Stream Deck
         - label: Lancement de l'application depuis Stream Deck
+        - label: Français, anglais et espagnol
+        - label: Thèmes Unity et Retro dans les deux modes
+        - label: Mode compact, notification et overlay
+        - label: Demandes d’attention et clignotement facultatif
+        - label: Portraits et icônes officielles
 
   - type: dropdown
     id: result

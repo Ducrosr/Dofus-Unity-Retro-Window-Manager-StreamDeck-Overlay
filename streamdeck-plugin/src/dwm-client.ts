@@ -15,13 +15,23 @@ export type DofusWindow = {
 	title: string;
 	active: boolean;
 	ignored?: boolean;
+	attention?: boolean;
+	portrait?: string;
+	badge?: string;
+	badge_image?: string;
 };
 
 export type DwmStatus = {
 	api_version: number;
 	app_version: string;
 	game_mode: "unity" | "retro";
+	theme?: string;
+	language?: "fr" | "en" | "es";
 	scan_revision?: number;
+	show_character_portraits?: boolean;
+	show_character_badges?: boolean;
+	attention_blink_enabled?: boolean;
+	attention_blink_phase?: boolean;
 	windows: DofusWindow[];
 };
 

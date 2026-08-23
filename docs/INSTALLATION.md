@@ -1,15 +1,17 @@
 # Installer Dofus Window Manager
 
-Ce guide installe la version 2.19.0 depuis le dépôt officiel.
+Ce guide installe le code source 2.20.0 ou l’exécutable public 2.19.0 depuis le dépôt officiel.
 
 > [!CAUTION]
-> Utilisez uniquement <https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager>. Le programme officiel ne demande jamais d’identifiant Ankama, de mot de passe, de code de double authentification ou de jeton de session. N’exécutez pas une copie reçue en message privé et ne désactivez pas votre antivirus pour l’installer.
+> Utilisez uniquement <https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay>. Le programme officiel ne demande jamais d’identifiant Ankama, de mot de passe, de code de double authentification ou de jeton de session. N’exécutez pas une copie reçue en message privé et ne désactivez pas votre antivirus pour l’installer.
+>
+> Consultez aussi la page officielle Ankama : [Reconnaître le phishing et s’en protéger](https://support.ankama.com/hc/fr/articles/201376953-Reconna%C3%AEtre-le-phishing-et-s-en-prot%C3%A9ger).
 
 ## Méthode A — exécutable Windows
 
 Cette méthode ne nécessite ni Python, ni Git, ni compilation.
 
-1. Ouvrez la [préversion officielle v2.19.0-beta.1](https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager/releases/tag/v2.19.0-beta.1) puis téléchargez `DofusWindowManager.exe`.
+1. Ouvrez la [préversion officielle v2.19.0-beta.1](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.19.0-beta.1) puis téléchargez `DofusWindowManager.exe`.
 2. Vérifiez si possible son empreinte avec la commande PowerShell suivante :
 
 ~~~powershell
@@ -28,6 +30,8 @@ La valeur attendue pour cette bêta est :
 Le binaire n'est pas encore signé numériquement. SmartScreen peut donc demander une confirmation au premier lancement. Cela ne constitue pas une garantie de sécurité : vérifiez toujours l'adresse du dépôt et l'empreinte du fichier.
 
 Cet exécutable est la version standard. La gestion des fenêtres Dofus Retro est incluse, mais pas la détection visuelle expérimentale des invitations Retro. Pour utiliser cette fonction facultative, installez l'application depuis les sources puis suivez la section correspondante de ce guide.
+
+L’exécutable publié correspond encore à la bêta 2.19.0. L’installation depuis les sources est nécessaire pour tester immédiatement l’interface multilingue, les overlays, les thèmes et les visuels de la bêta 2.20.0.
 
 ## Installation depuis les sources
 
@@ -64,8 +68,8 @@ Remplacez 3.14 par votre version de Python si nécessaire, sans descendre sous P
 ### Méthode C — cloner avec Git
 
 ~~~powershell
-git clone https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager.git
-cd Dofus-Retro-64-Window-Manager
+git clone https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay.git
+cd Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay
 py -3.14 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
@@ -109,6 +113,8 @@ La détection visuelle des invitations Retro nécessite des dépendances supplé
 Cette fonction est expérimentale. Elle n’apparaît dans les paramètres qu’en mode Retro et lorsque ses dépendances sont disponibles.
 
 ## Mettre à jour une installation clonée
+
+Le bouton **Application → Rechercher une mise à jour…** signale les nouvelles Releases sans télécharger de fichier. Le contrôle automatique, effectué au maximum une fois par jour, peut être désactivé dans **Paramètres**. Dans tous les cas, vérifiez la provenance et l’empreinte du nouveau binaire avant de remplacer l’ancien.
 
 Fermez l’application puis exécutez :
 

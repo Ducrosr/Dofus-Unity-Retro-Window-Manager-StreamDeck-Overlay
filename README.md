@@ -1,20 +1,27 @@
 # Dofus Window Manager
 
-[![Version](https://img.shields.io/badge/version-2.19.0-22b8f0)](CHANGELOG.md)
+**Français** · [English](README.en.md) · [Español](README.es.md)
+
+> [!NOTE]
+> Les versions anglaise et espagnole ont été traduites avec l’aide d’une IA et peuvent contenir des erreurs. Les corrections sont bienvenues dans les Issues ou Pull Requests du dépôt officiel.
+
+[![Version](https://img.shields.io/badge/version-2.20.0--beta-22b8f0)](CHANGELOG.md)
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows)](docs/INSTALLATION.md)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
-[![Tests](https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager/actions/workflows/tests.yml/badge.svg)](https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager/actions/workflows/tests.yml)
+[![Tests](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/actions/workflows/tests.yml/badge.svg)](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/actions/workflows/tests.yml)
 [![Licence GPL-3.0](https://img.shields.io/badge/licence-GPL--3.0-green)](LICENSE)
 
 Gestionnaire de fenêtres local pour **Dofus Unity** et **Dofus Retro**, conçu pour rendre le jeu multicompte plus lisible et plus rapide sous Windows. Il détecte les fenêtres Dofus ouvertes, conserve leur ordre et permet de passer de l’une à l’autre avec des raccourcis ou un Stream Deck.
 
 > [!WARNING]
 > **Ce dépôt est l’unique source officielle du projet :**
-> <https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager>
+> <https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay>
 >
 > Ne téléchargez jamais Dofus Window Manager depuis un site, un message privé ou un miroir tiers. Une copie modifiée peut chercher à voler un identifiant Ankama, un mot de passe, un jeton de session ou d’autres données personnelles. **La version officielle ne demande jamais vos identifiants Ankama, votre code de double authentification ni l’accès à votre compte.**
+>
+> Consultez également les recommandations officielles d’Ankama : **[Reconnaître le phishing et s’en protéger](https://support.ankama.com/hc/fr/articles/201376953-Reconna%C3%AEtre-le-phishing-et-s-en-prot%C3%A9ger)**.
 
-La version 2.19.0 est proposée en **bêta publique**. Les retours de bugs, d’ergonomie et de compatibilité sont les bienvenus dans les [Issues GitHub](https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager/issues).
+Le code source 2.20.0 est proposé en **bêta publique**. Il réunit l’interface multilingue, les overlays, les demandes d’attention, les portraits, les icônes officielles et les thèmes Unity/Retro. Les retours de bugs, d’ergonomie et de compatibilité sont les bienvenus dans les [Issues GitHub](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/issues).
 
 ## Ce que fait l’application
 
@@ -30,20 +37,33 @@ La version 2.19.0 est proposée en **bêta publique**. Les retours de bugs, d’
 - fonctionnement dans la zone de notification et démarrage Windows facultatif ;
 - sauvegarde/restauration des réglages, profils, alias et ordre courant ;
 - rapport de diagnostic copiable pour les bêta-testeurs ;
+- vérification facultative des nouvelles Releases officielles, sans téléchargement automatique ;
+- douze thèmes disponibles dans les deux modes : Standard, Bonta, Brakmar, Tribute, Gold and Steel, Belladone, Unicorn, Emerald Mine, Sufokia, Pandala, Wabbit et Retro ;
+- interface en français par défaut, anglais ou espagnol, sélectionnable en un clic avec les trois drapeaux ;
+- réinitialisation séparée de l’affichage, sans supprimer les profils ni les personnalisations des personnages ;
+- mode compact toujours visible avec uniquement la rotation active et un bouton de retour explicite ;
+- notification de changement de personnage et overlay de rotation transparent, configurables et désactivables ;
+- contenu de l’overlay et de la notification personnalisable : numéro, nom, classe et alias peuvent être déplacés ou masqués ;
+- signalement orange avec `!` et léger clignotement facultatif des fenêtres demandant l’attention ;
+- portrait local, 38 portraits de classes, 39 icônes officielles de caractéristiques et 20 icônes officielles de métiers personnalisables par personnage ;
+- ordre modifiable depuis l’overlay par flèches ou glisser-déposer, avec taille ajustable directement à la souris ;
 - thème sombre moderne et interface à défilement vertical ;
 - détection visuelle facultative des invitations sur Retro.
 
 ## Intégration Stream Deck
 
-Le plugin 0.4.1 fourni avec le projet comprend :
+Le plugin 0.6.1 fourni avec le projet comprend :
 
 - huit touches Personnage avec numéro, nom, classe et alias ;
 - choix individuel des lignes de texte et de leur visibilité ;
 - couleur de bordure par personnage : Terre, Feu, Eau, Air, Neutre ou Violet ;
+- bordure orange, repère `!` et léger clignotement facultatif lorsqu’une fenêtre demande l’attention ;
+- portrait et icône du personnage en arrière-plan, selon les préférences définies dans l’application ;
 - actions Précédent, Suivant, Monter, Descendre, Ignorer/réintégrer et Actualiser ;
 - touche Lancer/afficher Dofus Window Manager ;
 - profil prêt à l’emploi pour le Stream Deck standard à 15 touches ;
 - aperçu interactif de la disposition directement dans l’application.
+- reprise automatique du thème et de la langue de l’application sur les touches dynamiques.
 
 Les préférences visuelles suivent le personnage lorsqu’il change de position. Une fenêtre ignorée reste associée à sa touche et directement activable ; elle est seulement retirée de la rotation automatique.
 
@@ -53,9 +73,12 @@ Les préférences visuelles suivent le personnage lorsqu’il change de position
 
 Pour utiliser l'application sans installer Python ni compiler le projet :
 
-1. ouvrez la **[préversion officielle v2.19.0-beta.1](https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager/releases/tag/v2.19.0-beta.1)** puis téléchargez `DofusWindowManager.exe` ;
+1. ouvrez la **[préversion officielle v2.19.0-beta.1](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.19.0-beta.1)** puis téléchargez `DofusWindowManager.exe` ;
 2. vérifiez si possible son empreinte SHA-256 à l'aide du fichier [SHA256SUMS.txt](release/v2.19.0-beta/SHA256SUMS.txt) ;
 3. placez l'exécutable dans un dossier permanent puis lancez-le.
+
+> [!IMPORTANT]
+> L’exécutable public actuel reste celui de la bêta 2.19.0. Pour tester immédiatement toutes les nouveautés 2.20.0, utilisez l’installation depuis les sources ci-dessous jusqu’à la publication d’un nouveau binaire Windows.
 
 Cette bêta n'est pas encore signée numériquement. Windows SmartScreen peut donc afficher un avertissement, même pour le fichier officiel. Ne contournez jamais cet avertissement pour une copie obtenue ailleurs que sur ce dépôt.
 
@@ -73,8 +96,8 @@ L'exécutable fourni est la version standard : il gère Dofus Unity et Dofus Ret
 Dans PowerShell :
 
 ~~~powershell
-git clone https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager.git
-cd Dofus-Retro-64-Window-Manager
+git clone https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay.git
+cd Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay
 py -3.14 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
@@ -93,10 +116,11 @@ Le guide détaillé couvre l'exécutable, l’installation depuis un ZIP, les mi
 2. Ouvrez les clients Dofus puis cliquez sur **Rafraîchir**.
 3. Vérifiez les noms et les classes détectés.
 4. Réorganisez les personnages par glisser-déposer.
-5. Ajoutez si besoin des alias courts comme Terre, Feu, Mineur ou Alchimiste.
+5. Dans **Personnaliser…**, ajoutez si besoin un alias, un portrait personnel ou de classe et une icône.
 6. Testez les raccourcis F5, F6, F7 et Ctrl+Alt+R.
 7. Enregistrez un profil lorsque l’ordre vous convient.
 8. Ouvrez **Aperçu Stream Deck…** pour contrôler la disposition avant ou après l’installation du plugin.
+9. Essayez **Mode compact** ou **Afficher l’overlay**, puis ajustez leur comportement dans **Paramètres → Affichage en jeu**.
 
 Consultez le **[guide complet d’utilisation](docs/UTILISATION.md)** pour les profils, les fenêtres ignorées, les sauvegardes, la zone de notification, les diagnostics et le Stream Deck.
 
@@ -118,13 +142,17 @@ Dofus Window Manager est un outil de gestion de fenêtres :
 - il ne lit ni la mémoire ni les paquets réseau de Dofus ;
 - il ne saisit aucune commande dans le jeu ;
 - il ne demande et ne stocke aucun identifiant Ankama ;
+- les notifications et overlays sont des fenêtres locales distinctes : aucun code n’est injecté dans Dofus ;
+- les portraits choisis sont redimensionnés et enregistrés uniquement dans les réglages locaux ;
 - le pont utilisé par le plugin Stream Deck écoute uniquement sur 127.0.0.1:32145 ;
 - les pages web ne peuvent pas piloter ce pont, car les requêtes portant une origine navigateur sont refusées ;
+- le contrôle de mise à jour contacte uniquement l’API publique du dépôt GitHub officiel, au maximum une fois par jour par défaut ;
+- aucune mise à jour n’est téléchargée ou installée automatiquement et ce contrôle peut être désactivé dans les paramètres ;
 - les réglages, profils et journaux restent dans %APPDATA%\DofusUnityWindowManager\.
 
 Le gestionnaire et Dofus doivent fonctionner au même niveau de privilèges Windows. Ne lancez pas l’application en administrateur sauf si Dofus l’est également, et ne désactivez jamais votre antivirus sur recommandation d’un distributeur tiers.
 
-Lisez **[SECURITY.md](SECURITY.md)** avant d’installer un binaire ou de transmettre un rapport de bug.
+Lisez **[SECURITY.md](SECURITY.md)** et la page Ankama **[Reconnaître le phishing et s’en protéger](https://support.ankama.com/hc/fr/articles/201376953-Reconna%C3%AEtre-le-phishing-et-s-en-prot%C3%A9ger)** avant d’installer un binaire reçu en dehors du dépôt officiel.
 
 ## Compilation et développement
 
@@ -146,11 +174,11 @@ Le résultat PyInstaller est créé dans **dist\DofusWindowManager.exe**. La com
 
 ## Participer à la bêta
 
-Téléchargez la [préversion v2.19.0-beta.1](https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager/releases/tag/v2.19.0-beta.1), puis suivez le **[guide de test bêta](docs/BETA_TESTING.md)**. Vous pouvez transmettre un **[retour de session](https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager/issues/new?template=beta_feedback.yml)** même si tout a fonctionné.
+Pour la bêta 2.20.0, installez actuellement les sources du dépôt puis suivez le **[guide de test bêta](docs/BETA_TESTING.md)**. Vous pouvez transmettre un **[retour de session](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/issues/new?template=beta_feedback.yml)** même si tout a fonctionné.
 
 Avant de signaler un problème :
 
-1. vérifiez qu’il existe toujours en version 2.19.0 ;
+1. vérifiez qu’il existe toujours avec le code source 2.20.0 le plus récent ;
 2. utilisez **Diagnostic… → Copier** dans l’application ;
 3. retirez de votre rapport toute information personnelle ou sensible ;
 4. recherchez un ticket similaire ;
@@ -172,4 +200,4 @@ Voir **[CONTRIBUTING.md](CONTRIBUTING.md)** pour tester, proposer une améliorat
 
 Le code est distribué sous licence **GNU GPL v3**, voir [LICENSE](LICENSE).
 
-Ce projet communautaire n’est ni affilié, ni approuvé, ni sponsorisé par Ankama. Dofus, Dofus Retro et Ankama sont des marques appartenant à leurs propriétaires respectifs.
+Ce projet communautaire n’est ni affilié, ni approuvé, ni sponsorisé par Ankama. Dofus, Dofus Retro, Ankama, ainsi que les portraits et icônes de jeu fournis dans `assets/ankama`, sont la propriété de leurs titulaires respectifs. Ces ressources graphiques ne sont pas couvertes par la GPL-3.0 du code ; consultez leur [notice dédiée](assets/ankama/NOTICE.md) avant toute redistribution.

@@ -2,7 +2,7 @@
 from importlib.util import find_spec
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_submodules
 
 
 project_dir = Path(SPECPATH or ".").resolve()
@@ -23,8 +23,9 @@ a = Analysis(
     binaries=[],
     datas=[
         (icon_path, "icons"),
+        (str(project_dir / "assets" / "ankama"), "assets/ankama"),
         (streamdeck_plugin_path, "streamdeck-plugin"),
-    ] + collect_data_files("ttkthemes"),
+    ],
     hiddenimports=popup_hidden + ["pystray._win32"],
     hookspath=[],
     hooksconfig={},

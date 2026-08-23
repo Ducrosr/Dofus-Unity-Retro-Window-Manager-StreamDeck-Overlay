@@ -108,3 +108,77 @@ test("la couleur d’élément personnalise la bordure sans masquer l’état ac
 	assert.match(svg, /stroke="#d6a45d"/u);
 	assert.match(svg, /fill="#4ade80"/u);
 });
+
+test("une demande d’attention prend la priorité sur les autres états", () => {
+	const svg = buildCharacterKeySvg(
+		{ ...nealla, attention: true, ignored: true },
+		4,
+		defaultTextLayout(),
+		false,
+		"earth",
+	);
+
+	assert.match(svg, /stroke="#f59e0b" stroke-width="7"/u);
+	assert.match(svg, />!<\/text>/u);
+	assert.doesNotMatch(svg, /stroke="#f87171"/u);
+});
+
+test("le portrait et l’icône officielle peuvent être affichés ou masqués", () => {
+	const portrait = "data:image/png;base64,iVBORw0KGgo=";
+	const badgeImage = "data:image/png;base64,iVBORw0KGgo=";
+	const decorated = buildCharacterKeySvg(
+		{ ...nealla, portrait, badge: "ankama_force", badge_image: badgeImage },
+		4,
+		defaultTextLayout(),
+		false,
+		"auto",
+		true,
+		true,
+	);
+	assert.match(decorated, /<image href="data:image\/png;base64,iVBORw0KGgo="/u);
+	assert.match(decorated, new RegExp(`<image href="${badgeImage}" x="6"`, "u"));
+
+	const plain = buildCharacterKeySvg(
+		{ ...nealla, portrait, badge: "ankama_force", badge_image: badgeImage },
+		4,
+		defaultTextLayout(),
+		false,
+		"auto",
+		false,
+		false,
+	);
+	assert.doesNotMatch(plain, /<image/u);
+});
+
+test("une icône de jeu locale est rendue sur la touche", () => {
+	const badgeImage = "data:image/png;base64,iVBORw0KGgo=";
+	const svg = buildCharacterKeySvg(
+		{ ...nealla, badge: "ankama_force", badge_image: badgeImage },
+		4,
+		defaultTextLayout(),
+		false,
+		"auto",
+		false,
+		true,
+	);
+
+	assert.match(svg, new RegExp(`<image href="${badgeImage}" x="6"`, "u"));
+});
+
+test("le clignotement d’attention alterne légèrement la teinte orange", () => {
+	const svg = buildCharacterKeySvg(
+		{ ...nealla, attention: true },
+		4,
+		defaultTextLayout(),
+		false,
+		"auto",
+		false,
+		false,
+		"unity-standard",
+		true,
+		false,
+	);
+
+	assert.match(svg, /stroke="#b66f1c" stroke-width="7"/u);
+	assert.match(svg, /fill="#b66f1c"/u);
+});

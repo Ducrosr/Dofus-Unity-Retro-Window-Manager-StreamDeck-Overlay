@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Collection, Iterable, Mapping
 
 from ..models import GameWindow
+from .character_visuals import bundled_icon_data_uri
 
 
 def reconcile_streamdeck_order(
@@ -28,6 +29,8 @@ def build_streamdeck_windows(
     ignored: set[int],
     aliases: Mapping[str, str],
     active_hwnd: int | None,
+    attention_hwnds: Collection[int] = (),
+    character_visuals: Mapping[str, Mapping[str, str]] | None = None,
 ) -> list[dict[str, object]]:
     """Build the public window list without dropping ignored characters."""
     managed_positions = {hwnd: position for position, hwnd in enumerate(managed_order, start=1)}
@@ -38,6 +41,8 @@ def build_streamdeck_windows(
         if window is None:
             continue
         alias = (aliases.get(window.pseudo) or "").strip()
+        appearance = (character_visuals or {}).get(window.pseudo, {})
+        badge = str(appearance.get("badge") or "none")
         result.append(
             {
                 "slot": slot,
@@ -53,6 +58,10 @@ def build_streamdeck_windows(
                 "title": window.title,
                 "active": hwnd == active_hwnd,
                 "ignored": hwnd in ignored,
+                "attention": hwnd in attention_hwnds,
+                "portrait": str(appearance.get("portrait") or ""),
+                "badge": badge,
+                "badge_image": bundled_icon_data_uri(badge),
             }
         )
     return result

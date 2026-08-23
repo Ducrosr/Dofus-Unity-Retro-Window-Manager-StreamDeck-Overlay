@@ -1,6 +1,7 @@
 import { type CharacterAccent, characterBorderColor } from "./appearance-preferences.ts";
 import { type DisplayMode, resolveCharacterAlias, resolveCharacterName } from "./display-preferences.ts";
 import type { DofusWindow } from "./dwm-client";
+import { resolveTheme } from "./theme.ts";
 
 export type TextLine = "hidden" | "1" | "2" | "3" | "4";
 
@@ -19,6 +20,7 @@ export type TextLayoutSettings = {
 };
 
 const VALID_LINES = new Set<TextLine>(["hidden", "1", "2", "3", "4"]);
+const PNG_DATA_URI = /^data:image\/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*=*$/u;
 
 export function defaultTextLayout(): CharacterTextLayout {
 	return {
@@ -102,7 +104,14 @@ export function buildCharacterKeySvg(
 	layout: CharacterTextLayout,
 	active: boolean,
 	accent: CharacterAccent = "auto",
+	showPortrait = true,
+	showBadge = true,
+	theme?: string,
+	attentionBlinkEnabled = true,
+	attentionBlinkPhase = true,
 ): string {
+	const palette = resolveTheme(theme);
+	const attentionColor = !attentionBlinkEnabled || attentionBlinkPhase ? "#f59e0b" : "#b66f1c";
 	const lines = new Map<TextLine, Array<{ label: string; color: string }>>();
 	const add = (line: TextLine, label: string, color: string): void => {
 		if (line === "hidden" || !label.trim()) return;
@@ -111,10 +120,10 @@ export function buildCharacterKeySvg(
 		lines.set(line, items);
 	};
 
-	add(layout.position, window.position === null ? "—" : String(window.position ?? slot), "#38bdf8");
-	add(layout.name, resolveCharacterName(window), "#f8fafc");
+	add(layout.position, window.position === null ? "—" : String(window.position ?? slot), palette.accent);
+	add(layout.name, resolveCharacterName(window), palette.fg);
 	add(layout.alias, resolveCharacterAlias(window), "#fbbf24");
-	add(layout.class, window.character_class?.trim() ?? "", "#c4b5fd");
+	add(layout.class, window.character_class?.trim() ?? "", palette.muted);
 
 	const yByLine: Record<Exclude<TextLine, "hidden">, number> = { "1": 24, "2": 56, "3": 88, "4": 120 };
 	const textElements = (["1", "2", "3", "4"] as const)
@@ -122,17 +131,35 @@ export function buildCharacterKeySvg(
 			const items = lines.get(line);
 			if (!items?.length) return "";
 			const label = items.map((item) => item.label).join(" · ");
-			const color = items.length === 1 ? items[0].color : "#f8fafc";
+			const color = items.length === 1 ? items[0].color : palette.fg;
 			const fontSize = label.length <= 8 ? 22 : label.length <= 13 ? 18 : label.length <= 20 ? 15 : 12;
 			const fit = label.length > 18 ? ' textLength="116" lengthAdjust="spacingAndGlyphs"' : "";
 			return `<text x="72" y="${yByLine[line]}" fill="${color}" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="700" text-anchor="middle" dominant-baseline="middle"${fit}>${escapeXml(label)}</text>`;
 		})
 		.join("");
 
-	const background = active ? "#052e2b" : "#101827";
-	const border = window.ignored ? "#f87171" : characterBorderColor(accent);
-	const activeMarker = active ? '<circle cx="126" cy="18" r="7" fill="#4ade80"/>' : "";
-	return `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144"><rect width="144" height="144" rx="18" fill="${background}"/><rect x="5" y="5" width="134" height="134" rx="15" fill="none" stroke="${border}" stroke-width="4" opacity="0.8"/><path d="M18 40h108M18 72h108M18 104h108" stroke="${border}" stroke-width="1" opacity="0.12"/>${activeMarker}${textElements}</svg>`;
+	const background = active ? palette.bg3 : palette.bg;
+	const border = window.attention
+		? attentionColor
+		: window.ignored
+			? "#f87171"
+			: accent === "auto"
+				? palette.accent
+				: characterBorderColor(accent);
+	const portrait = safePortrait(window.portrait, showPortrait);
+	const portraitLayer = portrait
+		? `<image href="${portrait}" x="0" y="0" width="144" height="144" preserveAspectRatio="xMidYMid slice" opacity="0.68"/><rect width="144" height="144" rx="18" fill="${background}" opacity="0.58"/>`
+		: "";
+	const attentionMarker = window.attention
+		? `<circle cx="126" cy="18" r="11" fill="${attentionColor}"/><text x="126" y="19" fill="#111827" font-family="Arial, sans-serif" font-size="17" font-weight="900" text-anchor="middle" dominant-baseline="middle">!</text>`
+		: active
+			? '<circle cx="126" cy="18" r="7" fill="#4ade80"/>'
+			: "";
+	const badgeImage = safePortrait(window.badge_image, showBadge);
+	const badgeLayer = badgeImage
+		? `<circle cx="18" cy="18" r="13" fill="#111827" opacity=".85"/><image href="${badgeImage}" x="6" y="6" width="24" height="24" preserveAspectRatio="xMidYMid meet"/>`
+		: "";
+	return `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144"><rect width="144" height="144" rx="18" fill="${background}"/>${portraitLayer}<rect x="5" y="5" width="134" height="134" rx="15" fill="none" stroke="${border}" stroke-width="${window.attention ? 7 : 4}" opacity="0.92"/><path d="M18 40h108M18 72h108M18 104h108" stroke="${palette.line}" stroke-width="1" opacity="0.38"/>${attentionMarker}${badgeLayer}${textElements}</svg>`;
 }
 
 export function svgToDataUrl(svg: string): string {
@@ -141,6 +168,11 @@ export function svgToDataUrl(svg: string): string {
 
 function normalizeLine(value: unknown, fallback: TextLine): TextLine {
 	return typeof value === "string" && VALID_LINES.has(value as TextLine) ? (value as TextLine) : fallback;
+}
+
+function safePortrait(value: unknown, enabled: boolean): string {
+	if (!enabled || typeof value !== "string" || value.length > 500_000) return "";
+	return PNG_DATA_URI.test(value) ? value : "";
 }
 
 function escapeXml(value: string): string {

@@ -37,8 +37,8 @@ Décrivez le besoin utilisateur avant la solution technique : situation actuelle
 ## Développement local
 
 ~~~powershell
-git clone https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager.git
-cd Dofus-Retro-64-Window-Manager
+git clone https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay.git
+cd Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay
 py -3.14 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-dev.txt

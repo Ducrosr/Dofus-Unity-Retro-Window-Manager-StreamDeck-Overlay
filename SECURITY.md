@@ -4,9 +4,11 @@
 
 L’unique dépôt officiel de Dofus Window Manager est :
 
-<https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager>
+<https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay>
 
 Les sources, futurs binaires et paquets Stream Deck officiels doivent provenir de ce dépôt ou de ses Releases. Un fichier distribué sur un autre site, un hébergeur de fichiers, Discord ou par message privé doit être considéré comme non vérifié, même s’il reprend le même nom, la même icône ou des captures d’écran officielles.
+
+Ankama publie également un guide officiel : [Reconnaître le phishing et s’en protéger](https://support.ankama.com/hc/fr/articles/201376953-Reconna%C3%AEtre-le-phishing-et-s-en-prot%C3%A9ger).
 
 ## Ce que la version officielle ne demande jamais
 
@@ -29,13 +31,19 @@ L’application officielle :
 - énumère les fenêtres Windows visibles et manipule leur premier plan ;
 - ne lit et ne modifie pas la mémoire de Dofus ;
 - n’injecte pas de code et n’installe aucun hook dans le processus du jeu ;
+- affiche le mode compact, les notifications et l’overlay dans des fenêtres Windows séparées, sans modifier le rendu ou la mémoire de Dofus ;
 - ne capture pas les identifiants, le clavier du jeu ou les paquets réseau ;
 - stocke ses réglages, profils et journaux dans %APPDATA%\DofusUnityWindowManager\ ;
+- recadre les portraits choisis par l’utilisateur et les conserve uniquement dans les réglages locaux ;
 - expose au plugin Stream Deck un petit pont HTTP lié exclusivement à 127.0.0.1:32145 ;
 - refuse les commandes portant un en-tête Origin de navigateur et limite la taille des requêtes ;
-- ne contacte aucun serveur externe depuis le cœur Python.
+- peut consulter la liste publique des Releases sur `api.github.com`, au maximum une fois toutes les 24 heures par défaut ;
+- permet de désactiver cette consultation et ne transmet aucun identifiant, jeton, profil, pseudo ou rapport d’utilisation ;
+- ne télécharge et n’installe jamais de mise à jour automatiquement ; l’ouverture de la page GitHub officielle exige une confirmation.
 
 Le panneau de propriétés Stream Deck utilise les composants officiels Elgato chargés depuis sdpi-components.dev. Le plugin communique avec l’application uniquement par l’adresse locale ci-dessus.
+
+Les portraits de classes et les icônes de caractéristiques ou de métiers intégrés sont des ressources de l’univers Dofus appartenant à Ankama Games. Ils sont isolés dans `assets/ankama`, exclus de la licence GPL-3.0 du code et peuvent être retirés sans désactiver les fonctions principales. Les anciens symboles génériques créés pour le projet ont été supprimés ; l’utilisateur reste responsable des images personnelles qu’il sélectionne.
 
 Un petit script PowerShell inclus dans le plugin peut réduire l’application Stream Deck lorsque Windows refuse de donner le premier plan à Dofus. Il vérifie que la fenêtre active appartient bien à Stream Deck avant d’agir.
 
@@ -45,7 +53,7 @@ Le gestionnaire doit fonctionner au même niveau de privilèges que Dofus. Le mo
 
 ## Vérifier un téléchargement
 
-1. Contrôlez que l’adresse commence exactement par https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager/.
+1. Contrôlez que l’adresse commence exactement par https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/.
 2. Préférez une Release rattachée à un tag et à des notes de version.
 3. Comparez le SHA-256 publié lorsqu’un binaire est proposé.
 4. Analysez le fichier avec Microsoft Defender ou un service de réputation reconnu.
@@ -57,7 +65,8 @@ Un avertissement SmartScreen peut provenir de l’absence de signature numériqu
 
 | Version | Statut sécurité |
 |---|---|
-| 2.19.x | prise en charge pendant la bêta actuelle |
+| 2.20.x | bêta source actuelle |
+| 2.19.x | ancien exécutable public, maintenance de sécurité uniquement |
 | versions antérieures | mise à jour recommandée avant tout rapport |
 
 ## Signaler une vulnérabilité

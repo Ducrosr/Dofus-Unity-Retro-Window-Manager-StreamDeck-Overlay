@@ -5,9 +5,10 @@ import os
 import queue
 import threading
 import time
+import webbrowser
 from datetime import datetime
 from pathlib import Path
-from tkinter import BooleanVar, Canvas, StringVar, Text, Toplevel, filedialog, messagebox, simpledialog
+from tkinter import BooleanVar, Canvas, Label as TkLabel, StringVar, Text, Tk, Toplevel, filedialog, messagebox, simpledialog
 from tkinter.ttk import (
     Button as TtkButton,
     Checkbutton as TtkCheckbutton,
@@ -22,9 +23,9 @@ from tkinter.ttk import (
     Treeview,
 )
 
-from ttkthemes import ThemedTk
+from PIL import ImageTk
 
-from . import __version__
+from . import __release_tag__, __version__
 from .models import GameWindow
 from .services.windows import (
     extract_character_class,
@@ -36,11 +37,37 @@ from .services.windows import (
 )
 from .services.focus import FocusError, focus_hwnd, get_foreground_hwnd, is_window
 from .services.game_mode import game_mode_label, normalize_game_mode, win_event_filter
+from .services.themes import (
+    THEME_LABELS,
+    RETRO_THEME,
+    default_theme_for_mode,
+    normalize_theme,
+    theme_ids_for_mode,
+    theme_label,
+    theme_palette,
+)
 from .services.hotkeys_win import HotkeyManager, parse_hotkey
+from .services.i18n import (
+    LANGUAGE_FLAGS,
+    LANGUAGES,
+    install_messagebox_translation,
+    set_language,
+    tr,
+    translation_notice,
+    translation_source,
+)
 from .services.streamdeck_bridge import StreamDeckBridge
 from .services.streamdeck_installer import open_streamdeck_plugin
 from .services.streamdeck_preview import STREAMDECK_ACTION_LABELS, STREAMDECK_PROFILE_LAYOUT, format_character_key
 from .services.streamdeck_state import build_streamdeck_windows, reconcile_streamdeck_order
+from .services.update_checker import (
+    ReleaseInfo,
+    UpdateCheckError,
+    UpdateCheckResult,
+    check_for_update,
+    is_automatic_check_due,
+    utc_now_iso,
+)
 from .services.ui_scroll import vertical_scroll_needed, wheel_scroll_units
 from .services.configuration_backup import build_configuration_backup, parse_configuration_backup
 from .services.diagnostics import (
@@ -50,6 +77,24 @@ from .services.diagnostics import (
     read_manifest_version,
     read_packaged_plugin_version,
 )
+from .services.display_overlay import (
+    DEFAULT_ROTATION_OVERLAY_LAYOUT,
+    build_rotation_displays,
+    build_single_display,
+    clamp_notification_duration,
+    clamp_overlay_opacity,
+)
+from .services.attention_state import WindowAttentionState
+from .services.character_visuals import (
+    BADGE_CATALOG,
+    badge_from_label,
+    badge_label,
+    bundled_portrait_choices,
+    build_avatar_image,
+    encode_portrait_file,
+    sanitize_character_visuals,
+)
+from .services.shell_attention_hook import ShellAttentionHook
 from .services.tray import TrayController
 from .services.windows_startup import set_startup_enabled
 from .services.window_order import (
@@ -57,10 +102,12 @@ from .services.window_order import (
     move_column,
     move_window,
     move_window_by_delta,
+    move_window_to_index,
 )
 from .services.window_table import window_table_values
 from .services.win32_enum import get_class_name, get_last_enum_error, get_window_title
 from .services.win_event_hook import WinEventHook
+from .ui_overlays import OverlayUI
 
 # Optional: Retro in-game popup watcher (requires Windows Graphics Capture)
 # This feature can rotate/focus to the character window when a modal popup
@@ -94,62 +141,69 @@ WINDOW_COLUMN_TITLES = {
     "hwnd": "ID fenêtre",
 }
 WINDOW_COLUMN_WIDTHS = {
-    "class": 120,
-    "name": 170,
-    "alias": 150,
-    "hwnd": 110,
+    "class": 105,
+    "name": 145,
+    "alias": 125,
+    "hwnd": 95,
 }
-MODERN_DARK_THEME_LABEL = "Sombre moderne (recommandé)"
+OVERLAY_FIELD_LABELS = {
+    "none": "Masqué",
+    "position": "Numéro",
+    "name": "Nom",
+    "class": "Classe",
+    "alias": "Alias",
+}
+SWAP_POSITION_LABELS = {
+    "top_left": "En haut à gauche",
+    "top_center": "En haut au centre",
+    "top_right": "En haut à droite",
+    "bottom_left": "En bas à gauche",
+    "bottom_center": "En bas au centre",
+    "bottom_right": "En bas à droite",
+}
+OFFICIAL_REPOSITORY_URL = (
+    "https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay"
+)
+ANKAMA_ANTI_PHISHING_URL = (
+    "https://support.ankama.com/hc/fr/articles/201376953-"
+    "Reconna%C3%AEtre-le-phishing-et-s-en-prot%C3%A9ger"
+)
+
+
+def app_theme_palette(theme_name: str) -> dict[str, str]:
+    return theme_palette(theme_name)
+
+
+def resolved_theme_palette(root, theme_name: str) -> dict[str, str]:
+    return app_theme_palette(theme_name)
+
+
+def blend_hex_colors(foreground: str, background: str, ratio: float) -> str:
+    """Blend two #RRGGBB colors; used for a subtle attention pulse."""
+    try:
+        ratio = max(0.0, min(1.0, float(ratio)))
+        fg = tuple(int(foreground[index : index + 2], 16) for index in (1, 3, 5))
+        bg = tuple(int(background[index : index + 2], 16) for index in (1, 3, 5))
+        mixed = tuple(round(a * ratio + b * (1.0 - ratio)) for a, b in zip(fg, bg))
+        return "#" + "".join(f"{value:02x}" for value in mixed)
+    except (TypeError, ValueError):
+        return foreground
 
 # -----------------------
 # Dark UI skin (robust)
 # -----------------------
 def apply_dark_theme(root, theme_name: str = MODERN_DARK_THEME) -> None:
-    """Apply DWM's modern dark theme or polish a legacy dark theme."""
-    t = (theme_name or "").strip().lower()
-
-    # Only apply our palette if user selected a dark-ish theme
-    want_dark = t in {"equilux", "black"} or "equilux" in t or "dark" in t
-    if not want_dark:
-        return
+    """Apply one of DWM's built-in Unity or Retro palettes."""
+    t = normalize_theme(theme_name)
 
     style = Style(root)
-    if t == MODERN_DARK_THEME:
-        try:
-            if MODERN_DARK_THEME not in style.theme_names():
-                style.theme_create(MODERN_DARK_THEME, parent="clam")
-            style.theme_use(MODERN_DARK_THEME)
-        except Exception:
-            style.theme_use("clam")
-        colors = {
-            "bg": "#0f1724",
-            "bg2": "#172131",
-            "bg3": "#223047",
-            "fg": "#e8eef7",
-            "muted": "#9aa9bd",
-            "line": "#33435b",
-            "accent": "#22b8f0",
-            "accent_hover": "#0ea5e9",
-            "accent_pressed": "#0284c7",
-        }
-    else:
-        try:
-            if hasattr(root, "set_theme"):
-                root.set_theme(t if t in {"equilux", "black"} else "equilux")
-        except Exception:
-            pass
-        colors = {
-            "bg": "#1e1f22",
-            "bg2": "#25262a",
-            "bg3": "#2b2d31",
-            "fg": "#e6e6e6",
-            "muted": "#b8b8b8",
-            "line": "#3a3f4b",
-            "accent": "#00aaff",
-            "accent_hover": "#0284c7",
-            "accent_pressed": "#0369a1",
-        }
-    C = colors
+    try:
+        if t not in style.theme_names():
+            style.theme_create(t, parent="clam")
+        style.theme_use(t)
+    except Exception:
+        style.theme_use("clam")
+    C = app_theme_palette(t)
 
     try:
         root.configure(bg=C["bg"])
@@ -162,12 +216,12 @@ def apply_dark_theme(root, theme_name: str = MODERN_DARK_THEME) -> None:
         root.option_add("*Text.foreground", C["fg"])
         root.option_add("*Text.insertBackground", C["fg"])
         root.option_add("*Text.selectBackground", C["accent"])
-        root.option_add("*Text.selectForeground", "#ffffff")
+        root.option_add("*Text.selectForeground", C["on_accent"])
 
         root.option_add("*Listbox.background", C["bg2"])
         root.option_add("*Listbox.foreground", C["fg"])
         root.option_add("*Listbox.selectBackground", C["accent"])
-        root.option_add("*Listbox.selectForeground", "#ffffff")
+        root.option_add("*Listbox.selectForeground", C["on_accent"])
 
         root.option_add("*Toplevel.background", C["bg"])
     except Exception:
@@ -183,7 +237,7 @@ def apply_dark_theme(root, theme_name: str = MODERN_DARK_THEME) -> None:
                     darkcolor=C["line"],
                     troughcolor=C["bg2"],
                     selectbackground=C["accent"],
-                    selectforeground="#ffffff",
+                    selectforeground=C["on_accent"],
                     font=("Segoe UI", 10),
                     )
 
@@ -200,38 +254,76 @@ def apply_dark_theme(root, theme_name: str = MODERN_DARK_THEME) -> None:
         borderwidth=1,
         relief="solid",
     )
-    style.configure("TLabelframe.Label", background=C["bg"], foreground=C["fg"])
+    if t == RETRO_THEME:
+        style.configure(
+            "TLabelframe.Label",
+            background=C["bg3"],
+            foreground=C["on_dark"],
+            padding=(8, 3),
+        )
+    else:
+        style.configure("TLabelframe.Label", background=C["bg"], foreground=C["fg"])
 
     style.configure("TButton",
                     background=C["bg3"],
-                    foreground=C["fg"],
+                    foreground=C["on_dark"],
                     borderwidth=1,
                     focusthickness=0,
                     padding=(11, 7))
     style.map("TButton",
-              background=[("active", C["bg2"]), ("pressed", C["bg3"]), ("disabled", C["bg2"])],
+              background=[("active", C["button_hover"]), ("pressed", C["bg3"]), ("disabled", C["bg2"])],
               foreground=[("disabled", C["muted"])])
-    style.configure("Accent.TButton", background=C["accent"], foreground="#ffffff")
+    style.configure("Accent.TButton", background=C["accent"], foreground=C["on_accent"])
     style.map(
         "Accent.TButton",
         background=[("active", C["accent_hover"]), ("pressed", C["accent_pressed"])],
     )
     style.configure(
-        "StreamDeck.TButton",
-        background="#111827",
+        "Language.TButton",
+        background=C["bg2"],
         foreground=C["fg"],
+        padding=(4, 3),
+        font=("Segoe UI Emoji", 11),
+    )
+    style.configure(
+        "LanguageActive.TButton",
+        background=C["accent"],
+        foreground=C["on_accent"],
+        padding=(4, 3),
+        font=("Segoe UI Emoji", 11),
+    )
+    style.map(
+        "LanguageActive.TButton",
+        background=[("active", C["accent_hover"]), ("pressed", C["accent_pressed"])],
+    )
+    style.configure(
+        "StreamDeck.TButton",
+        background=C["bg3"],
+        foreground=C["on_dark"],
         padding=(6, 9),
         font=("Segoe UI", 9, "bold"),
     )
     style.map(
         "StreamDeck.TButton",
-        background=[("active", C["bg3"]), ("pressed", C["bg2"]), ("disabled", "#111827")],
+        background=[("active", C["button_hover"]), ("pressed", C["bg3"]), ("disabled", C["bg2"])],
         foreground=[("disabled", C["muted"])],
     )
-    style.configure("StreamDeckActive.TButton", background="#064e3b", foreground="#ecfdf5")
-    style.map("StreamDeckActive.TButton", background=[("active", "#047857"), ("pressed", "#065f46")])
+    style.configure("StreamDeckActive.TButton", background=C["accent"], foreground=C["on_accent"])
+    style.map(
+        "StreamDeckActive.TButton",
+        background=[("active", C["accent_hover"]), ("pressed", C["accent_pressed"])],
+    )
     style.configure("StreamDeckIgnored.TButton", background="#4c1d1d", foreground="#fecaca")
     style.map("StreamDeckIgnored.TButton", background=[("active", "#7f1d1d"), ("pressed", "#991b1b")])
+    style.configure(
+        "StreamDeckAttention.TButton",
+        background=C["attention"],
+        foreground=C["on_attention"],
+    )
+    style.map(
+        "StreamDeckAttention.TButton",
+        background=[("active", C["accent_hover"]), ("pressed", C["accent_pressed"])],
+    )
 
     style.configure("TCheckbutton", background=C["bg"], foreground=C["fg"])
     style.configure("TRadiobutton", background=C["bg"], foreground=C["fg"])
@@ -243,10 +335,10 @@ def apply_dark_theme(root, theme_name: str = MODERN_DARK_THEME) -> None:
               foreground=[("readonly", C["fg"])])
 
     style.configure("TNotebook", background=C["bg"], borderwidth=0)
-    style.configure("TNotebook.Tab", background=C["bg3"], foreground=C["fg"], padding=(10, 6))
+    style.configure("TNotebook.Tab", background=C["bg3"], foreground=C["on_dark"], padding=(10, 6))
     style.map("TNotebook.Tab",
               background=[("selected", C["bg2"]), ("active", C["bg2"])],
-              foreground=[("selected", C["fg"])])
+              foreground=[("selected", C["fg"]), ("active", C["fg"])])
 
     style.configure("Treeview",
                     background=C["bg2"],
@@ -256,11 +348,17 @@ def apply_dark_theme(root, theme_name: str = MODERN_DARK_THEME) -> None:
                     rowheight=28)
     style.map("Treeview",
               background=[("selected", C["accent"])],
-              foreground=[("selected", "#ffffff")])
-    style.configure("Treeview.Heading", background=C["bg3"], foreground=C["fg"], relief="flat")
-    style.map("Treeview.Heading", background=[("active", C["bg2"])])
+              foreground=[("selected", C["on_accent"])])
+    style.configure("Treeview.Heading", background=C["bg3"], foreground=C["on_dark"], relief="flat")
+    style.map("Treeview.Heading", background=[("active", C["button_hover"])])
 
-    style.configure("TScrollbar", background=C["bg"], troughcolor=C["bg2"], bordercolor=C["bg"], arrowcolor=C["fg"])
+    style.configure(
+        "TScrollbar",
+        background=C["bg3"],
+        troughcolor=C["bg2"],
+        bordercolor=C["bg"],
+        arrowcolor=C["on_dark"],
+    )
 
 
 class WindowManagerApp:
@@ -268,11 +366,17 @@ class WindowManagerApp:
         self.dirs = ensure_dirs()
         self.settings_path = self.dirs["root"] / "settings.json"
         self.settings: Settings = load_settings(self.settings_path)
+        set_language(self.settings.language)
+        install_messagebox_translation(messagebox)
 
         # Game mode: allow main.py to override, otherwise use last saved setting.
         gm = normalize_game_mode(game_mode, self.settings.game_mode)
         self.game_mode = gm
         self.settings.game_mode = gm
+        self.settings.theme = (self.settings.theme_by_game_mode or {}).get(
+            gm,
+            default_theme_for_mode(gm),
+        )
         self.game_label = game_mode_label(self.game_mode)
 
         self.logger = AppLogger(
@@ -284,7 +388,8 @@ class WindowManagerApp:
         # Ensure log files exist + useful startup info
         try:
             self.logger.info(
-                f"Starting Dofus Window Manager {__version__} | mode={self.game_mode} | data={self.dirs['root']}"
+                f"Starting Dofus Window Manager {__version__} ({__release_tag__}) "
+                f"| mode={self.game_mode} | data={self.dirs['root']}"
             )
             self.logger.action("App started")
             if not _POPUP_WATCH_AVAILABLE:
@@ -309,6 +414,9 @@ class WindowManagerApp:
         self._streamdeck_preview_buttons: dict[int, TtkButton] = {}
         self._streamdeck_preview_poll_job: str | None = None
         self.rotation_index: int = 0
+        self._active_game_hwnd: int | None = None
+        self.attention_state = WindowAttentionState()
+        self._attention_blink_phase = True
         self.aliases: dict[str, str] = {}
         self.desired_order_pseudos: list[str] = []  # current profile order
 
@@ -330,9 +438,12 @@ class WindowManagerApp:
         self._stop_event = threading.Event()
         self._refresh_inflight = False
         self._refresh_again_requested = False
+        self._update_check_inflight = False
+        self._available_release: ReleaseInfo | None = None
         self._scan_revision = 0
         self._game_mode_revision = 0
         self.streamdeck_bridge: StreamDeckBridge | None = None
+        self.shell_attention: ShellAttentionHook | None = None
         self._start_minimized = bool(start_minimized)
         self._tray_notice_shown = False
         self.tray = TrayController(resource_path("icons", "dofus.ico"))
@@ -352,12 +463,7 @@ class WindowManagerApp:
         self.hotkeys.start()
 
         # ---- UI ----
-        startup_theme = "equilux" if self.settings.theme == MODERN_DARK_THEME else self.settings.theme
-        try:
-            self.root = ThemedTk(theme=startup_theme)
-        except Exception:
-            self.root = ThemedTk(theme="equilux")
-            self.settings.theme = MODERN_DARK_THEME
+        self.root = Tk()
         self.root.title(f"Dofus Window Manager {__version__} ({self.game_label})")
         self.root.geometry("1040x760")
         self.root.minsize(900, 620)
@@ -371,23 +477,41 @@ class WindowManagerApp:
 
         self.search_var = StringVar()
         self.game_mode_var = StringVar(value=self.game_label)
-        self.game_subtitle_var = StringVar(value=f"Mode {self.game_label} · gestion locale des fenêtres")
+        self.game_subtitle_var = StringVar(
+            value=tr("Mode {game} · gestion locale des fenêtres", game=self.game_label)
+        )
         self.status_var = StringVar(value="")
         self.last_update_time = StringVar(value="")
         self.auto_refresh_enabled = BooleanVar(value=bool(self.settings.auto_refresh))
         self.log_visible = BooleanVar(value=False)
         self.selected_profile = StringVar(value=self.settings.last_profile or "")
+        self.overlay_button_text = StringVar(value=tr("Afficher l’overlay"))
+        self.character_preview_var = StringVar(value=tr("Sélectionnez un personnage"))
+        self._character_preview_photo: ImageTk.PhotoImage | None = None
+        self._preview_selected_hwnd: int | None = None
 
         # Style
         self.style = Style(self.root)
-        try:
-            self.style.theme_use(self.settings.theme)
-        except Exception:
-            pass
+        self.style.theme_use(self.settings.theme)
 
         self._build_ui()
+        self._localize_ui()
+        self.root.after(400, self._localization_tick)
+        self.overlay_ui = OverlayUI(
+            self.root,
+            focus_character=self._focus_from_auxiliary_display,
+            save_overlay_position=self._save_overlay_position,
+            save_compact_geometry=self._save_compact_geometry,
+            save_overlay_size=self._save_overlay_size,
+            reorder_character=self._reorder_from_overlay,
+            palette=resolved_theme_palette(self.root, self.settings.theme),
+        )
+        self._apply_display_preferences()
+        self.update_listboxes()
         self._register_hotkeys()
         self.root.after(1000, self._check_hotkey_errors)
+        self.root.after(350, self._poll_active_game_window)
+        self.root.after(650, self._attention_blink_tick)
 
         # Schedule polling of background queue
         self.root.after(100, self._process_queue)
@@ -443,6 +567,10 @@ class WindowManagerApp:
         # Initial refresh
         self.refresh_windows()
 
+        # A delayed background check keeps startup responsive and never opens a
+        # browser or downloads a file without an explicit user action.
+        self.root.after(3000, self._check_updates_on_startup)
+
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         tray_started = self.tray.start(
             show=lambda: self._queue.put(("tray", "show")),
@@ -456,6 +584,122 @@ class WindowManagerApp:
                 self._log("Zone de notification indisponible : l’application reste affichée.")
 
     # ---------------------------- UI ----------------------------
+
+    def _localize_widget_tree(self, widget) -> None:
+        try:
+            current_title = widget.title()
+        except Exception:
+            current_title = ""
+        title_source = translation_source(current_title)
+        if title_source:
+            try:
+                widget.title(tr(title_source))
+            except Exception:
+                pass
+
+        try:
+            current_text = str(widget.cget("text"))
+        except Exception:
+            current_text = ""
+        text_source = translation_source(current_text)
+        if text_source:
+            try:
+                widget.configure(text=tr(text_source))
+            except Exception:
+                pass
+
+        try:
+            values = tuple(widget.cget("values"))
+        except Exception:
+            values = ()
+        if values:
+            translated_values: list[str] = []
+            values_changed = False
+            for value in values:
+                source = translation_source(str(value))
+                translated = tr(source) if source else str(value)
+                translated_values.append(translated)
+                values_changed = values_changed or translated != str(value)
+            if values_changed:
+                try:
+                    widget.configure(values=tuple(translated_values))
+                except Exception:
+                    pass
+
+        try:
+            children = widget.winfo_children()
+        except Exception:
+            children = ()
+        for child in children:
+            self._localize_widget_tree(child)
+
+    def _localize_ui(self) -> None:
+        self._localize_widget_tree(self.root)
+        for tree in (getattr(self, "managed_tree", None), getattr(self, "ignored_tree", None)):
+            if tree is None:
+                continue
+            for column in self._window_column_order:
+                tree.heading(column, text=tr(WINDOW_COLUMN_TITLES[column]))
+        self.game_subtitle_var.set(
+            tr("Mode {game} · gestion locale des fenêtres", game=self.game_label)
+        )
+        self.overlay_button_text.set(
+            tr("Masquer l’overlay")
+            if self.settings.rotation_overlay_enabled
+            else tr("Afficher l’overlay")
+        )
+        for language, button in getattr(self, "language_buttons", {}).items():
+            button.configure(
+                style="LanguageActive.TButton" if language == self.settings.language else "Language.TButton"
+            )
+
+    def _localization_tick(self) -> None:
+        try:
+            self._localize_ui()
+            self.root.after(400, self._localization_tick)
+        except Exception:
+            return
+
+    def _attention_color(self) -> str:
+        palette = resolved_theme_palette(self.root, self.settings.theme)
+        if not self.settings.attention_blink_enabled or self._attention_blink_phase:
+            return palette["attention"]
+        return blend_hex_colors(palette["attention"], palette["bg2"], 0.68)
+
+    def _apply_attention_blink_visuals(self) -> None:
+        color = self._attention_color()
+        for tree in (getattr(self, "managed_tree", None), getattr(self, "ignored_tree", None)):
+            if tree is not None:
+                tree.tag_configure("attention", background=color, foreground="#111827")
+        overlay_ui = getattr(self, "overlay_ui", None)
+        if overlay_ui is not None:
+            overlay_ui.set_attention_blink(
+                enabled=self.settings.attention_blink_enabled,
+                phase=self._attention_blink_phase,
+            )
+
+    def _attention_blink_tick(self) -> None:
+        pending = bool(self.attention_state.snapshot())
+        if pending and self.settings.attention_blink_enabled:
+            self._attention_blink_phase = not self._attention_blink_phase
+        else:
+            self._attention_blink_phase = True
+        self._apply_attention_blink_visuals()
+        if pending and self.settings.attention_blink_enabled:
+            self._publish_streamdeck_state()
+        self.root.after(650, self._attention_blink_tick)
+
+    def _select_language(self, language: str) -> None:
+        if language not in LANGUAGES:
+            return
+        self.settings.language = set_language(language)
+        save_settings(self.settings_path, self.settings)
+        self._localize_ui()
+        self.update_listboxes()
+        self._publish_streamdeck_state()
+        if language in {"en", "es"}:
+            title, notice = translation_notice(language)
+            messagebox.showwarning(title, notice, parent=self.root)
 
     def _build_ui(self):
         viewport = TtkFrame(self.root)
@@ -490,6 +734,20 @@ class WindowManagerApp:
             style="Muted.TLabel",
         ).pack(anchor="w")
 
+        language_box = TtkFrame(header)
+        language_box.pack(side="right", padx=(10, 0))
+        self.language_buttons: dict[str, TtkButton] = {}
+        for language in LANGUAGES:
+            button = TtkButton(
+                language_box,
+                text=LANGUAGE_FLAGS[language],
+                width=3,
+                style="LanguageActive.TButton" if language == self.settings.language else "Language.TButton",
+                command=lambda selected=language: self._select_language(selected),
+            )
+            button.pack(side="left", padx=1)
+            self.language_buttons[language] = button
+
         search_box = TtkFrame(header)
         search_box.pack(side="right", fill="x", expand=True, padx=(30, 0))
         TtkLabel(search_box, text="Rechercher").pack(anchor="w")
@@ -502,12 +760,15 @@ class WindowManagerApp:
 
         main = TtkFrame(self.main_content)
         main.pack(fill="both", expand=True, padx=12, pady=(4, 10))
+        main.columnconfigure(0, weight=5, minsize=500)
+        main.columnconfigure(1, weight=3, minsize=310)
+        main.rowconfigure(0, weight=1)
 
         left = TtkFrame(main)
-        left.pack(side="left", fill="both", expand=True)
+        left.grid(row=0, column=0, sticky="nsew")
 
         right = TtkFrame(main)
-        right.pack(side="right", fill="y", padx=(12, 0))
+        right.grid(row=0, column=1, sticky="new", padx=(12, 0))
 
         # Window tables
         TtkLabel(left, text="Fenêtres gérées").pack(pady=(0, 5), anchor="w")
@@ -518,6 +779,11 @@ class WindowManagerApp:
         )
         self.managed_tree.bind(
             "<ButtonRelease-1>", lambda event: self._on_window_tree_release(event, self.managed_tree), add="+"
+        )
+        self.managed_tree.bind(
+            "<<TreeviewSelect>>",
+            lambda _event: self._on_character_tree_selected(self.managed_tree),
+            add="+",
         )
         TtkLabel(
             left,
@@ -532,6 +798,11 @@ class WindowManagerApp:
         )
         self.ignored_tree.bind(
             "<ButtonRelease-1>", lambda event: self._on_window_tree_release(event, self.ignored_tree), add="+"
+        )
+        self.ignored_tree.bind(
+            "<<TreeviewSelect>>",
+            lambda _event: self._on_character_tree_selected(self.ignored_tree),
+            add="+",
         )
 
         # Right panel controls, grouped by frequency and purpose.
@@ -556,8 +827,24 @@ class WindowManagerApp:
         selection.pack(fill="x", pady=(0, 8))
         selection.columnconfigure(0, weight=1)
         selection.columnconfigure(1, weight=1)
-        TtkButton(selection, text="Modifier l’alias…", command=self.rename_alias).grid(
-            row=0, column=0, columnspan=2, sticky="ew", pady=2
+        character_preview = TtkFrame(selection)
+        character_preview.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 5))
+        preview_holder = TtkFrame(character_preview, width=72, height=72)
+        preview_holder.pack(side="left", padx=(0, 8))
+        preview_holder.pack_propagate(False)
+        self.character_preview_image = TkLabel(
+            preview_holder,
+            borderwidth=0,
+        )
+        self.character_preview_image.pack(fill="both", expand=True)
+        TtkLabel(
+            character_preview,
+            textvariable=self.character_preview_var,
+            justify="left",
+            wraplength=160,
+        ).pack(side="left", fill="x", expand=True)
+        TtkButton(selection, text="Personnaliser…", command=self.open_character_customization).grid(
+            row=1, column=0, columnspan=2, sticky="ew", pady=2
         )
         TtkLabel(
             selection,
@@ -568,12 +855,12 @@ class WindowManagerApp:
             style="Muted.TLabel",
             wraplength=235,
             justify="left",
-        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(5, 7))
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(5, 7))
         TtkButton(selection, text="Ignorer", command=self.ignore_selected).grid(
-            row=2, column=0, sticky="ew", padx=(0, 3), pady=2
+            row=3, column=0, sticky="ew", padx=(0, 3), pady=2
         )
         TtkButton(selection, text="Réintégrer", command=self.unignore_selected).grid(
-            row=2, column=1, sticky="ew", padx=(3, 0), pady=2
+            row=3, column=1, sticky="ew", padx=(3, 0), pady=2
         )
 
         profiles = TtkLabelFrame(right, text="Profils", padding=8)
@@ -612,6 +899,21 @@ class WindowManagerApp:
         self.game_mode_combo.pack(side="right")
         self.game_mode_combo.bind("<<ComboboxSelected>>", self._on_game_mode_selected)
         TtkButton(application, text="Paramètres…", command=self.open_settings_window).pack(fill="x", pady=2)
+        TtkButton(
+            application,
+            text="Réinitialiser l’affichage…",
+            command=self.reset_display_settings,
+        ).pack(fill="x", pady=2)
+        display_row = TtkFrame(application)
+        display_row.pack(fill="x", pady=2)
+        TtkButton(display_row, text="Mode compact", command=self.open_compact_mode).pack(
+            side="left", fill="x", expand=True, padx=(0, 3)
+        )
+        TtkButton(
+            display_row,
+            textvariable=self.overlay_button_text,
+            command=self.toggle_rotation_overlay,
+        ).pack(side="left", fill="x", expand=True, padx=(3, 0))
         TtkButton(application, text="Aperçu Stream Deck…", command=self.open_streamdeck_preview).pack(fill="x", pady=2)
         TtkButton(application, text="Diagnostic…", command=self.open_diagnostics_window).pack(fill="x", pady=2)
         TtkButton(
@@ -625,6 +927,35 @@ class WindowManagerApp:
             command=self.install_streamdeck_plugin,
             style="Accent.TButton",
         ).pack(fill="x", pady=2)
+        TtkButton(
+            application,
+            text="Dépôt GitHub officiel",
+            command=lambda: self._open_trusted_web_page(
+                OFFICIAL_REPOSITORY_URL,
+                "Dépôt GitHub officiel",
+            ),
+        ).pack(fill="x", pady=2)
+        TtkButton(
+            application,
+            text="Conseils anti-phishing Ankama",
+            command=lambda: self._open_trusted_web_page(
+                ANKAMA_ANTI_PHISHING_URL,
+                "Conseils anti-phishing Ankama",
+            ),
+        ).pack(fill="x", pady=2)
+        self.update_button = TtkButton(
+            application,
+            text="Rechercher une mise à jour…",
+            command=self.check_for_updates,
+        )
+        self.update_button.pack(fill="x", pady=2)
+        TtkLabel(
+            application,
+            text="Illustrations et icônes Dofus © Ankama Games. Projet communautaire non affilié.",
+            style="Muted.TLabel",
+            wraplength=235,
+            justify="left",
+        ).pack(fill="x", pady=(7, 1))
         TtkButton(application, text="Quitter", command=lambda: self.on_close(force=True)).pack(fill="x", pady=2)
 
         # Status and logs
@@ -670,7 +1001,11 @@ class WindowManagerApp:
         while current is not None:
             if current is self.main_content:
                 inside_main_content = True
-            if isinstance(current, (Treeview, Text)):
+            if isinstance(current, Treeview):
+                first, last = current.yview()
+                if vertical_scroll_needed(first, last):
+                    return None
+            elif isinstance(current, Text):
                 return None
             current = getattr(current, "master", None)
 
@@ -693,6 +1028,8 @@ class WindowManagerApp:
     def _create_window_tree(self, parent, *, height: int) -> Treeview:
         container = TtkFrame(parent)
         container.pack(fill="both", expand=True)
+        container.columnconfigure(0, weight=1)
+        container.rowconfigure(0, weight=1)
 
         tree = Treeview(
             container,
@@ -702,10 +1039,15 @@ class WindowManagerApp:
             selectmode="browse",
             height=height,
         )
-        scrollbar = Scrollbar(container, orient="vertical", command=tree.yview)
-        tree.configure(yscrollcommand=scrollbar.set)
-        tree.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
+        vertical_scrollbar = Scrollbar(container, orient="vertical", command=tree.yview)
+        horizontal_scrollbar = Scrollbar(container, orient="horizontal", command=tree.xview)
+        tree.configure(
+            yscrollcommand=vertical_scrollbar.set,
+            xscrollcommand=horizontal_scrollbar.set,
+        )
+        tree.grid(row=0, column=0, sticky="nsew")
+        vertical_scrollbar.grid(row=0, column=1, sticky="ns")
+        horizontal_scrollbar.grid(row=1, column=0, sticky="ew")
 
         for column in DEFAULT_WINDOW_COLUMN_ORDER:
             tree.heading(column, text=WINDOW_COLUMN_TITLES[column])
@@ -714,9 +1056,11 @@ class WindowManagerApp:
                 width=WINDOW_COLUMN_WIDTHS[column],
                 minwidth=70,
                 anchor="center" if column in {"class", "hwnd"} else "w",
-                stretch=column != "hwnd",
+                stretch=column in {"name", "alias"},
             )
         tree.tag_configure("active", foreground="#5eead4")
+        tree.tag_configure("attention", background=self._attention_color(), foreground="#111827")
+        tree.tag_configure("empty", foreground=resolved_theme_palette(self.root, self.settings.theme)["muted"])
         tree.tag_configure("drop_before", background="#164e63", foreground="#ffffff")
         tree.tag_configure("drop_after", background="#155e75", foreground="#ffffff")
         return tree
@@ -895,6 +1239,348 @@ class WindowManagerApp:
         if int(self.log_text.index("end-1c").split(".")[0]) > 250:
             self.log_text.delete("1.0", "80.0")
         self.logger.action(msg)
+
+    # ---------------------------- Compact mode and overlays ----------------------------
+
+    def _rotation_display_entries(self):
+        active_hwnd = self._active_game_hwnd
+        if active_hwnd not in self._all_windows and self._managed_order:
+            self.rotation_index %= len(self._managed_order)
+            active_hwnd = self._managed_order[self.rotation_index]
+        return build_rotation_displays(
+            self._all_windows,
+            self._managed_order,
+            self.aliases,
+            active_hwnd,
+            self.attention_state.snapshot(),
+            self.settings.character_visuals,
+        )
+
+    def _refresh_auxiliary_displays(self) -> None:
+        overlay_ui = getattr(self, "overlay_ui", None)
+        if overlay_ui is not None:
+            overlay_ui.update_characters(self._rotation_display_entries())
+
+    def _apply_display_preferences(self) -> None:
+        overlay_ui = getattr(self, "overlay_ui", None)
+        if overlay_ui is None:
+            return
+        overlay_ui.set_palette(resolved_theme_palette(self.root, self.settings.theme))
+        overlay_ui.set_attention_blink(
+            enabled=self.settings.attention_blink_enabled,
+            phase=self._attention_blink_phase,
+        )
+        overlay_ui.configure_persistent(
+            enabled=self.settings.rotation_overlay_enabled,
+            x=self.settings.rotation_overlay_x,
+            y=self.settings.rotation_overlay_y,
+            opacity=self.settings.rotation_overlay_opacity,
+            locked=self.settings.rotation_overlay_locked,
+            layout=self.settings.rotation_overlay_layout,
+            width=self.settings.rotation_overlay_width,
+            height=self.settings.rotation_overlay_height,
+            show_portrait=self.settings.show_overlay_portraits,
+            show_badge=self.settings.show_character_badges,
+        )
+        self.overlay_button_text.set(
+            tr("Masquer l’overlay") if self.settings.rotation_overlay_enabled else tr("Afficher l’overlay")
+        )
+        self._refresh_auxiliary_displays()
+
+    def _apply_runtime_theme(self, theme_name: str) -> None:
+        theme = normalize_theme(theme_name, self.game_mode)
+        apply_dark_theme(self.root, theme)
+        self.settings.theme = theme
+        self.settings.theme_by_game_mode[self.game_mode] = theme
+        palette = resolved_theme_palette(self.root, theme)
+        self.root.configure(background=palette["bg"])
+        self.main_canvas.configure(background=palette["bg"])
+        self.log_text.configure(
+            background=palette["bg2"],
+            foreground=palette["fg"],
+            insertbackground=palette["fg"],
+            selectbackground=palette["accent"],
+        )
+        for tree in (getattr(self, "managed_tree", None), getattr(self, "ignored_tree", None)):
+            if tree is not None:
+                tree.tag_configure("empty", foreground=palette["muted"])
+        overlay_ui = getattr(self, "overlay_ui", None)
+        if overlay_ui is not None:
+            overlay_ui.set_palette(palette)
+
+    def open_compact_mode(self) -> None:
+        self._refresh_auxiliary_displays()
+        self.overlay_ui.open_compact(self.settings.compact_window_geometry)
+
+    def toggle_rotation_overlay(self) -> None:
+        self.settings.rotation_overlay_enabled = not self.settings.rotation_overlay_enabled
+        save_settings(self.settings_path, self.settings)
+        self._apply_display_preferences()
+        state = "affiché" if self.settings.rotation_overlay_enabled else "masqué"
+        self._log(f"Overlay de rotation {state}")
+
+    def _save_overlay_position(self, x: int, y: int) -> None:
+        if (x, y) == (self.settings.rotation_overlay_x, self.settings.rotation_overlay_y):
+            return
+        self.settings.rotation_overlay_x = int(x)
+        self.settings.rotation_overlay_y = int(y)
+        save_settings(self.settings_path, self.settings)
+
+    def _save_overlay_size(self, width: int, height: int) -> None:
+        normalized = (max(240, min(900, int(width))), max(80, min(1600, int(height))))
+        if normalized == (
+            self.settings.rotation_overlay_width,
+            self.settings.rotation_overlay_height,
+        ):
+            return
+        self.settings.rotation_overlay_width, self.settings.rotation_overlay_height = normalized
+        save_settings(self.settings_path, self.settings)
+
+    def _reorder_from_overlay(self, hwnd: int, destination: str | int) -> None:
+        if hwnd not in self._managed_order:
+            return
+        active_hwnd = self._active_game_hwnd
+        if isinstance(destination, str):
+            if destination not in {"up", "down"}:
+                return
+            delta = -1 if destination == "up" else 1
+            new_order = move_window_by_delta(self._managed_order, hwnd, delta)
+        else:
+            new_order = move_window_to_index(self._managed_order, hwnd, destination)
+        if new_order == self._managed_order:
+            return
+        self._managed_order = new_order
+        if active_hwnd in self._managed_order:
+            self.rotation_index = self._managed_order.index(active_hwnd)
+        self._sync_streamdeck_order_with_managed()
+        self.update_listboxes()
+        window = self._all_windows.get(hwnd)
+        if window is not None:
+            self._log(
+                f"Overlay : {window.pseudo} déplacé en position "
+                f"{self._managed_order.index(hwnd) + 1}"
+            )
+
+    def _save_compact_geometry(self, geometry: str) -> None:
+        value = (geometry or "").strip()
+        if not value or value == self.settings.compact_window_geometry:
+            return
+        self.settings.compact_window_geometry = value
+        save_settings(self.settings_path, self.settings)
+
+    def _record_character_focus(self, hwnd: int, *, notify: bool) -> None:
+        self._active_game_hwnd = hwnd
+        attention_cleared = self.attention_state.clear(hwnd)
+        if hwnd in self._managed_order:
+            self.rotation_index = self._managed_order.index(hwnd)
+        if attention_cleared:
+            self._publish_streamdeck_state()
+            self._refresh_auxiliary_displays()
+        if not notify or not self.settings.swap_notification_enabled:
+            return
+        window = self._all_windows.get(hwnd)
+        if window is None:
+            return
+        entry = build_single_display(
+            window,
+            aliases=self.aliases,
+            managed_order=self._managed_order,
+            active=True,
+            attention=False,
+            appearance=(self.settings.character_visuals or {}).get(window.pseudo),
+        )
+        self.overlay_ui.show_swap_notification(
+            entry,
+            anchor=self.settings.swap_notification_anchor,
+            duration_ms=self.settings.swap_notification_duration_ms,
+            opacity=self.settings.swap_notification_opacity,
+            layout=self.settings.swap_notification_layout,
+            show_portrait=self.settings.show_popup_portraits,
+            show_badge=self.settings.show_character_badges,
+        )
+
+    def _focus_from_auxiliary_display(self, hwnd: int) -> None:
+        window = self._all_windows.get(hwnd)
+        if window is None or not is_window(hwnd):
+            self._log("La fenêtre sélectionnée n’est plus disponible.")
+            self.refresh_windows(quiet=True, force=True)
+            return
+        try:
+            focus_hwnd(hwnd)
+        except FocusError as exc:
+            self._log(f"Focus échoué depuis le mode compact ou l’overlay : {exc}")
+            return
+        self._record_character_focus(hwnd, notify=True)
+        self.update_listboxes()
+        self._log(f"Mode compact / overlay → {window.title}")
+
+    def _poll_active_game_window(self) -> None:
+        if self._stop_event.is_set():
+            return
+        overlay_ui = getattr(self, "overlay_ui", None)
+        if overlay_ui is not None and overlay_ui.has_visible_character_list:
+            foreground_hwnd = get_foreground_hwnd()
+            if foreground_hwnd in self._all_windows and foreground_hwnd != self._active_game_hwnd:
+                self._record_character_focus(foreground_hwnd, notify=False)
+                self.update_listboxes()
+        self.root.after(350, self._poll_active_game_window)
+
+    # ---------------------------- Updates ----------------------------
+
+    def _check_updates_on_startup(self) -> None:
+        if not self.settings.check_updates_automatically:
+            return
+        if not is_automatic_check_due(self.settings.last_update_check_at):
+            return
+        self._start_update_check(manual=False)
+
+    def check_for_updates(self) -> None:
+        self._start_update_check(manual=True)
+
+    def _start_update_check(self, *, manual: bool) -> None:
+        if self._stop_event.is_set():
+            return
+        if self._update_check_inflight:
+            if manual:
+                messagebox.showinfo(
+                    "Mise à jour",
+                    "Une recherche est déjà en cours.",
+                    parent=self.root,
+                )
+            return
+
+        self._update_check_inflight = True
+        self.update_button.configure(text="Recherche en cours…", style="TButton")
+        self.update_button.state(["disabled"])
+        if manual:
+            self._log("Recherche d’une mise à jour sur le dépôt officiel…")
+
+        include_prereleases = bool(self.settings.include_prereleases)
+
+        def worker() -> None:
+            checked_at = utc_now_iso()
+            try:
+                result = check_for_update(
+                    __release_tag__,
+                    include_prereleases=include_prereleases,
+                )
+                self._queue.put(("update_check", manual, result, "", checked_at))
+            except UpdateCheckError as exc:
+                self._queue.put(("update_check", manual, None, str(exc), checked_at))
+            except Exception:
+                self._queue.put(
+                    (
+                        "update_check",
+                        manual,
+                        None,
+                        "La recherche de mise à jour a échoué de manière inattendue.",
+                        checked_at,
+                    )
+                )
+
+        threading.Thread(target=worker, name="DWMUpdateCheck", daemon=True).start()
+
+    def _finish_update_check(
+        self,
+        *,
+        manual: bool,
+        result: UpdateCheckResult | None,
+        error: str,
+        checked_at: str,
+    ) -> None:
+        self._update_check_inflight = False
+        self.update_button.state(["!disabled"])
+        self.settings.last_update_check_at = checked_at
+        try:
+            save_settings(self.settings_path, self.settings)
+        except OSError as exc:
+            self.logger.warn(f"Update check timestamp could not be saved: {exc}")
+
+        if error:
+            self._restore_update_button()
+            self.logger.warn(f"Update check failed: {error}")
+            if manual:
+                self._log(f"Mise à jour : {error}")
+                messagebox.showwarning("Mise à jour", error, parent=self.root)
+            return
+
+        if result is None:
+            self._restore_update_button()
+            return
+
+        release = result.latest_release
+        if result.update_available and release is not None:
+            self._available_release = release
+            self._restore_update_button()
+            self._log(f"Mise à jour {release.tag} disponible sur le dépôt officiel")
+            if manual:
+                self._offer_official_release(release)
+            return
+
+        self._available_release = None
+        self._restore_update_button()
+        self._log(f"Dofus Window Manager est à jour ({__release_tag__})")
+        if manual:
+            if release is None:
+                detail = "Aucune version publiée compatible n’a été trouvée."
+            else:
+                detail = f"Vous utilisez déjà la version la plus récente ({__release_tag__})."
+            messagebox.showinfo("Mise à jour", detail, parent=self.root)
+
+    def _restore_update_button(self) -> None:
+        if self._available_release is None:
+            self.update_button.configure(text="Rechercher une mise à jour…", style="TButton")
+            return
+        self.update_button.configure(
+            text=f"Mise à jour {self._available_release.tag} disponible…",
+            style="Accent.TButton",
+        )
+
+    def _offer_official_release(self, release: ReleaseInfo) -> None:
+        release_label = release.tag
+        if release.name and release.name != release.tag:
+            release_label = f"{release.tag} — {release.name}"
+        open_release = messagebox.askyesno(
+            "Mise à jour disponible",
+            (
+                f"Version installée : {__version__} ({__release_tag__})\n"
+                f"Nouvelle version : {release_label}\n\n"
+                "Aucun fichier ne sera téléchargé automatiquement. "
+                "Ouvrir la Release officielle dans votre navigateur ?"
+            ),
+            parent=self.root,
+        )
+        if not open_release:
+            return
+        try:
+            opened = webbrowser.open(release.url, new=2)
+        except Exception as exc:
+            opened = False
+            self.logger.warn(f"Official release page could not be opened: {exc}")
+        if not opened:
+            messagebox.showwarning(
+                "Mise à jour",
+                "Le navigateur n’a pas pu être ouvert. Consultez la Release depuis le dépôt officiel.",
+                parent=self.root,
+            )
+
+    def _open_trusted_web_page(self, url: str, label: str) -> None:
+        try:
+            opened = webbrowser.open(url, new=2)
+        except Exception as exc:
+            opened = False
+            self.logger.warn(f"Trusted web page could not be opened ({label}): {exc}")
+        if opened:
+            self._log(f"Ouverture : {label}")
+            return
+        messagebox.showwarning(
+            "Lien externe",
+            tr(
+                "Le navigateur n’a pas pu être ouvert.\n\nAdresse à consulter :\n{url}",
+                url=url,
+            ),
+            parent=self.root,
+        )
 
     # ---------------------------- Profiles ----------------------------
 
@@ -1223,7 +1909,16 @@ class WindowManagerApp:
 
             hwnd = int(entry["hwnd"])
             ignored = bool(entry.get("ignored"))
-            style = "StreamDeckActive.TButton" if hwnd == active_hwnd else "StreamDeckIgnored.TButton" if ignored else "StreamDeck.TButton"
+            attention = bool(entry.get("attention"))
+            style = (
+                "StreamDeckAttention.TButton"
+                if attention
+                else "StreamDeckActive.TButton"
+                if hwnd == active_hwnd
+                else "StreamDeckIgnored.TButton"
+                if ignored
+                else "StreamDeck.TButton"
+            )
             position = entry.get("position")
             button.configure(
                 text=format_character_key(
@@ -1264,11 +1959,30 @@ class WindowManagerApp:
         bundled_version = read_packaged_plugin_version(bundled_package)
         return [
             ("Version de l’application", __version__),
+            ("Version de publication", __release_tag__),
             ("Mode de jeu", self.game_label),
             ("Thème", self.settings.theme),
+            (
+                "Notification après changement de fenêtre",
+                (
+                    f"active · {SWAP_POSITION_LABELS.get(self.settings.swap_notification_anchor, 'position inconnue')}"
+                    if self.settings.swap_notification_enabled
+                    else "désactivée"
+                ),
+            ),
+            (
+                "Overlay de rotation",
+                (
+                    f"actif · {self.settings.rotation_overlay_opacity}% · "
+                    f"{'verrouillé' if self.settings.rotation_overlay_locked else 'déverrouillé'}"
+                    if self.settings.rotation_overlay_enabled
+                    else "désactivé"
+                ),
+            ),
             ("Profil actif", self.selected_profile.get().strip() or "aucun"),
             ("Fenêtres gérées", len(self._managed_order)),
             ("Fenêtres ignorées", len(self._ignored)),
+            ("Fenêtres en attente d’attention", len(self.attention_state.snapshot())),
             ("Révision du scan", self._scan_revision),
             ("API locale Stream Deck", f"active sur le port {bridge.port}" if bridge_running else "inactive"),
             (
@@ -1279,10 +1993,19 @@ class WindowManagerApp:
             ("Plugin fourni avec l’application", bundled_version or "indisponible"),
             ("WinEventHook", "actif" if self.win_events and self.win_events.is_running() else "inactif"),
             (
+                "Détection du clignotement Windows",
+                "active" if self.shell_attention and self.shell_attention.is_running() else "inactive",
+            ),
+            (
                 "Privilèges incompatibles suspectés",
                 "oui" if self._privilege_mismatch_suspected else "non",
             ),
             ("Démarrage Windows", "activé" if self.settings.start_with_windows else "désactivé"),
+            (
+                "Recherche automatique des mises à jour",
+                "activée" if self.settings.check_updates_automatically else "désactivée",
+            ),
+            ("Dernière recherche de mise à jour", self.settings.last_update_check_at or "jamais"),
             ("Dossier des données", self.dirs["root"]),
             ("Dossier des journaux", self.dirs["logs"]),
         ]
@@ -1428,9 +2151,18 @@ class WindowManagerApp:
 
         restored_settings.game_mode = restored_settings.game_mode or self.game_mode
         self.settings = restored_settings
+        set_language(self.settings.language)
         save_settings(self.settings_path, self.settings)
         self.auto_refresh_enabled.set(self.settings.auto_refresh)
         self._apply_window_column_order(list(self.settings.window_column_order or ()), persist=False)
+        try:
+            self._apply_runtime_theme(self.settings.theme)
+        except Exception:
+            self.settings.theme = MODERN_DARK_THEME
+            self._apply_runtime_theme(self.settings.theme)
+            save_settings(self.settings_path, self.settings)
+        self._apply_display_preferences()
+        self._localize_ui()
         self._refresh_profile_combo()
 
         active_profile = str(session.get("active_profile") or "")
@@ -1447,9 +2179,43 @@ class WindowManagerApp:
         self._log(f"Configuration restaurée depuis {path}")
         messagebox.showinfo(
             "Configuration restaurée",
-            "La configuration est restaurée. Redémarrez l’application pour appliquer complètement le thème et les options de détection.",
+            "La configuration est restaurée. Redémarrez l’application pour appliquer complètement les options de détection.",
             parent=self.root,
         )
+
+    def reset_display_settings(self, *, parent=None) -> bool:
+        dialog_parent = parent or self.root
+        if not messagebox.askyesno(
+            "Réinitialiser l’affichage",
+            (
+                "Rétablir le thème, les colonnes, la notification et l’overlay par défaut ?\n\n"
+                "Les profils, alias, portraits, icônes et raccourcis seront conservés."
+            ),
+            parent=dialog_parent,
+        ):
+            return False
+
+        self.settings.reset_display_preferences(self.game_mode)
+        save_settings(self.settings_path, self.settings)
+        self._apply_window_column_order(list(self.settings.window_column_order or ()), persist=False)
+        self._apply_runtime_theme(self.settings.theme)
+        self._apply_display_preferences()
+        self._attention_blink_phase = True
+        self._apply_attention_blink_visuals()
+        self._refresh_character_preview()
+        self.update_listboxes()
+        try:
+            self.main_canvas.yview_moveto(0)
+        except Exception:
+            pass
+        self._publish_streamdeck_state()
+        self._log("Affichage réinitialisé")
+        messagebox.showinfo(
+            "Affichage réinitialisé",
+            "L’affichage par défaut est restauré et l’overlay hors écran a été désactivé.",
+            parent=dialog_parent,
+        )
+        return True
 
     def reset_settings(self) -> None:
         if not messagebox.askyesno(
@@ -1463,9 +2229,22 @@ class WindowManagerApp:
         except OSError:
             pass
         self.settings = Settings(game_mode=self.game_mode)
+        set_language(self.settings.language)
         save_settings(self.settings_path, self.settings)
         self.auto_refresh_enabled.set(self.settings.auto_refresh)
         self._apply_window_column_order(list(self.settings.window_column_order or ()), persist=False)
+        self._apply_runtime_theme(self.settings.theme)
+        self._apply_display_preferences()
+        self._attention_blink_phase = True
+        self._apply_attention_blink_visuals()
+        self._localize_ui()
+        self._refresh_character_preview()
+        self.update_listboxes()
+        try:
+            self.main_canvas.yview_moveto(0)
+        except Exception:
+            pass
+        self._publish_streamdeck_state()
         self._log("Réglages réinitialisés")
         messagebox.showinfo(
             "Réglages réinitialisés",
@@ -1494,9 +2273,16 @@ class WindowManagerApp:
         self.game_mode = new_mode
         self.game_label = game_mode_label(new_mode)
         self.settings.game_mode = new_mode
+        selected_theme = (self.settings.theme_by_game_mode or {}).get(
+            new_mode,
+            default_theme_for_mode(new_mode),
+        )
+        self._apply_runtime_theme(selected_theme)
         self._game_mode_revision += 1
         self.game_mode_var.set(self.game_label)
-        self.game_subtitle_var.set(f"Mode {self.game_label} · gestion locale des fenêtres")
+        self.game_subtitle_var.set(
+            tr("Mode {game} · gestion locale des fenêtres", game=self.game_label)
+        )
         self.root.title(f"Dofus Window Manager {__version__} ({self.game_label})")
 
         # Window handles, ignored state and Stream Deck slots belong to the
@@ -1507,6 +2293,8 @@ class WindowManagerApp:
         self._ignored.clear()
         self._streamdeck_order.clear()
         self.rotation_index = 0
+        self._active_game_hwnd = None
+        self.attention_state.reset()
         self._windows_sig = tuple()
         self.update_listboxes()
         self._publish_streamdeck_state()
@@ -1538,6 +2326,13 @@ class WindowManagerApp:
             error = self.win_events.get_last_error()
             if error:
                 self._log(f"WinEventHook: {error}")
+            self.shell_attention = ShellAttentionHook(
+                lambda evt, hwnd: self._queue.put(("wevt", evt, hwnd))
+            )
+            self.shell_attention.start()
+            shell_error = self.shell_attention.get_last_error()
+            if shell_error:
+                self._log(f"Attention Windows : repli Shell indisponible ({shell_error})")
         except Exception as exc:
             self._log(f"WinEventHook: impossible de démarrer ({exc})")
             self.win_events = None
@@ -1550,6 +2345,13 @@ class WindowManagerApp:
             except Exception:
                 pass
         self.win_events = None
+        shell_hook = getattr(self, "shell_attention", None)
+        if shell_hook is not None:
+            try:
+                shell_hook.stop()
+            except Exception:
+                pass
+        self.shell_attention = None
 
     def refresh_windows(self, quiet: bool = False, force: bool = False) -> bool:
         """Scan game windows in a background thread.
@@ -1617,6 +2419,9 @@ class WindowManagerApp:
         # Update map
         new_map = {w.hwnd: w for w in wins}
         self._all_windows = new_map
+        self.attention_state.discard_unknown(new_map.keys())
+        if self._active_game_hwnd not in new_map:
+            self._active_game_hwnd = None
 
         # Compute a lightweight signature to detect whether the scan changed.
         new_sig = tuple(sorted((w.hwnd, w.title) for w in wins))
@@ -1726,6 +2531,13 @@ class WindowManagerApp:
                     self.refresh_windows(force=True)
                 elif action == "quit":
                     self.on_close(force=True)
+            elif kind == "update_check":
+                self._finish_update_check(
+                    manual=bool(item[1]),
+                    result=item[2] if isinstance(item[2], UpdateCheckResult) else None,
+                    error=str(item[3] or ""),
+                    checked_at=str(item[4] or ""),
+                )
 
             self._queue.task_done()
             if self._stop_event.is_set():
@@ -1819,8 +2631,7 @@ class WindowManagerApp:
                 self._log(f"Stream Deck, focus échoué : {exc}")
                 return {"ok": False, "error": str(exc), "_status": 409}
 
-            if hwnd in self._managed_order:
-                self.rotation_index = self._managed_order.index(hwnd)
+            self._record_character_focus(hwnd, notify=True)
             self.update_listboxes()
             self._log(f"Stream Deck → {window.title}")
             return {
@@ -1835,6 +2646,9 @@ class WindowManagerApp:
 
     def _show_main_window(self) -> None:
         """Restore and foreground the manager when requested from Stream Deck."""
+        overlay_ui = getattr(self, "overlay_ui", None)
+        if overlay_ui is not None and overlay_ui.compact_is_open:
+            overlay_ui.close_compact(show_root=False)
         try:
             self.root.deiconify()
             self.root.state("normal")
@@ -1926,6 +2740,8 @@ class WindowManagerApp:
             self._ignored,
             self.aliases,
             active_hwnd,
+            self.attention_state.snapshot(),
+            self.settings.character_visuals,
         )
         self._streamdeck_preview_entries = windows
         self._refresh_streamdeck_preview()
@@ -1939,7 +2755,13 @@ class WindowManagerApp:
                 "api_version": 1,
                 "app_version": __version__,
                 "game_mode": self.game_mode,
+                "theme": self.settings.theme,
+                "language": self.settings.language,
                 "scan_revision": self._scan_revision,
+                "show_character_portraits": bool(self.settings.show_character_portraits),
+                "show_character_badges": bool(self.settings.show_character_badges),
+                "attention_blink_enabled": bool(self.settings.attention_blink_enabled),
+                "attention_blink_phase": bool(self._attention_blink_phase),
                 "windows": windows,
             }
         )
@@ -2022,6 +2844,9 @@ class WindowManagerApp:
         if evt == "destroy":
             if hwnd in self._all_windows:
                 self._all_windows.pop(hwnd, None)
+                self.attention_state.clear(hwnd)
+                if hwnd == self._active_game_hwnd:
+                    self._active_game_hwnd = None
                 if hwnd in self._streamdeck_order:
                     self._streamdeck_order.remove(hwnd)
                 if hwnd in self._ignored:
@@ -2032,6 +2857,28 @@ class WindowManagerApp:
                     except ValueError:
                         pass
                 changed_structure = True
+
+        elif evt == "attention":
+            foreground_hwnd = get_foreground_hwnd()
+            active_target = hwnd if foreground_hwnd == hwnd else None
+            if self.attention_state.mark(hwnd, self._all_windows.keys(), active_target):
+                window = self._all_windows.get(hwnd)
+                self._log(
+                    f"Attention demandée : {window.pseudo if window else hwnd}"
+                )
+                self.update_listboxes()
+            return
+
+        elif evt == "foreground":
+            if hwnd not in self._all_windows:
+                return
+            changed = self.attention_state.clear(hwnd) or hwnd != self._active_game_hwnd
+            self._active_game_hwnd = hwnd
+            if hwnd in self._managed_order:
+                self.rotation_index = self._managed_order.index(hwnd)
+            if changed:
+                self.update_listboxes()
+            return
 
         elif evt in ("create", "namechange"):
             # Validate window still exists
@@ -2135,8 +2982,9 @@ class WindowManagerApp:
             self.ignored_tree.delete(*ignored_items)
 
         filtered = self._managed_hwnds_filtered()
-        active_hwnd = None
-        if self._managed_order:
+        attention_hwnds = self.attention_state.snapshot()
+        active_hwnd = self._active_game_hwnd if self._active_game_hwnd in self._managed_order else None
+        if active_hwnd is None and self._active_game_hwnd not in self._ignored and self._managed_order:
             self.rotation_index %= len(self._managed_order)
             active_hwnd = self._managed_order[self.rotation_index]
 
@@ -2145,13 +2993,29 @@ class WindowManagerApp:
             if not w:
                 continue
             alias = self.aliases.get(w.pseudo, "")
-            tags = ("active",) if hwnd == active_hwnd else ()
+            tags = (
+                ("attention",)
+                if hwnd in attention_hwnds
+                else ("active",)
+                if hwnd == active_hwnd
+                else ()
+            )
             self.managed_tree.insert(
                 "",
                 "end",
                 iid=str(hwnd),
                 values=window_table_values(w, alias),
                 tags=tags,
+            )
+
+        if not filtered:
+            empty_text = tr("Aucune fenêtre détectée") if not self._all_windows else tr("Aucun résultat")
+            self.managed_tree.insert(
+                "",
+                "end",
+                iid="__empty_managed__",
+                values=("", empty_text, "", ""),
+                tags=("empty",),
             )
 
         ignored_order = [hwnd for hwnd in self._streamdeck_order if hwnd in self._ignored]
@@ -2165,6 +3029,16 @@ class WindowManagerApp:
                 "end",
                 iid=str(hwnd),
                 values=window_table_values(w, self.aliases.get(w.pseudo, "")),
+                tags=(("attention",) if hwnd in attention_hwnds else ()),
+            )
+
+        if not ignored_order:
+            self.ignored_tree.insert(
+                "",
+                "end",
+                iid="__empty_ignored__",
+                values=("", tr("Aucune fenêtre ignorée"), "", ""),
+                tags=("empty",),
             )
 
         managed_children = set(self.managed_tree.get_children())
@@ -2182,6 +3056,8 @@ class WindowManagerApp:
             self.ignored_tree.see(ignored_selection)
 
         self._publish_streamdeck_state()
+        self._refresh_auxiliary_displays()
+        self._refresh_character_preview()
 
     def _selected_managed_hwnd(self) -> int | None:
         selection = self.managed_tree.selection()
@@ -2234,6 +3110,7 @@ class WindowManagerApp:
 
             try:
                 focus_hwnd(hwnd)
+                self._record_character_focus(hwnd, notify=True)
                 self._log(f"Focus → {w.title}")
                 focused = True
             except FocusError as e:
@@ -2335,6 +3212,212 @@ class WindowManagerApp:
             self._ignored,
         )
 
+    def _on_character_tree_selected(self, tree: Treeview) -> None:
+        selection = tree.selection()
+        if selection:
+            try:
+                self._preview_selected_hwnd = int(selection[0])
+            except ValueError:
+                self._preview_selected_hwnd = None
+        self._refresh_character_preview()
+
+    def _selected_character_hwnd(self) -> int | None:
+        if self._preview_selected_hwnd in self._all_windows:
+            return self._preview_selected_hwnd
+        return self._selected_managed_hwnd() or self._selected_ignored_hwnd()
+
+    def _refresh_character_preview(self) -> None:
+        label = getattr(self, "character_preview_image", None)
+        if label is None:
+            return
+        hwnd = self._selected_character_hwnd()
+        window = self._all_windows.get(hwnd) if hwnd is not None else None
+        if window is None:
+            self._character_preview_photo = None
+            label.configure(image="", background=resolved_theme_palette(self.root, self.settings.theme)["bg2"])
+            self.character_preview_var.set("Sélectionnez un personnage")
+            return
+
+        appearance = (self.settings.character_visuals or {}).get(window.pseudo, {})
+        palette = resolved_theme_palette(self.root, self.settings.theme)
+        avatar = build_avatar_image(
+            window.pseudo,
+            portrait_data=str(appearance.get("portrait") or ""),
+            badge=str(appearance.get("badge") or "none"),
+            size=64,
+            background=palette["bg3"],
+            foreground=palette["on_dark"],
+            show_badge=True,
+        )
+        photo = ImageTk.PhotoImage(avatar, master=self.root)
+        self._character_preview_photo = photo
+        label.configure(image=photo, background=palette["bg2"])
+        alias = (self.aliases.get(window.pseudo) or "").strip() or "—"
+        badge = badge_label(appearance.get("badge"))
+        attention = "\n! Demande d’attention" if hwnd in self.attention_state.snapshot() else ""
+        self.character_preview_var.set(
+            f"{window.pseudo}\n{window.character_class or 'Classe inconnue'}\n"
+            f"Alias : {alias}\nIcône : {badge}{attention}"
+        )
+
+    def open_character_customization(self) -> None:
+        hwnd = self._selected_character_hwnd()
+        window = self._all_windows.get(hwnd) if hwnd is not None else None
+        if window is None:
+            messagebox.showwarning(
+                "Personnaliser le personnage",
+                "Sélectionnez d’abord une fenêtre Dofus.",
+                parent=self.root,
+            )
+            return
+
+        appearance = dict((self.settings.character_visuals or {}).get(window.pseudo, {}))
+        portrait_data = str(appearance.get("portrait") or "")
+        alias_var = StringVar(value=self.aliases.get(window.pseudo, ""))
+        badge_var = StringVar(value=badge_label(appearance.get("badge")))
+        class_portraits = {
+            label.replace("Féminin", tr("Féminin")).replace("Masculin", tr("Masculin")): path
+            for label, path in bundled_portrait_choices().items()
+        }
+        class_portrait_var = StringVar(value=tr("Portrait de classe…"))
+
+        win = Toplevel(self.root)
+        win.title(f"Personnaliser — {window.pseudo}")
+        win.transient(self.root)
+        win.grab_set()
+        win.resizable(False, False)
+        content = TtkFrame(win, padding=14)
+        content.pack(fill="both", expand=True)
+        content.columnconfigure(1, weight=1)
+
+        preview = TkLabel(content, width=96, height=96, borderwidth=0)
+        preview.grid(row=0, column=0, rowspan=4, padx=(0, 12), pady=(0, 8))
+        preview_photo: ImageTk.PhotoImage | None = None
+
+        TtkLabel(content, text=f"{window.pseudo} · {window.character_class or 'classe inconnue'}").grid(
+            row=0, column=1, columnspan=2, sticky="w", pady=(0, 8)
+        )
+        TtkLabel(content, text="Alias").grid(row=1, column=1, sticky="w", padx=(0, 8), pady=3)
+        TtkEntry(content, textvariable=alias_var, width=30).grid(row=1, column=2, sticky="ew", pady=3)
+        TtkLabel(content, text="Icône").grid(row=2, column=1, sticky="w", padx=(0, 8), pady=3)
+        badge_combo = Combobox(
+            content,
+            values=tuple(item[0] for item in BADGE_CATALOG.values()),
+            state="readonly",
+            textvariable=badge_var,
+            width=25,
+        )
+        badge_combo.grid(row=2, column=2, sticky="ew", pady=3)
+
+        def refresh_preview(*_args) -> None:
+            nonlocal preview_photo
+            palette = resolved_theme_palette(self.root, self.settings.theme)
+            avatar = build_avatar_image(
+                window.pseudo,
+                portrait_data=portrait_data,
+                badge=badge_from_label(badge_var.get()),
+                size=96,
+                background=palette["bg3"],
+                foreground=palette["on_dark"],
+                show_badge=True,
+            )
+            preview_photo = ImageTk.PhotoImage(avatar, master=win)
+            preview.configure(image=preview_photo, background=palette["bg2"])
+
+        def choose_portrait() -> None:
+            nonlocal portrait_data
+            path = filedialog.askopenfilename(
+                title="Choisir un portrait",
+                filetypes=[
+                    ("Images", "*.png *.jpg *.jpeg *.webp *.bmp"),
+                    ("Tous les fichiers", "*.*"),
+                ],
+                parent=win,
+            )
+            if not path:
+                return
+            try:
+                portrait_data = encode_portrait_file(path)
+            except ValueError as exc:
+                messagebox.showerror("Portrait incompatible", str(exc), parent=win)
+                return
+            refresh_preview()
+
+        def remove_portrait() -> None:
+            nonlocal portrait_data
+            portrait_data = ""
+            refresh_preview()
+
+        portrait_buttons = TtkFrame(content)
+        portrait_buttons.grid(row=3, column=1, columnspan=2, sticky="ew", pady=(5, 8))
+        TtkButton(portrait_buttons, text="Choisir un portrait…", command=choose_portrait).pack(
+            side="left", fill="x", expand=True, padx=(0, 3)
+        )
+        TtkButton(portrait_buttons, text="Retirer", command=remove_portrait).pack(
+            side="left", padx=(3, 0)
+        )
+        class_portrait_combo = Combobox(
+            content,
+            values=tuple(class_portraits),
+            state="readonly",
+            textvariable=class_portrait_var,
+            width=30,
+        )
+        class_portrait_combo.grid(row=4, column=1, columnspan=2, sticky="ew", pady=(0, 8))
+
+        def choose_class_portrait(_event=None) -> None:
+            nonlocal portrait_data
+            path = class_portraits.get(class_portrait_var.get())
+            if not path:
+                return
+            try:
+                portrait_data = encode_portrait_file(path)
+            except ValueError as exc:
+                messagebox.showerror("Portrait incompatible", str(exc), parent=win)
+                return
+            refresh_preview()
+
+        class_portrait_combo.bind("<<ComboboxSelected>>", choose_class_portrait)
+        TtkLabel(
+            content,
+            text=(
+                "Le portrait personnel est recadré et enregistré localement. Les illustrations "
+                "et icônes de jeu intégrées sont la propriété d’Ankama Games. Dofus Window "
+                "Manager est un projet communautaire non affilié à Ankama."
+            ),
+            style="Muted.TLabel",
+            wraplength=430,
+            justify="left",
+        ).grid(row=5, column=0, columnspan=3, sticky="w", pady=(2, 10))
+
+        def apply() -> None:
+            alias = alias_var.get().strip()
+            if alias:
+                self.aliases[window.pseudo] = alias
+            else:
+                self.aliases.pop(window.pseudo, None)
+
+            visuals = dict(self.settings.character_visuals or {})
+            badge = badge_from_label(badge_var.get())
+            if portrait_data or badge != "none":
+                visuals[window.pseudo] = {"portrait": portrait_data, "badge": badge}
+            else:
+                visuals.pop(window.pseudo, None)
+            self.settings.character_visuals = sanitize_character_visuals(visuals)
+            save_settings(self.settings_path, self.settings)
+            self.update_listboxes()
+            self._log(f"Apparence de {window.pseudo} mise à jour")
+            win.destroy()
+
+        badge_combo.bind("<<ComboboxSelected>>", refresh_preview)
+        refresh_preview()
+        buttons = TtkFrame(content)
+        buttons.grid(row=6, column=0, columnspan=3, sticky="e")
+        TtkButton(buttons, text="Annuler", command=win.destroy).pack(side="right")
+        TtkButton(buttons, text="Appliquer", command=apply, style="Accent.TButton").pack(
+            side="right", padx=(0, 6)
+        )
+
     def rename_alias(self):
         hwnd = self._selected_managed_hwnd()
         if hwnd is None:
@@ -2400,11 +3483,13 @@ class WindowManagerApp:
         win.title("Paramètres")
         win.transient(self.root)
         win.grab_set()
-        win.resizable(False, False)
+        win.resizable(True, True)
+        settings_height = max(560, min(820, self.root.winfo_screenheight() - 120))
+        win.geometry(f"650x{settings_height}")
 
-        selected_theme_label = (
-            MODERN_DARK_THEME_LABEL if self.settings.theme == MODERN_DARK_THEME else self.settings.theme
-        )
+        localized_overlay_labels = {field: tr(label) for field, label in OVERLAY_FIELD_LABELS.items()}
+        localized_position_labels = {anchor: tr(label) for anchor, label in SWAP_POSITION_LABELS.items()}
+        selected_theme_label = theme_label(self.settings.theme, self.game_mode)
         theme_var = StringVar(value=selected_theme_label)
         refresh_var = StringVar(value=str(self.settings.refresh_seconds))
         hk_fwd = StringVar(value=self.settings.hotkeys.get("forward", "F5"))
@@ -2415,27 +3500,94 @@ class WindowManagerApp:
         popup_watch = BooleanVar(value=bool(getattr(self.settings, "popup_watch_enabled", False)))
         minimize_to_tray = BooleanVar(value=bool(self.settings.minimize_to_tray))
         start_with_windows = BooleanVar(value=bool(self.settings.start_with_windows))
+        check_updates = BooleanVar(value=bool(self.settings.check_updates_automatically))
+        include_prereleases = BooleanVar(value=bool(self.settings.include_prereleases))
+        swap_notification = BooleanVar(value=bool(self.settings.swap_notification_enabled))
+        swap_position = StringVar(
+            value=localized_position_labels.get(self.settings.swap_notification_anchor, tr("En haut au centre"))
+        )
+        swap_duration = StringVar(value=str(self.settings.swap_notification_duration_ms))
+        swap_opacity = StringVar(value=str(self.settings.swap_notification_opacity))
+        notification_layout = dict(
+            self.settings.swap_notification_layout or DEFAULT_ROTATION_OVERLAY_LAYOUT
+        )
+        notification_left = StringVar(
+            value=localized_overlay_labels.get(notification_layout["left"], tr("Numéro"))
+        )
+        notification_line1 = StringVar(
+            value=localized_overlay_labels.get(notification_layout["line1"], tr("Nom"))
+        )
+        notification_line2_left = StringVar(
+            value=localized_overlay_labels.get(notification_layout["line2_left"], tr("Classe"))
+        )
+        notification_line2_right = StringVar(
+            value=localized_overlay_labels.get(notification_layout["line2_right"], tr("Alias"))
+        )
+        rotation_overlay = BooleanVar(value=bool(self.settings.rotation_overlay_enabled))
+        overlay_opacity = StringVar(value=str(self.settings.rotation_overlay_opacity))
+        overlay_x = StringVar(value=str(self.settings.rotation_overlay_x))
+        overlay_y = StringVar(value=str(self.settings.rotation_overlay_y))
+        overlay_locked = BooleanVar(value=bool(self.settings.rotation_overlay_locked))
+        overlay_width = StringVar(value=str(self.settings.rotation_overlay_width))
+        overlay_height = StringVar(value=str(self.settings.rotation_overlay_height))
+        show_portraits = BooleanVar(value=bool(self.settings.show_character_portraits))
+        show_popup_portraits = BooleanVar(value=bool(self.settings.show_popup_portraits))
+        show_overlay_portraits = BooleanVar(value=bool(self.settings.show_overlay_portraits))
+        attention_blink = BooleanVar(value=bool(self.settings.attention_blink_enabled))
+        show_badges = BooleanVar(value=bool(self.settings.show_character_badges))
+        overlay_layout = dict(
+            self.settings.rotation_overlay_layout or DEFAULT_ROTATION_OVERLAY_LAYOUT
+        )
+        overlay_left = StringVar(
+            value=localized_overlay_labels.get(overlay_layout["left"], tr("Numéro"))
+        )
+        overlay_line1 = StringVar(
+            value=localized_overlay_labels.get(overlay_layout["line1"], tr("Nom"))
+        )
+        overlay_line2_left = StringVar(
+            value=localized_overlay_labels.get(overlay_layout["line2_left"], tr("Classe"))
+        )
+        overlay_line2_right = StringVar(
+            value=localized_overlay_labels.get(overlay_layout["line2_right"], tr("Alias"))
+        )
 
-        # Tk/Ttk compatibility: on some Tk builds (e.g. Tk 8.7), the Tcl command `ttk::theme` does not exist.
-        # Use the official style interface instead.
-        try:
-            themes = list(self.style.theme_names())
-        except Exception:
-            try:
-                themes = list(self.root.tk.call("ttk::style", "theme", "names"))
-            except Exception:
-                themes = []
-        if MODERN_DARK_THEME not in themes:
-            themes.append(MODERN_DARK_THEME)
-        theme_labels = [
-            MODERN_DARK_THEME_LABEL,
-            *(sorted(theme for theme in set(themes) if theme != MODERN_DARK_THEME)),
-        ]
+        available_theme_ids = theme_ids_for_mode(self.game_mode)
+        theme_labels = [THEME_LABELS[theme_id] for theme_id in available_theme_ids]
 
-        content = TtkFrame(win, padding=12)
-        content.pack(fill="both", expand=True)
+        settings_footer = TtkFrame(win, padding=(12, 8))
+        settings_footer.pack(side="bottom", fill="x")
+        viewport = TtkFrame(win)
+        viewport.pack(fill="both", expand=True)
+        settings_canvas = Canvas(
+            viewport,
+            borderwidth=0,
+            highlightthickness=0,
+            background=resolved_theme_palette(self.root, self.settings.theme)["bg"],
+        )
+        settings_scrollbar = Scrollbar(viewport, orient="vertical", command=settings_canvas.yview)
+        settings_canvas.configure(yscrollcommand=settings_scrollbar.set)
+        settings_scrollbar.pack(side="right", fill="y")
+        settings_canvas.pack(side="left", fill="both", expand=True)
+        content = TtkFrame(settings_canvas, padding=12)
+        content_window = settings_canvas.create_window((0, 0), window=content, anchor="nw")
+        content.bind(
+            "<Configure>",
+            lambda _event: settings_canvas.configure(scrollregion=settings_canvas.bbox("all")),
+        )
+        settings_canvas.bind(
+            "<Configure>",
+            lambda event: settings_canvas.itemconfigure(content_window, width=event.width),
+        )
+        win.bind(
+            "<MouseWheel>",
+            lambda event: settings_canvas.yview_scroll(wheel_scroll_units(event.delta), "units"),
+        )
 
-        general = TtkLabelFrame(content, text=f"Général · mode {self.game_label}", padding=10)
+        general = TtkLabelFrame(
+            content,
+            text=tr("Général · mode {game}", game=self.game_label),
+            padding=10,
+        )
         general.pack(fill="x", pady=(0, 8))
         general.columnconfigure(1, weight=1)
         TtkLabel(general, text="Thème").grid(row=0, column=0, sticky="w", padx=(0, 12), pady=4)
@@ -2459,6 +3611,233 @@ class WindowManagerApp:
             text="Lancer avec Windows, directement dans la zone de notification",
             variable=start_with_windows,
         ).grid(row=3, column=0, columnspan=2, sticky="w", pady=2)
+        TtkCheckbutton(
+            general,
+            text="Rechercher automatiquement les mises à jour officielles",
+            variable=check_updates,
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(8, 2))
+        TtkCheckbutton(
+            general,
+            text="Inclure les versions bêta",
+            variable=include_prereleases,
+        ).grid(row=5, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=2)
+        TtkLabel(
+            general,
+            text="Vérification quotidienne au maximum ; aucun téléchargement automatique.",
+            style="Muted.TLabel",
+        ).grid(row=6, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=(0, 4))
+
+        attention_display = TtkLabelFrame(content, text="Demandes d’attention", padding=10)
+        attention_display.pack(fill="x", pady=(0, 8))
+        TtkCheckbutton(
+            attention_display,
+            text="Clignotement léger sur l’application, l’overlay et le Stream Deck",
+            variable=attention_blink,
+        ).pack(anchor="w")
+        TtkLabel(
+            attention_display,
+            text="Désactivez le clignotement pour conserver uniquement la couleur orange et le repère !.",
+            style="Muted.TLabel",
+            wraplength=560,
+        ).pack(anchor="w", padx=(22, 0), pady=(3, 0))
+
+        in_game_display = TtkLabelFrame(content, text="Affichage en jeu", padding=10)
+        in_game_display.pack(fill="x", pady=(0, 8))
+        in_game_display.columnconfigure(1, weight=1)
+        TtkCheckbutton(
+            in_game_display,
+            text="Afficher le personnage après chaque changement de fenêtre",
+            variable=swap_notification,
+        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 4))
+        TtkLabel(in_game_display, text="Position de la notification").grid(
+            row=1, column=0, sticky="w", padx=(22, 12), pady=3
+        )
+        Combobox(
+            in_game_display,
+            values=tuple(localized_position_labels.values()),
+            state="readonly",
+            textvariable=swap_position,
+            width=23,
+        ).grid(row=1, column=1, sticky="ew", pady=3)
+        TtkLabel(in_game_display, text="Durée").grid(
+            row=2, column=0, sticky="w", padx=(22, 12), pady=3
+        )
+        duration_row = TtkFrame(in_game_display)
+        duration_row.grid(row=2, column=1, sticky="w", pady=3)
+        Spinbox(duration_row, from_=600, to=5000, increment=100, textvariable=swap_duration, width=7).pack(
+            side="left"
+        )
+        TtkLabel(duration_row, text=" ms", style="Muted.TLabel").pack(side="left")
+        TtkLabel(duration_row, text="   Opacité", style="Muted.TLabel").pack(side="left")
+        Spinbox(duration_row, from_=35, to=100, textvariable=swap_opacity, width=5).pack(side="left")
+        TtkLabel(duration_row, text=" %", style="Muted.TLabel").pack(side="left")
+
+        notification_content = TtkLabelFrame(
+            in_game_display,
+            text="Contenu de la notification",
+            padding=8,
+        )
+        notification_content.grid(
+            row=3,
+            column=0,
+            columnspan=2,
+            sticky="ew",
+            padx=(22, 0),
+            pady=(7, 3),
+        )
+        notification_content.columnconfigure(1, weight=1)
+        notification_content.columnconfigure(3, weight=1)
+        overlay_field_values = tuple(localized_overlay_labels.values())
+        notification_slots = (
+            ("À gauche", notification_left, "Ligne 1", notification_line1),
+            (
+                "Ligne 2 · gauche",
+                notification_line2_left,
+                "Ligne 2 · droite",
+                notification_line2_right,
+            ),
+        )
+        for row_index, (left_label, left_var, right_label, right_var) in enumerate(notification_slots):
+            TtkLabel(notification_content, text=left_label).grid(
+                row=row_index, column=0, sticky="w", padx=(0, 6), pady=3
+            )
+            Combobox(
+                notification_content,
+                values=overlay_field_values,
+                state="readonly",
+                textvariable=left_var,
+                width=10,
+            ).grid(row=row_index, column=1, sticky="ew", padx=(0, 12), pady=3)
+            TtkLabel(notification_content, text=right_label).grid(
+                row=row_index, column=2, sticky="w", padx=(0, 6), pady=3
+            )
+            Combobox(
+                notification_content,
+                values=overlay_field_values,
+                state="readonly",
+                textvariable=right_var,
+                width=10,
+            ).grid(row=row_index, column=3, sticky="ew", pady=3)
+
+        TtkCheckbutton(
+            in_game_display,
+            text="Afficher en permanence la rotation",
+            variable=rotation_overlay,
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(8, 3))
+        TtkLabel(in_game_display, text="Opacité").grid(
+            row=5, column=0, sticky="w", padx=(22, 12), pady=3
+        )
+        opacity_row = TtkFrame(in_game_display)
+        opacity_row.grid(row=5, column=1, sticky="w", pady=3)
+        Spinbox(opacity_row, from_=35, to=100, textvariable=overlay_opacity, width=7).pack(side="left")
+        TtkLabel(opacity_row, text=" %", style="Muted.TLabel").pack(side="left")
+        TtkLabel(in_game_display, text="Position X / Y").grid(
+            row=6, column=0, sticky="w", padx=(22, 12), pady=3
+        )
+        position_row = TtkFrame(in_game_display)
+        position_row.grid(row=6, column=1, sticky="w", pady=3)
+        Spinbox(position_row, from_=-10000, to=10000, textvariable=overlay_x, width=7).pack(side="left")
+        TtkLabel(position_row, text=" / ", style="Muted.TLabel").pack(side="left")
+        Spinbox(position_row, from_=-10000, to=10000, textvariable=overlay_y, width=7).pack(side="left")
+
+        TtkLabel(in_game_display, text="Largeur / hauteur").grid(
+            row=7, column=0, sticky="w", padx=(22, 12), pady=3
+        )
+        size_row = TtkFrame(in_game_display)
+        size_row.grid(row=7, column=1, sticky="w", pady=3)
+        Spinbox(size_row, from_=240, to=900, textvariable=overlay_width, width=7).pack(side="left")
+        TtkLabel(size_row, text=" / ", style="Muted.TLabel").pack(side="left")
+        Spinbox(size_row, from_=0, to=1600, textvariable=overlay_height, width=7).pack(side="left")
+        TtkLabel(size_row, text=" px · hauteur 0 = automatique", style="Muted.TLabel").pack(side="left")
+
+        overlay_content = TtkLabelFrame(
+            in_game_display,
+            text="Contenu de l’overlay",
+            padding=8,
+        )
+        overlay_content.grid(
+            row=8,
+            column=0,
+            columnspan=2,
+            sticky="ew",
+            padx=(22, 0),
+            pady=(7, 3),
+        )
+        overlay_content.columnconfigure(1, weight=1)
+        overlay_content.columnconfigure(3, weight=1)
+        overlay_slots = (
+            ("À gauche", overlay_left, "Ligne 1", overlay_line1),
+            ("Ligne 2 · gauche", overlay_line2_left, "Ligne 2 · droite", overlay_line2_right),
+        )
+        for row_index, (left_label, left_var, right_label, right_var) in enumerate(overlay_slots):
+            TtkLabel(overlay_content, text=left_label).grid(
+                row=row_index,
+                column=0,
+                sticky="w",
+                padx=(0, 6),
+                pady=3,
+            )
+            Combobox(
+                overlay_content,
+                values=overlay_field_values,
+                state="readonly",
+                textvariable=left_var,
+                width=10,
+            ).grid(row=row_index, column=1, sticky="ew", padx=(0, 12), pady=3)
+            TtkLabel(overlay_content, text=right_label).grid(
+                row=row_index,
+                column=2,
+                sticky="w",
+                padx=(0, 6),
+                pady=3,
+            )
+            Combobox(
+                overlay_content,
+                values=overlay_field_values,
+                state="readonly",
+                textvariable=right_var,
+                width=10,
+            ).grid(row=row_index, column=3, sticky="ew", pady=3)
+        TtkLabel(
+            overlay_content,
+            text="Par défaut : numéro à gauche, nom ligne 1, puis classe · alias ligne 2.",
+            style="Muted.TLabel",
+        ).grid(row=2, column=0, columnspan=4, sticky="w", pady=(5, 0))
+
+        TtkCheckbutton(
+            in_game_display,
+            text="Verrouiller et ignorer les clics",
+            variable=overlay_locked,
+        ).grid(row=9, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=(4, 2))
+        TtkLabel(
+            in_game_display,
+            text=(
+                "Déverrouillé : glissez l’en-tête pour déplacer l’overlay, une ligne pour la "
+                "réordonner, ou la poignée ◢ pour le redimensionner."
+            ),
+            style="Muted.TLabel",
+            wraplength=560,
+        ).grid(row=10, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=(0, 2))
+        TtkCheckbutton(
+            in_game_display,
+            text="Afficher les portraits dans la notification",
+            variable=show_popup_portraits,
+        ).grid(row=11, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=(6, 2))
+        TtkCheckbutton(
+            in_game_display,
+            text="Afficher les portraits dans l’overlay",
+            variable=show_overlay_portraits,
+        ).grid(row=12, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=2)
+        TtkCheckbutton(
+            in_game_display,
+            text="Afficher les portraits sur le Stream Deck",
+            variable=show_portraits,
+        ).grid(row=13, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=2)
+        TtkCheckbutton(
+            in_game_display,
+            text="Afficher les icônes officielles de caractéristiques ou de métiers sur ces mêmes affichages",
+            variable=show_badges,
+        ).grid(row=14, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=2)
 
         hotkeys = TtkLabelFrame(content, text="Raccourcis clavier", padding=10)
         hotkeys.pack(fill="x", pady=(0, 8))
@@ -2484,7 +3863,7 @@ class WindowManagerApp:
         detection.pack(fill="x")
         TtkCheckbutton(
             detection,
-            text="Mise à jour en temps réel avec WinEventHook",
+            text="Synchronisation en temps réel et détection des demandes d’attention Windows",
             variable=evt_hook,
         ).pack(anchor="w")
 
@@ -2500,15 +3879,29 @@ class WindowManagerApp:
 
         def apply():
             selected_theme = theme_var.get().strip()
-            new_theme = MODERN_DARK_THEME if selected_theme == MODERN_DARK_THEME_LABEL else selected_theme
-            new_theme = new_theme or MODERN_DARK_THEME
+            new_theme = next(
+                (
+                    theme_id
+                    for theme_id in available_theme_ids
+                    if THEME_LABELS[theme_id] == selected_theme
+                ),
+                default_theme_for_mode(self.game_mode),
+            )
             try:
-                if new_theme == MODERN_DARK_THEME:
-                    apply_dark_theme(self.root, new_theme)
-                else:
-                    self.style.theme_use(new_theme)
-                    apply_dark_theme(self.root, new_theme)
-                self.settings.theme = new_theme
+                overlay_x_value = int(overlay_x.get())
+                overlay_y_value = int(overlay_y.get())
+                overlay_width_value = max(240, min(900, int(overlay_width.get())))
+                requested_height = int(overlay_height.get())
+                overlay_height_value = 0 if requested_height <= 0 else max(80, min(1600, requested_height))
+            except ValueError:
+                messagebox.showerror(
+                    "Géométrie de l’overlay",
+                    "Les positions et dimensions de l’overlay doivent être des nombres entiers.",
+                    parent=win,
+                )
+                return
+            try:
+                self._apply_runtime_theme(new_theme)
             except Exception:
                 messagebox.showwarning("Thème", f"Thème non disponible: {new_theme}")
 
@@ -2547,6 +3940,48 @@ class WindowManagerApp:
                     return
             self.settings.start_with_windows = requested_startup
             self.settings.minimize_to_tray = bool(minimize_to_tray.get())
+            updates_were_disabled = not self.settings.check_updates_automatically
+            self.settings.check_updates_automatically = bool(check_updates.get())
+            self.settings.include_prereleases = bool(include_prereleases.get())
+            self.settings.swap_notification_enabled = bool(swap_notification.get())
+            selected_position = swap_position.get().strip()
+            self.settings.swap_notification_anchor = next(
+                (
+                    value
+                    for value, label in localized_position_labels.items()
+                    if label == selected_position
+                ),
+                "top_center",
+            )
+            self.settings.swap_notification_duration_ms = clamp_notification_duration(swap_duration.get())
+            self.settings.swap_notification_opacity = clamp_overlay_opacity(swap_opacity.get())
+            reverse_overlay_fields = {
+                label: field for field, label in localized_overlay_labels.items()
+            }
+            self.settings.swap_notification_layout = {
+                "left": reverse_overlay_fields.get(notification_left.get(), "position"),
+                "line1": reverse_overlay_fields.get(notification_line1.get(), "name"),
+                "line2_left": reverse_overlay_fields.get(notification_line2_left.get(), "class"),
+                "line2_right": reverse_overlay_fields.get(notification_line2_right.get(), "alias"),
+            }
+            self.settings.rotation_overlay_enabled = bool(rotation_overlay.get())
+            self.settings.rotation_overlay_opacity = clamp_overlay_opacity(overlay_opacity.get())
+            self.settings.rotation_overlay_x = overlay_x_value
+            self.settings.rotation_overlay_y = overlay_y_value
+            self.settings.rotation_overlay_width = overlay_width_value
+            self.settings.rotation_overlay_height = overlay_height_value
+            self.settings.rotation_overlay_locked = bool(overlay_locked.get())
+            self.settings.rotation_overlay_layout = {
+                "left": reverse_overlay_fields.get(overlay_left.get(), "position"),
+                "line1": reverse_overlay_fields.get(overlay_line1.get(), "name"),
+                "line2_left": reverse_overlay_fields.get(overlay_line2_left.get(), "class"),
+                "line2_right": reverse_overlay_fields.get(overlay_line2_right.get(), "alias"),
+            }
+            self.settings.show_character_portraits = bool(show_portraits.get())
+            self.settings.show_popup_portraits = bool(show_popup_portraits.get())
+            self.settings.show_overlay_portraits = bool(show_overlay_portraits.get())
+            self.settings.attention_blink_enabled = bool(attention_blink.get())
+            self.settings.show_character_badges = bool(show_badges.get())
 
             # Keep the remembered Retro preference untouched while configuring Unity.
             if self.game_mode == "retro":
@@ -2567,13 +4002,26 @@ class WindowManagerApp:
                 return
 
             save_settings(self.settings_path, self.settings)
+            self._apply_display_preferences()
+            self._attention_blink_phase = True
+            self._apply_attention_blink_visuals()
+            self._publish_streamdeck_state()
             self._log("Paramètres appliqués")
             win.destroy()
+            if updates_were_disabled and self.settings.check_updates_automatically:
+                self.root.after(100, self._check_updates_on_startup)
 
-        buttons = TtkFrame(content)
-        buttons.pack(fill="x", pady=(10, 0))
-        TtkButton(buttons, text="Annuler", command=win.destroy).pack(side="right")
-        TtkButton(buttons, text="Appliquer", command=apply, style="Accent.TButton").pack(
+        def reset_display_from_settings() -> None:
+            if self.reset_display_settings(parent=win):
+                win.destroy()
+
+        TtkButton(
+            settings_footer,
+            text="Réinitialiser l’affichage…",
+            command=reset_display_from_settings,
+        ).pack(side="left")
+        TtkButton(settings_footer, text="Annuler", command=win.destroy).pack(side="right")
+        TtkButton(settings_footer, text="Appliquer", command=apply, style="Accent.TButton").pack(
             side="right", padx=(0, 6)
         )
 
@@ -2732,6 +4180,7 @@ class WindowManagerApp:
         try:
             self.rotation_index = self._managed_order.index(hwnd)
             focus_hwnd(hwnd)
+            self._record_character_focus(hwnd, notify=True)
             self._popup_global_cooldown_until = now + self._popup_global_cooldown_sec
             self.update_listboxes()
             self._log(f"Popup détecté → focus {evt.title}")
@@ -2803,6 +4252,10 @@ class WindowManagerApp:
 
         self._stop_win_event_hook()
         self._shutdown_popup_watcher()
+        try:
+            self.overlay_ui.close_all()
+        except Exception:
+            pass
 
         self.tray.stop()
 
