@@ -184,7 +184,10 @@ def blend_hex_colors(foreground: str, background: str, ratio: float) -> str:
         ratio = max(0.0, min(1.0, float(ratio)))
         fg = tuple(int(foreground[index : index + 2], 16) for index in (1, 3, 5))
         bg = tuple(int(background[index : index + 2], 16) for index in (1, 3, 5))
-        mixed = tuple(round(a * ratio + b * (1.0 - ratio)) for a, b in zip(fg, bg))
+        mixed = tuple(
+            round(a * ratio + b * (1.0 - ratio))
+            for a, b in zip(fg, bg, strict=True)
+        )
         return "#" + "".join(f"{value:02x}" for value in mixed)
     except (TypeError, ValueError):
         return foreground

@@ -14,7 +14,6 @@ from ..services.display_overlay import (
 )
 from ..services.character_visuals import sanitize_character_visuals
 from ..services.themes import (
-    RETRO_THEME,
     UNITY_STANDARD_THEME,
     default_theme_for_mode,
     normalize_theme,
