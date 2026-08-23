@@ -8,6 +8,7 @@
 
 ## 2.20.0-beta.1 — bêta source
 
+- synchronisation immédiate de chaque changement d’ordre depuis l’application vers l’overlay et le Stream Deck, indépendamment de la reconstruction du tableau principal ;
 - correction de la mise en page sans fenêtre détectée : la vignette vide est désormais contrainte en pixels et ne peut plus étirer l’interface ;
 - rééquilibrage des largeurs entre les tableaux et les commandes, avec défilement horizontal propre à chaque tableau et défilement vertical global amélioré ;
 - ajout d’états explicites **Aucune fenêtre détectée**, **Aucune fenêtre ignorée** et **Aucun résultat** ;

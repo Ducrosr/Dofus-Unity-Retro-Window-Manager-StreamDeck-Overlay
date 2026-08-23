@@ -1370,8 +1370,8 @@ class WindowManagerApp:
         self._managed_order = new_order
         if active_hwnd in self._managed_order:
             self.rotation_index = self._managed_order.index(active_hwnd)
-        self._sync_streamdeck_order_with_managed()
-        self.update_listboxes()
+        self._publish_order_consumers()
+        self.update_listboxes(publish_consumers=False)
         window = self._all_windows.get(hwnd)
         if window is not None:
             self._log(
@@ -2777,8 +2777,8 @@ class WindowManagerApp:
 
         self._managed_order = new_order
         self.rotation_index = self._managed_order.index(hwnd)
-        self._sync_streamdeck_order_with_managed()
-        self.update_listboxes()
+        self._publish_order_consumers()
+        self.update_listboxes(publish_consumers=False)
         self._update_popup_watcher_targets()
 
         window = self._all_windows.get(hwnd)
@@ -2817,29 +2817,27 @@ class WindowManagerApp:
             self.settings.character_visuals,
         )
         self._streamdeck_preview_entries = windows
-        self._refresh_streamdeck_preview()
 
         bridge = self.streamdeck_bridge
-        if bridge is None:
-            return
-
-        bridge.update_snapshot(
-            {
-                "api_version": 1,
-                "app_version": __version__,
-                "game_mode": self.game_mode,
-                "theme": self.settings.theme,
-                "language": self.settings.language,
-                "scan_revision": self._scan_revision,
-                "show_character_portraits": bool(self.settings.show_character_portraits),
-                "show_character_badges": bool(self.settings.show_character_badges),
-                "attention_blink_enabled": bool(self.settings.attention_blink_enabled),
-                "attention_blink_phase": bool(self._attention_blink_phase),
-                "attention_count": len(self.attention_state.queue()),
-                "next_attention_hwnd": self.attention_state.next(),
-                "windows": windows,
-            }
-        )
+        if bridge is not None:
+            bridge.update_snapshot(
+                {
+                    "api_version": 1,
+                    "app_version": __version__,
+                    "game_mode": self.game_mode,
+                    "theme": self.settings.theme,
+                    "language": self.settings.language,
+                    "scan_revision": self._scan_revision,
+                    "show_character_portraits": bool(self.settings.show_character_portraits),
+                    "show_character_badges": bool(self.settings.show_character_badges),
+                    "attention_blink_enabled": bool(self.settings.attention_blink_enabled),
+                    "attention_blink_phase": bool(self._attention_blink_phase),
+                    "attention_count": len(self.attention_state.queue()),
+                    "next_attention_hwnd": self.attention_state.next(),
+                    "windows": windows,
+                }
+            )
+        self._refresh_streamdeck_preview()
 
     def _toggle_ignore_current_window(self) -> dict[str, object]:
         foreground_hwnd = get_foreground_hwnd()
@@ -3046,7 +3044,7 @@ class WindowManagerApp:
                 out.append(hwnd)
         return out
 
-    def update_listboxes(self):
+    def update_listboxes(self, *, publish_consumers: bool = True):
         selected_managed = set(self.managed_tree.selection())
         selected_ignored = set(self.ignored_tree.selection())
         managed_items = self.managed_tree.get_children()
@@ -3130,8 +3128,8 @@ class WindowManagerApp:
             self.ignored_tree.selection_set(ignored_selection)
             self.ignored_tree.see(ignored_selection)
 
-        self._publish_streamdeck_state()
-        self._refresh_auxiliary_displays()
+        if publish_consumers:
+            self._publish_order_consumers()
         self._refresh_character_preview()
         self._update_next_attention_controls()
 
@@ -3258,8 +3256,8 @@ class WindowManagerApp:
         elif new_idx <= self.rotation_index < idx:
             self.rotation_index += 1
 
-        self._sync_streamdeck_order_with_managed()
-        self.update_listboxes()
+        self._publish_order_consumers()
+        self.update_listboxes(publish_consumers=False)
 
     def _move_managed_window(self, hwnd: int, target_hwnd: int, *, after: bool) -> None:
         if hwnd not in self._managed_order or target_hwnd not in self._managed_order:
@@ -3273,8 +3271,8 @@ class WindowManagerApp:
         self._managed_order = new_order
         if active_hwnd in self._managed_order:
             self.rotation_index = self._managed_order.index(active_hwnd)
-        self._sync_streamdeck_order_with_managed()
-        self.update_listboxes()
+        self._publish_order_consumers()
+        self.update_listboxes(publish_consumers=False)
         item = str(hwnd)
         if item in self.managed_tree.get_children():
             self.managed_tree.selection_set(item)
@@ -3287,6 +3285,12 @@ class WindowManagerApp:
             self._managed_order,
             self._ignored,
         )
+
+    def _publish_order_consumers(self) -> None:
+        """Publish one managed-order snapshot to the overlay and Stream Deck."""
+        self._sync_streamdeck_order_with_managed()
+        self._refresh_auxiliary_displays()
+        self._publish_streamdeck_state()
 
     def _on_character_tree_selected(self, tree: Treeview) -> None:
         selection = tree.selection()
