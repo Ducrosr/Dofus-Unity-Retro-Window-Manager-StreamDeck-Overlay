@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://ducrosr.github.io/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/sitemap.xml

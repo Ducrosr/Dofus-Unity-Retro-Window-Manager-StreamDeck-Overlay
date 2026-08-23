@@ -1,4 +1,22 @@
-# Dofus Window Manager
+<h1 align="center">Dofus Window Manager</h1>
+
+<p align="center"><strong>Gestionnaire multicompte Dofus Unity &amp; Retro — avec ou sans Stream Deck</strong></p>
+
+<p align="center">
+  Changez de personnage avec des <strong>raccourcis clavier globaux</strong>, gardez votre équipe visible dans un <strong>overlay</strong> et ajoutez le plugin <strong>Stream Deck</strong> uniquement si vous le souhaitez.
+</p>
+
+<p align="center">
+  <a href="https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.2"><strong>⬇ Télécharger pour Windows</strong></a>
+  ·
+  <a href="docs/INSTALLATION.md">Guide d’installation</a>
+  ·
+  <a href="docs/UTILISATION.md">Guide d’utilisation</a>
+</p>
+
+<p align="center">
+  <img src=".github/social-preview.png" alt="Dofus Window Manager — Multicompte Unity et Retro avec raccourcis, overlay et Stream Deck optionnel" width="100%">
+</p>
 
 **Français** · [English](README.en.md) · [Español](README.es.md)
 
@@ -11,7 +29,7 @@
 [![Tests](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/actions/workflows/tests.yml/badge.svg)](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/actions/workflows/tests.yml)
 [![Licence GPL-3.0](https://img.shields.io/badge/licence-GPL--3.0-green)](LICENSE)
 
-Gestionnaire de fenêtres local pour **Dofus Unity** et **Dofus Retro**, conçu pour rendre le jeu multicompte plus lisible et plus rapide sous Windows. Il détecte les fenêtres Dofus ouvertes, conserve leur ordre et permet de passer de l’une à l’autre avec des raccourcis ou un Stream Deck.
+Dofus Window Manager est un gestionnaire de fenêtres local pour **Dofus Unity** et **Dofus Retro**, conçu pour rendre le jeu multicompte plus lisible et plus rapide sous Windows. Il détecte les fenêtres ouvertes, conserve leur ordre et permet de passer de l’une à l’autre avec les raccourcis clavier **F5/F6**, l’overlay ou le mode compact. **Stream Deck n’est pas nécessaire** : son plugin est une intégration optionnelle pour celles et ceux qui possèdent le matériel.
 
 > [!WARNING]
 > **Ce dépôt est l’unique source officielle du projet :**

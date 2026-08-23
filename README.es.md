@@ -1,11 +1,29 @@
-# Dofus Window Manager
+<h1 align="center">Dofus Window Manager</h1>
+
+<p align="center"><strong>Gestor multicuenta para Dofus Unity y Retro — con o sin Stream Deck</strong></p>
+
+<p align="center">
+  Cambia de personaje con <strong>atajos de teclado globales</strong>, mantén tu equipo visible en un <strong>overlay</strong> y añade el plugin de <strong>Stream Deck</strong> solo si lo deseas.
+</p>
+
+<p align="center">
+  <a href="https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.2"><strong>⬇ Descargar para Windows</strong></a>
+  ·
+  <a href="docs/INSTALLATION.md">Guía de instalación</a>
+  ·
+  <a href="docs/UTILISATION.md">Guía de uso</a>
+</p>
+
+<p align="center">
+  <img src=".github/social-preview.png" alt="Dofus Window Manager — Gestión multicuenta Unity y Retro con atajos, overlay y Stream Deck opcional" width="100%">
+</p>
 
 [Français](README.md) · [English](README.en.md) · **Español**
 
 > [!NOTE]
 > Esta traducción fue generada con ayuda de IA y puede contener errores. Puedes proponer correcciones mediante Issues o Pull Requests en el repositorio oficial.
 
-Gestor local de ventanas para Windows compatible con **Dofus Unity** y **Dofus Retro**, diseñado para facilitar y agilizar el juego multicuenta. Detecta las ventanas abiertas, conserva su orden y permite cambiar entre ellas mediante atajos globales, un overlay o un Stream Deck.
+Gestor local de ventanas para Windows compatible con **Dofus Unity** y **Dofus Retro**, diseñado para facilitar y agilizar el juego multicuenta. Detecta las ventanas abiertas, conserva su orden y permite cambiar entre ellas mediante los atajos **F5/F6**, el overlay o el modo compacto. **Stream Deck no es necesario**: el plugin incluido es una integración opcional para quien disponga del dispositivo.
 
 > [!WARNING]
 > **Este repositorio es la única fuente oficial:**

@@ -1,11 +1,29 @@
-# Dofus Window Manager
+<h1 align="center">Dofus Window Manager</h1>
+
+<p align="center"><strong>Dofus Unity &amp; Retro multi-account window manager — with or without Stream Deck</strong></p>
+
+<p align="center">
+  Switch characters with <strong>global keyboard shortcuts</strong>, keep your team visible in an <strong>overlay</strong>, and add the <strong>Stream Deck</strong> plugin only if you want it.
+</p>
+
+<p align="center">
+  <a href="https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.2"><strong>⬇ Download for Windows</strong></a>
+  ·
+  <a href="docs/INSTALLATION.md">Installation guide</a>
+  ·
+  <a href="docs/UTILISATION.md">User guide</a>
+</p>
+
+<p align="center">
+  <img src=".github/social-preview.png" alt="Dofus Window Manager — Unity and Retro multi-account management with shortcuts, overlay and optional Stream Deck" width="100%">
+</p>
 
 [Français](README.md) · **English** · [Español](README.es.md)
 
 > [!NOTE]
 > This translation was generated with AI assistance and may contain errors. Corrections are welcome through Issues or Pull Requests on the official repository.
 
-A local Windows window manager for **Dofus Unity** and **Dofus Retro**, designed to make multi-account play easier to read and faster to control. It detects open Dofus windows, keeps their order and switches between them through global shortcuts, an overlay or a Stream Deck.
+A local Windows window manager for **Dofus Unity** and **Dofus Retro**, designed to make multi-account play easier to read and faster to control. It detects open Dofus windows, keeps their order and switches between them through the **F5/F6 keyboard shortcuts**, the overlay or compact mode. **A Stream Deck is not required**: the bundled plugin is an optional integration for users who own the hardware.
 
 > [!WARNING]
 > **This repository is the only official source:**
