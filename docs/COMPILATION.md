@@ -98,3 +98,24 @@ Testez toujours sur un compte Windows distinct ou une machine virtuelle avant de
 - ne republiez jamais un exécutable reçu d’un tiers ;
 - signalez clairement toute compilation personnelle ou tout fork comme non officiel ;
 - n’incluez jamais le contenu de %APPDATA%\DofusUnityWindowManager\ dans une archive de diffusion.
+
+## Publication automatisée
+
+Le workflow GitHub Actions **Compiler et publier une version** reproduit ces contrôles sur un environnement Windows propre. Il exécute les tests Python et Stream Deck, Ruff, le contrôle TypeScript, la validation Elgato, la compilation du plugin et le build PyInstaller standard.
+
+Une publication normale se déclenche en poussant un tag dont la version de base correspond à `pyproject.toml` :
+
+~~~powershell
+git tag v2.20.0-beta.2
+git push origin v2.20.0-beta.2
+~~~
+
+Le workflow crée ou complète ensuite la Release avec :
+
+- `DofusWindowManager.exe` ;
+- `DofusWindowManager.exe.sha256` ;
+- `DofusWindowManager-StreamDeck.streamDeckPlugin` ;
+- l’empreinte SHA-256 du plugin ;
+- `SHA256SUMS.txt` pour vérifier les deux fichiers.
+
+Un tag contenant un suffixe comme `-beta.2` est automatiquement publié comme préversion. Le workflow peut aussi être relancé manuellement depuis l’onglet **Actions**, en sélectionnant un tag qui existe déjà. Aucun exécutable ni jeton personnel ne doit être ajouté au dépôt : la publication utilise le `GITHUB_TOKEN` temporaire limité au projet.

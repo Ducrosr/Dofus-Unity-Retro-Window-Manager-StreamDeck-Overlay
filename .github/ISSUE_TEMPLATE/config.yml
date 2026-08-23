@@ -1,11 +1,11 @@
 blank_issues_enabled: false
 contact_links:
   - name: Guide des tests bêta
-    url: https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager/blob/main/docs/BETA_TESTING.md
+    url: https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/blob/main/docs/BETA_TESTING.md
     about: Suivez un parcours court puis partagez le résultat de votre session.
   - name: Consignes de sécurité
-    url: https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager/blob/main/SECURITY.md
+    url: https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/blob/main/SECURITY.md
     about: Ne publiez pas les détails sensibles d’une vulnérabilité dans une Issue.
   - name: Guide d’installation
-    url: https://github.com/Ducrosr/Dofus-Retro-64-Window-Manager/blob/main/docs/INSTALLATION.md
+    url: https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/blob/main/docs/INSTALLATION.md
     about: Vérifiez l’installation et les solutions de dépannage avant de signaler un bug.

@@ -1,85 +1,196 @@
-name: Publier une version
+name: Compiler et publier une version
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - "release/**"
+    tags:
+      - "v*.*.*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag existant à republier, par exemple v2.20.0-beta.2"
+        required: true
+        type: string
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: publication-version
+  group: publication-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: Créer la GitHub Release
-    runs-on: ubuntu-latest
+  build:
+    name: Tester et compiler sous Windows
+    runs-on: windows-latest
+    outputs:
+      prerelease: ${{ steps.metadata.outputs.prerelease }}
+      tag: ${{ steps.metadata.outputs.tag }}
+      target_sha: ${{ steps.metadata.outputs.target_sha }}
     steps:
       - name: Récupérer les sources
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
-      - name: Valider le manifeste et les fichiers
-        shell: bash
+      - name: Installer Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: streamdeck-plugin/package-lock.json
+
+      - name: Contrôler le tag et les versions
+        id: metadata
+        shell: pwsh
+        env:
+          MANUAL_TAG: ${{ inputs.tag }}
         run: |
-          set -euo pipefail
-          jq -e '
-            (.tag | test("^v[0-9]+\\.[0-9]+\\.[0-9]+-[0-9A-Za-z.-]+$")) and
-            (.title | type == "string" and length > 0) and
-            (.prerelease | type == "boolean") and
-            (.notes | type == "string" and length > 0) and
-            (.checksum_file | type == "string" and length > 0) and
-            (.assets | type == "array" and length > 0)
-          ' release/manifest.json >/dev/null
+          $tag = if ($env:GITHUB_EVENT_NAME -eq "workflow_dispatch") {
+            $env:MANUAL_TAG
+          } else {
+            $env:GITHUB_REF_NAME
+          }
 
-          mapfile -t files < <(jq -r '.notes, .checksum_file, .assets[]' release/manifest.json)
-          for path in "${files[@]}"; do
-            if [[ "$path" == /* || "$path" == *".."* || ! -f "$path" ]]; then
-              echo "Chemin de publication invalide ou absent : $path" >&2
-              exit 1
-            fi
-          done
+          if ($tag -notmatch '^v(?<version>\d+\.\d+\.\d+)(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?$') {
+            throw "Tag invalide : $tag"
+          }
+          $tagVersion = $Matches.version
 
-          checksum_file="$(jq -r '.checksum_file' release/manifest.json)"
-          checksum_dir="$(dirname "$checksum_file")"
-          checksum_name="$(basename "$checksum_file")"
-          (cd "$checksum_dir" && sha256sum -c "$checksum_name")
+          $projectVersion = python -c "import pathlib, tomllib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['project']['version'])"
+          if ($tagVersion -ne $projectVersion) {
+            throw "Le tag $tag ne correspond pas à la version $projectVersion de pyproject.toml."
+          }
 
-      - name: Créer ou actualiser la préversion
+          $targetSha = (git rev-parse HEAD).Trim()
+          $tagSha = (git rev-parse "$tag^{commit}").Trim()
+          if ($targetSha -ne $tagSha) {
+            throw "Le code récupéré ($targetSha) ne correspond pas au tag $tag ($tagSha)."
+          }
+
+          $packageVersion = node -p "require('./streamdeck-plugin/package.json').version"
+          $manifestVersion = node -p "require('./streamdeck-plugin/com.remyducros.dofuswindowmanager.sdPlugin/manifest.json').Version"
+          if ($manifestVersion -ne "$packageVersion.0") {
+            throw "Versions Stream Deck incohérentes : package $packageVersion, manifeste $manifestVersion."
+          }
+
+          $prerelease = ($tag.Contains("-")).ToString().ToLowerInvariant()
+
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "prerelease=$prerelease" >> $env:GITHUB_OUTPUT
+          "target_sha=$targetSha" >> $env:GITHUB_OUTPUT
+
+      - name: Installer les dépendances Python
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Exécuter les tests Python
+        run: python -m unittest discover -s tests -v
+
+      - name: Contrôler le code Python
+        run: python -m ruff check .
+
+      - name: Installer les dépendances Stream Deck
+        working-directory: streamdeck-plugin
+        run: npm ci
+
+      - name: Tester le plugin Stream Deck
+        working-directory: streamdeck-plugin
+        run: npm test
+
+      - name: Contrôler TypeScript
+        working-directory: streamdeck-plugin
+        run: npm run typecheck
+
+      - name: Compiler et valider le plugin
+        working-directory: streamdeck-plugin
+        run: npm run build && npm run validate && npm run pack
+
+      - name: Compiler l'exécutable Windows
+        run: python build_exe.py
+
+      - name: Préparer et vérifier les fichiers
+        shell: pwsh
+        run: |
+          $output = "release-assets"
+          New-Item -ItemType Directory -Force $output | Out-Null
+          $exe = "dist/DofusWindowManager.exe"
+          $pluginSource = "streamdeck-plugin/com.remyducros.dofuswindowmanager.streamDeckPlugin"
+          $pluginTarget = "$output/DofusWindowManager-StreamDeck.streamDeckPlugin"
+
+          Copy-Item $exe "$output/DofusWindowManager.exe"
+          Copy-Item $pluginSource $pluginTarget
+
+          $exeBytes = [System.IO.File]::ReadAllBytes("$output/DofusWindowManager.exe")
+          if ($exeBytes.Length -lt 2 -or $exeBytes[0] -ne 0x4D -or $exeBytes[1] -ne 0x5A) {
+            throw "L'exécutable produit n'est pas un fichier PE Windows valide."
+          }
+
+          $exeHash = (Get-FileHash "$output/DofusWindowManager.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+          $pluginHash = (Get-FileHash $pluginTarget -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$exeHash  DofusWindowManager.exe" | Set-Content "$output/DofusWindowManager.exe.sha256" -Encoding ascii
+          "$pluginHash  DofusWindowManager-StreamDeck.streamDeckPlugin" | Set-Content "$output/DofusWindowManager-StreamDeck.streamDeckPlugin.sha256" -Encoding ascii
+          @(
+            "$exeHash  DofusWindowManager.exe"
+            "$pluginHash  DofusWindowManager-StreamDeck.streamDeckPlugin"
+          ) | Set-Content "$output/SHA256SUMS.txt" -Encoding ascii
+
+          Get-ChildItem $output | Format-Table Name, Length
+
+      - name: Conserver les fichiers compilés
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ steps.metadata.outputs.tag }}
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Créer la GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Récupérer les fichiers compilés
+        uses: actions/download-artifact@v4
+        with:
+          name: release-${{ needs.build.outputs.tag }}
+          path: release-assets
+
+      - name: Créer ou actualiser la Release
         env:
           GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ needs.build.outputs.prerelease }}
+          RELEASE_TAG: ${{ needs.build.outputs.tag }}
+          TARGET_SHA: ${{ needs.build.outputs.target_sha }}
         shell: bash
         run: |
           set -euo pipefail
-          tag="$(jq -r '.tag' release/manifest.json)"
-          title="$(jq -r '.title' release/manifest.json)"
-          notes="$(jq -r '.notes' release/manifest.json)"
-          prerelease="$(jq -r '.prerelease' release/manifest.json)"
-          mapfile -t assets < <(jq -r '.assets[]' release/manifest.json)
+          mapfile -t assets < <(find release-assets -maxdepth 1 -type f -print | sort)
+          if [[ "${#assets[@]}" -ne 5 ]]; then
+            echo "Cinq fichiers de publication étaient attendus, ${#assets[@]} ont été trouvés." >&2
+            exit 1
+          fi
 
-          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release edit "$tag" \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "$title" \
-              --notes-file "$notes" \
-              --prerelease="$prerelease"
-            gh release upload "$tag" "${assets[@]}" \
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "${assets[@]}" \
               --repo "$GITHUB_REPOSITORY" \
               --clobber
           else
             release_args=(
-              "$tag"
+              "$RELEASE_TAG"
               "${assets[@]}"
               --repo "$GITHUB_REPOSITORY"
-              --target "$GITHUB_SHA"
-              --title "$title"
-              --notes-file "$notes"
+              --target "$TARGET_SHA"
+              --title "Dofus Window Manager ${RELEASE_TAG#v}"
+              --generate-notes
             )
-            if [[ "$prerelease" == "true" ]]; then
+            if [[ "$PRERELEASE" == "true" ]]; then
               release_args+=(--prerelease)
             fi
             gh release create "${release_args[@]}"

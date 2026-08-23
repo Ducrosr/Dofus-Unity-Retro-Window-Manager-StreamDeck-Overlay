@@ -174,7 +174,7 @@ Le résultat PyInstaller est créé dans **dist\DofusWindowManager.exe**. La com
 
 ## Participer à la bêta
 
-Pour la bêta 2.20.0, installez actuellement les sources du dépôt puis suivez le **[guide de test bêta](docs/BETA_TESTING.md)**. Vous pouvez transmettre un **[retour de session](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/issues/new?template=beta_feedback.yml)** même si tout a fonctionné.
+Pour la bêta 2.20.0, utilisez l’**[exécutable officiel v2.20.0-beta.1](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.1)** ou installez les sources, puis suivez le **[guide de test bêta](docs/BETA_TESTING.md)**. Vous pouvez transmettre un **[retour de session](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/issues/new?template=beta_feedback.yml)** même si tout a fonctionné.
 
 Avant de signaler un problème :
 
