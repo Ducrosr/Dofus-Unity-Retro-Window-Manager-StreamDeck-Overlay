@@ -161,6 +161,7 @@ SWAP_POSITION_LABELS = {
     "bottom_center": "En bas au centre",
     "bottom_right": "En bas à droite",
 }
+ROTATION_COALESCE_MS = 18
 OFFICIAL_REPOSITORY_URL = (
     "https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay"
 )
@@ -418,6 +419,8 @@ class WindowManagerApp:
         self._streamdeck_preview_poll_job: str | None = None
         self.rotation_index: int = 0
         self._active_game_hwnd: int | None = None
+        self._pending_rotation_delta = 0
+        self._rotation_request_job: str | None = None
         self.attention_state = WindowAttentionState()
         self._attention_blink_phase = True
         self.aliases: dict[str, str] = {}
@@ -816,10 +819,10 @@ class WindowManagerApp:
         navigation.pack(fill="x", pady=(0, 8))
         navigation.columnconfigure(0, weight=1)
         navigation.columnconfigure(1, weight=1)
-        TtkButton(navigation, text="← Précédent", command=lambda: self.rotate("backward")).grid(
+        TtkButton(navigation, text="← Précédent", command=lambda: self.request_rotation("backward")).grid(
             row=0, column=0, sticky="ew", padx=(0, 3), pady=2
         )
-        TtkButton(navigation, text="Suivant →", command=lambda: self.rotate("forward")).grid(
+        TtkButton(navigation, text="Suivant →", command=lambda: self.request_rotation("forward")).grid(
             row=0, column=1, sticky="ew", padx=(3, 0), pady=2
         )
         TtkButton(navigation, text="↑ Monter", command=lambda: self.move_selected(-1)).grid(
@@ -1387,13 +1390,15 @@ class WindowManagerApp:
         save_settings(self.settings_path, self.settings)
 
     def _record_character_focus(self, hwnd: int, *, notify: bool) -> None:
+        previous_hwnd = self._active_game_hwnd
         self._active_game_hwnd = hwnd
         attention_cleared = self.attention_state.clear(hwnd)
         if hwnd in self._managed_order:
             self.rotation_index = self._managed_order.index(hwnd)
         if attention_cleared:
-            self._publish_streamdeck_state()
-            self._refresh_auxiliary_displays()
+            self.update_listboxes()
+        elif previous_hwnd != hwnd:
+            self._refresh_focus_views()
         if not notify or not self.settings.swap_notification_enabled:
             return
         window = self._all_windows.get(hwnd)
@@ -1429,7 +1434,6 @@ class WindowManagerApp:
             self._log(f"Focus échoué depuis le mode compact ou l’overlay : {exc}")
             return
         self._record_character_focus(hwnd, notify=True)
-        self.update_listboxes()
         self._log(f"Mode compact / overlay → {window.title}")
 
     def _activate_next_attention(self, *, source: str) -> dict[str, object]:
@@ -1461,7 +1465,6 @@ class WindowManagerApp:
                 return {"ok": False, "error": str(exc), "_status": 409}
 
             self._record_character_focus(hwnd, notify=True)
-            self.update_listboxes()
             remaining = len(self.attention_state.queue())
             name = self.aliases.get(window.pseudo) or window.pseudo
             self._log(f"{source}, prochaine alerte → {window.title}")
@@ -1492,7 +1495,6 @@ class WindowManagerApp:
             foreground_hwnd = get_foreground_hwnd()
             if foreground_hwnd in self._all_windows and foreground_hwnd != self._active_game_hwnd:
                 self._record_character_focus(foreground_hwnd, notify=False)
-                self.update_listboxes()
         self.root.after(350, self._poll_active_game_window)
 
     # ---------------------------- Updates ----------------------------
@@ -2662,9 +2664,9 @@ class WindowManagerApp:
             direction = str(payload.get("direction", "")).strip().lower()
             if direction not in {"forward", "backward"}:
                 return {"ok": False, "error": "Direction invalide.", "_status": 400}
-            if not self.rotate(direction):
+            if not self.request_rotation(direction):
                 return {"ok": False, "error": "Aucune fenêtre ne peut être activée.", "_status": 409}
-            return {"ok": True, "direction": direction}
+            return {"ok": True, "accepted": True, "direction": direction}
 
         if command == "focus":
             raw_hwnd = payload.get("hwnd")
@@ -2705,7 +2707,6 @@ class WindowManagerApp:
                 return {"ok": False, "error": str(exc), "_status": 409}
 
             self._record_character_focus(hwnd, notify=True)
-            self.update_listboxes()
             self._log(f"Stream Deck → {window.title}")
             return {
                 "ok": True,
@@ -2945,12 +2946,7 @@ class WindowManagerApp:
         elif evt == "foreground":
             if hwnd not in self._all_windows:
                 return
-            changed = self.attention_state.clear(hwnd) or hwnd != self._active_game_hwnd
-            self._active_game_hwnd = hwnd
-            if hwnd in self._managed_order:
-                self.rotation_index = self._managed_order.index(hwnd)
-            if changed:
-                self.update_listboxes()
+            self._record_character_focus(hwnd, notify=False)
             return
 
         elif evt in ("create", "namechange"):
@@ -3043,6 +3039,33 @@ class WindowManagerApp:
             ):
                 out.append(hwnd)
         return out
+
+    def _refresh_focus_views(self) -> None:
+        """Update focus styling and consumers without rebuilding either table."""
+        attention_hwnds = self.attention_state.snapshot()
+        active_hwnd = self._active_game_hwnd
+        for tree, show_active in (
+            (self.managed_tree, True),
+            (self.ignored_tree, False),
+        ):
+            for item in tree.get_children():
+                try:
+                    hwnd = int(item)
+                except (TypeError, ValueError):
+                    continue
+                tags = tuple(
+                    tag
+                    for tag in tree.item(item, "tags")
+                    if tag not in {"active", "attention"}
+                )
+                if hwnd in attention_hwnds:
+                    tags += ("attention",)
+                elif show_active and hwnd == active_hwnd:
+                    tags += ("active",)
+                tree.item(item, tags=tags)
+
+        self._refresh_auxiliary_displays()
+        self._publish_streamdeck_state()
 
     def update_listboxes(self, *, publish_consumers: bool = True):
         selected_managed = set(self.managed_tree.selection())
@@ -3151,33 +3174,58 @@ class WindowManagerApp:
         except ValueError:
             return None
 
+    def request_rotation(self, direction: str) -> bool:
+        """Coalesce rapid UI/hotkey presses and focus only the final target."""
+        if direction not in {"forward", "backward"} or not self._managed_order:
+            return False
+        self._pending_rotation_delta += 1 if direction == "forward" else -1
+        if self._rotation_request_job is None:
+            self._rotation_request_job = self.root.after(
+                ROTATION_COALESCE_MS,
+                self._flush_rotation_requests,
+            )
+        return True
+
+    def _flush_rotation_requests(self) -> None:
+        delta = self._pending_rotation_delta
+        self._pending_rotation_delta = 0
+        self._rotation_request_job = None
+        if delta:
+            self._rotate_by_delta(delta)
+
     def rotate(self, direction: str) -> bool:
-        if not self._managed_order:
+        if direction not in {"forward", "backward"}:
+            return False
+        return self._rotate_by_delta(1 if direction == "forward" else -1)
+
+    def _rotate_by_delta(self, delta: int) -> bool:
+        if not self._managed_order or not delta:
             return False
 
         previous_hwnd = self._managed_order[self.rotation_index % len(self._managed_order)]
-        delta = 1 if direction == "forward" else -1
+        step = 1 if delta > 0 else -1
+        self.rotation_index = (self.rotation_index + int(delta)) % len(self._managed_order)
         attempts = 0
         focused = False
+        structure_changed = False
 
         while self._managed_order and attempts < max(1, len(self._managed_order) + 1):
-            self.rotation_index = (self.rotation_index + delta) % len(self._managed_order)
             hwnd = self._managed_order[self.rotation_index]
-            w = self._all_windows.get(hwnd)
+            window = self._all_windows.get(hwnd)
 
-            # Window may have disappeared between scans; prune and rescan.
-            if (not w) or (not is_window(hwnd)):
+            # Window may have disappeared between scans; prune and try the next one.
+            if (not window) or (not is_window(hwnd)):
                 self._log("Fenêtre fermée détectée, mise à jour de la liste…")
-                try:
-                    self._managed_order.remove(hwnd)
-                except Exception:
-                    pass
+                self._managed_order.remove(hwnd)
                 self._ignored.discard(hwnd)
+                structure_changed = True
                 if not self._managed_order:
                     self.rotation_index = 0
                     self.update_listboxes()
                     self.refresh_windows()
                     return False
+                if step < 0:
+                    self.rotation_index -= 1
                 self.rotation_index %= len(self._managed_order)
                 attempts += 1
                 continue
@@ -3185,18 +3233,19 @@ class WindowManagerApp:
             try:
                 focus_hwnd(hwnd)
                 self._record_character_focus(hwnd, notify=True)
-                self._log(f"Focus → {w.title}")
+                self._log(f"Focus → {window.title}")
                 focused = True
-            except FocusError as e:
+            except FocusError as exc:
                 if previous_hwnd in self._managed_order:
                     self.rotation_index = self._managed_order.index(previous_hwnd)
-                msg = f"Focus échoué: {e}"
-                if self._privilege_mismatch_suspected and "bloqu" in str(e).lower():
+                msg = f"Focus échoué: {exc}"
+                if self._privilege_mismatch_suspected and "bloqu" in str(exc).lower():
                     msg += " (Astuce: lance le manager au même niveau de privilèges que Dofus.)"
                 self._log(msg)
             break
 
-        self.update_listboxes()
+        if structure_changed:
+            self.update_listboxes()
         return focused
 
     def ignore_selected(self):
@@ -4272,7 +4321,6 @@ class WindowManagerApp:
             focus_hwnd(hwnd)
             self._record_character_focus(hwnd, notify=True)
             self._popup_global_cooldown_until = now + self._popup_global_cooldown_sec
-            self.update_listboxes()
             self._log(f"Popup détecté → focus {evt.title}")
         except (FocusError, ValueError) as exc:
             self._log(f"PopupWatch focus échoué: {exc}")
@@ -4280,8 +4328,8 @@ class WindowManagerApp:
     def _register_hotkeys(self):
         # IDs must be stable
         try:
-            self.hotkeys.set_hotkey(1, self.settings.hotkeys.get("forward", "F5"), lambda: self.root.after(0, lambda: self.rotate("forward")))
-            self.hotkeys.set_hotkey(2, self.settings.hotkeys.get("backward", "F6"), lambda: self.root.after(0, lambda: self.rotate("backward")))
+            self.hotkeys.set_hotkey(1, self.settings.hotkeys.get("forward", "F5"), lambda: self.root.after(0, lambda: self.request_rotation("forward")))
+            self.hotkeys.set_hotkey(2, self.settings.hotkeys.get("backward", "F6"), lambda: self.root.after(0, lambda: self.request_rotation("backward")))
             self.hotkeys.set_hotkey(3, self.settings.hotkeys.get("ignore", "F7"), lambda: self.root.after(0, self.ignore_selected))
             self.hotkeys.set_hotkey(4, self.settings.hotkeys.get("refresh", "Ctrl+Alt+R"), lambda: self.root.after(0, lambda: self.refresh_windows(quiet=True, force=True)))
             self.hotkeys.set_hotkey(5, self.settings.hotkeys.get("next_attention", "F8"), lambda: self.root.after(0, lambda: self.focus_next_attention(source="Raccourci")))

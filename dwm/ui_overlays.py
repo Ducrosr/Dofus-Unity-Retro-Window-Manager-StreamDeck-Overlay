@@ -4,6 +4,7 @@ import ctypes
 import os
 from collections.abc import Callable, Mapping, Sequence
 from ctypes import wintypes
+from dataclasses import dataclass, replace
 from tkinter import Frame as TkFrame
 from tkinter import Label as TkLabel
 from tkinter import Toplevel
@@ -41,6 +42,19 @@ DEFAULT_PALETTE = {
     "attention": "#f59e0b",
     "on_attention": "#111827",
 }
+
+SWAP_NOTIFICATION_DEBOUNCE_MS = 55
+
+
+@dataclass(frozen=True)
+class _SwapNotificationRequest:
+    entry: CharacterDisplay
+    anchor: str
+    duration_ms: int
+    opacity: int
+    layout: Mapping[str, str] | None
+    show_portrait: bool
+    show_badge: bool
 
 
 def _blend_hex(foreground: str, background: str, ratio: float) -> str:
@@ -170,6 +184,8 @@ class OverlayUI:
         self.attention_count = 0
         self.toast_window: Toplevel | None = None
         self.toast_job: str | None = None
+        self.toast_show_job: str | None = None
+        self._toast_request: _SwapNotificationRequest | None = None
         self.persistent_window: Toplevel | None = None
         self.compact_window: Toplevel | None = None
         self.compact_tree: Treeview | None = None
@@ -196,6 +212,7 @@ class OverlayUI:
         self._resize_pointer: tuple[int, int] | None = None
         self._resize_window_size: tuple[int, int] | None = None
         self._persistent_rows: dict[int, TkFrame] = {}
+        self._persistent_secondary_widgets: dict[int, object] = {}
         self._persistent_text_widgets: list[tuple[object, int, bool]] = []
         self._drop_target_index: int | None = None
         self._drop_preview_hwnd: int | None = None
@@ -229,16 +246,34 @@ class OverlayUI:
         *,
         attention_count: int | None = None,
     ) -> None:
-        self.entries = list(entries)
-        self.attention_count = (
+        next_entries = list(entries)
+        next_attention_count = (
             max(0, int(attention_count))
             if attention_count is not None
-            else sum(1 for entry in self.entries if entry.attention)
+            else sum(1 for entry in next_entries if entry.attention)
         )
+        focus_only = (
+            next_attention_count == self.attention_count
+            and len(next_entries) == len(self.entries)
+            and all(
+                replace(previous, active=False) == replace(current, active=False)
+                for previous, current in zip(self.entries, next_entries, strict=True)
+            )
+        )
+        self.entries = next_entries
+        self.attention_count = next_attention_count
         if self.persistent_enabled:
             self._ensure_persistent()
-            self._render_persistent()
-        self._refresh_compact()
+            if focus_only and set(self._persistent_rows) == {
+                entry.hwnd for entry in self.entries
+            }:
+                self._refresh_persistent_focus()
+            else:
+                self._render_persistent()
+        if focus_only:
+            self._refresh_compact_focus()
+        else:
+            self._refresh_compact()
 
     def _attention_background(self) -> str:
         if not self.attention_blink_enabled or self.attention_blink_phase:
@@ -276,6 +311,28 @@ class OverlayUI:
             children = ()
         for child in children:
             self._configure_widget_colors(child, background, foreground)
+
+    def _refresh_persistent_focus(self) -> None:
+        for entry in self.entries:
+            row = self._persistent_rows.get(entry.hwnd)
+            if row is None:
+                continue
+            if entry.attention:
+                background = self._attention_background()
+                foreground = self.palette["on_attention"]
+            elif entry.active:
+                background = self.palette["accent"]
+                foreground = self.palette["on_accent"]
+            else:
+                background = self.palette["bg2"]
+                foreground = self.palette["fg"]
+            self._configure_widget_colors(row, background, foreground)
+            secondary = self._persistent_secondary_widgets.get(entry.hwnd)
+            if secondary is not None and not entry.active and not entry.attention:
+                try:
+                    secondary.configure(foreground=self.palette["muted"])
+                except Exception:
+                    pass
 
     # ---------------------------- Compact manager ----------------------------
 
@@ -391,6 +448,33 @@ class OverlayUI:
             tree.selection_set(str(active.hwnd))
             tree.see(str(active.hwnd))
 
+    def _refresh_compact_focus(self) -> None:
+        tree = self.compact_tree
+        if tree is None or not self.compact_is_open:
+            return
+        children = set(tree.get_children())
+        expected = {str(entry.hwnd) for entry in self.entries}
+        if children != expected:
+            self._refresh_compact()
+            return
+        active: CharacterDisplay | None = None
+        for entry in self.entries:
+            tree.item(
+                str(entry.hwnd),
+                tags=(
+                    "attention"
+                    if entry.attention
+                    else "active"
+                    if entry.active
+                    else "normal",
+                ),
+            )
+            if entry.active:
+                active = entry
+        if active is not None:
+            tree.selection_set(str(active.hwnd))
+            tree.see(str(active.hwnd))
+
     def _activate_compact_selection(self, _event=None) -> None:
         tree = self.compact_tree
         if tree is None:
@@ -468,6 +552,7 @@ class OverlayUI:
         window = self.persistent_window
         self.persistent_window = None
         self._persistent_rows.clear()
+        self._persistent_secondary_widgets.clear()
         self._persistent_text_widgets.clear()
         self._persistent_images.clear()
         self._drop_target_index = None
@@ -486,6 +571,7 @@ class OverlayUI:
             child.destroy()
         self._persistent_images.clear()
         self._persistent_rows.clear()
+        self._persistent_secondary_widgets.clear()
         self._persistent_text_widgets.clear()
         self._drop_target_index = None
         self._drop_preview_hwnd = None
@@ -653,6 +739,7 @@ class OverlayUI:
                         font=("Segoe UI", 8),
                     )
                     secondary.pack(fill="x")
+                    self._persistent_secondary_widgets[entry.hwnd] = secondary
                     self._register_scaled_text(secondary, 8)
                 if not self.persistent_locked:
                     controls = TkFrame(row, background=background)
@@ -866,7 +953,41 @@ class OverlayUI:
         show_portrait: bool = True,
         show_badge: bool = True,
     ) -> None:
-        self.hide_swap_notification()
+        self._toast_request = _SwapNotificationRequest(
+            entry=entry,
+            anchor=anchor,
+            duration_ms=duration_ms,
+            opacity=opacity,
+            layout=layout,
+            show_portrait=show_portrait,
+            show_badge=show_badge,
+        )
+        if self.toast_show_job is not None:
+            try:
+                self.root.after_cancel(self.toast_show_job)
+            except Exception:
+                pass
+        self.toast_show_job = self.root.after(
+            SWAP_NOTIFICATION_DEBOUNCE_MS,
+            self._flush_swap_notification,
+        )
+
+    def _flush_swap_notification(self) -> None:
+        self.toast_show_job = None
+        request = self._toast_request
+        self._toast_request = None
+        if request is not None:
+            self._show_swap_notification_now(request)
+
+    def _show_swap_notification_now(self, request: _SwapNotificationRequest) -> None:
+        self._hide_visible_toast()
+        entry = request.entry
+        anchor = request.anchor
+        duration_ms = request.duration_ms
+        opacity = request.opacity
+        layout = request.layout
+        show_portrait = request.show_portrait
+        show_badge = request.show_badge
         window = Toplevel(self.root)
         self.toast_window = window
         window.withdraw()
@@ -950,10 +1071,10 @@ class OverlayUI:
         window.deiconify()
         self.toast_job = self.root.after(
             clamp_notification_duration(duration_ms),
-            self.hide_swap_notification,
+            self._hide_visible_toast,
         )
 
-    def hide_swap_notification(self) -> None:
+    def _hide_visible_toast(self) -> None:
         if self.toast_job is not None:
             try:
                 self.root.after_cancel(self.toast_job)
@@ -968,6 +1089,16 @@ class OverlayUI:
                 window.destroy()
             except Exception:
                 pass
+
+    def hide_swap_notification(self) -> None:
+        if self.toast_show_job is not None:
+            try:
+                self.root.after_cancel(self.toast_show_job)
+            except Exception:
+                pass
+            self.toast_show_job = None
+        self._toast_request = None
+        self._hide_visible_toast()
 
     def close_all(self) -> None:
         self.hide_swap_notification()

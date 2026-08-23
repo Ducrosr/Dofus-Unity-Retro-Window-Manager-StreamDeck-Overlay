@@ -2,6 +2,8 @@
 
 ## 2.20.0-beta.2 — en préparation
 
+- mise à jour en place du focus dans l’application, le mode compact et l’overlay afin d’éviter leur reconstruction et le clignotement visible à chaque changement de personnage ;
+- regroupement des rafales de navigation vers leur destination finale et remplacement des notifications en attente par la plus récente, sans accumulation retardée ;
 - ajout d’une file chronologique des demandes d’attention : `!1` désigne la plus ancienne, les signaux répétés ne modifient pas l’ordre et un focus échoué conserve l’alerte ;
 - ajout de l’action **Prochaine alerte** dans l’application, le mode compact, l’overlay déverrouillé, le raccourci global F8 et le plugin Stream Deck 0.7.0 ;
 - publication du rang et du nombre d’alertes sur le pont local afin de synchroniser l’application, l’overlay et les touches Stream Deck ;
