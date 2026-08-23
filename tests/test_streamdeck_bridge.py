@@ -95,6 +95,13 @@ class StreamDeckBridgeTests(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual(self.commands, [("reorder", {"direction": "up"})])
 
+    def test_next_attention_dispatches_command(self) -> None:
+        status, payload = self.request("/v1/next-attention", method="POST", body={})
+
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(self.commands, [("next_attention", {})])
+
     def test_post_rejects_non_json_content(self) -> None:
         request = Request(self.base_url + "/v1/refresh", data=b"{}", method="POST")
 

@@ -1,6 +1,6 @@
 {
     "Name": "Dofus Window Manager",
-    "Version": "0.6.1.0",
+    "Version": "0.7.0.0",
     "Author": "Rémy Ducros",
     "Actions": [
         {
@@ -73,6 +73,22 @@
             "States": [
                 {
                     "Image": "imgs/actions/previous/key"
+                }
+            ],
+            "SupportedInMultiActions": false
+        },
+        {
+            "Name": "Prochaine alerte",
+            "UUID": "com.remyducros.dofuswindowmanager.next-attention",
+            "Icon": "imgs/actions/next-attention/icon",
+            "Tooltip": "Active la plus ancienne fenêtre demandant votre attention.",
+            "Controllers": [
+                "Keypad"
+            ],
+            "UserTitleEnabled": false,
+            "States": [
+                {
+                    "Image": "imgs/actions/next-attention/key"
                 }
             ],
             "SupportedInMultiActions": false

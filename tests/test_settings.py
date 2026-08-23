@@ -20,6 +20,7 @@ class SettingsTests(unittest.TestCase):
         settings = Settings()
         self.assertEqual(settings.game_mode, "unity")
         self.assertEqual(settings.hotkeys["forward"], "F5")
+        self.assertEqual(settings.hotkeys["next_attention"], "F8")
         self.assertEqual(settings.hotkeys["refresh"], "Ctrl+Alt+R")
         self.assertEqual(settings.window_column_order, list(DEFAULT_WINDOW_COLUMN_ORDER))
         self.assertEqual(settings.theme, MODERN_DARK_THEME)

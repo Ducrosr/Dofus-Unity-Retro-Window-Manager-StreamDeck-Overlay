@@ -35,6 +35,7 @@ class CharacterDisplay:
     total: int
     active: bool
     attention: bool = False
+    attention_order: int | None = None
     portrait_data: str = ""
     badge: str = "none"
 
@@ -110,6 +111,10 @@ def build_rotation_displays(
     attention_hwnds: Collection[int] = (),
     character_visuals: Mapping[str, Mapping[str, str]] | None = None,
 ) -> list[CharacterDisplay]:
+    attention_order = {
+        int(hwnd): position
+        for position, hwnd in enumerate(dict.fromkeys(attention_hwnds), start=1)
+    }
     total = sum(1 for hwnd in managed_order if hwnd in windows)
     result: list[CharacterDisplay] = []
     position = 0
@@ -128,7 +133,8 @@ def build_rotation_displays(
                 position=position,
                 total=total,
                 active=hwnd == active_hwnd,
-                attention=hwnd in attention_hwnds,
+                attention=hwnd in attention_order,
+                attention_order=attention_order.get(hwnd),
                 portrait_data=str(appearance.get("portrait") or ""),
                 badge=str(appearance.get("badge") or "none"),
             )
@@ -143,6 +149,7 @@ def build_single_display(
     managed_order: Sequence[int],
     active: bool,
     attention: bool = False,
+    attention_order: int | None = None,
     appearance: Mapping[str, str] | None = None,
 ) -> CharacterDisplay:
     try:
@@ -159,6 +166,7 @@ def build_single_display(
         total=total,
         active=active,
         attention=bool(attention),
+        attention_order=(int(attention_order) if attention and attention_order else None),
         portrait_data=str((appearance or {}).get("portrait") or ""),
         badge=str((appearance or {}).get("badge") or "none"),
     )

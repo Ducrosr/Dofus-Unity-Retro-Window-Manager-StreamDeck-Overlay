@@ -138,6 +138,7 @@ class StreamDeckBridge:
                     "/v1/show": "show",
                     "/v1/toggle-ignore": "toggle_ignore",
                     "/v1/reorder": "reorder",
+                    "/v1/next-attention": "next_attention",
                 }
                 command = routes.get(self.path)
                 if command is None:

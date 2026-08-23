@@ -16,6 +16,7 @@ export type DofusWindow = {
 	active: boolean;
 	ignored?: boolean;
 	attention?: boolean;
+	attention_order?: number | null;
 	portrait?: string;
 	badge?: string;
 	badge_image?: string;
@@ -32,6 +33,8 @@ export type DwmStatus = {
 	show_character_badges?: boolean;
 	attention_blink_enabled?: boolean;
 	attention_blink_phase?: boolean;
+	attention_count?: number;
+	next_attention_hwnd?: number | null;
 	windows: DofusWindow[];
 };
 
@@ -87,6 +90,10 @@ class DwmClient {
 
 	async rotate(direction: "forward" | "backward"): Promise<void> {
 		await this.focusCommand("rotate", { direction });
+	}
+
+	async nextAttention(): Promise<void> {
+		await this.focusCommand("next-attention", {});
 	}
 
 	async show(): Promise<void> {
@@ -163,7 +170,7 @@ class DwmClient {
 		throw new Error(result.error || `HTTP ${response.status}`);
 	}
 
-	private async focusCommand(path: "focus" | "rotate", payload: Record<string, unknown>): Promise<void> {
+	private async focusCommand(path: "focus" | "rotate" | "next-attention", payload: Record<string, unknown>): Promise<void> {
 		try {
 			await this.command(path, payload);
 			return;

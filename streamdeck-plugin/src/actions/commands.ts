@@ -32,6 +32,14 @@ export class PreviousAction extends CommandAction {
 	}
 }
 
+@action({ UUID: "com.remyducros.dofuswindowmanager.next-attention" })
+export class NextAttentionAction extends CommandAction {
+	protected readonly actionKind: ActionKind = "next-attention";
+	override async onKeyDown(ev: KeyDownEvent<EmptySettings>): Promise<void> {
+		await this.execute(ev, () => dwmClient.nextAttention());
+	}
+}
+
 @action({ UUID: "com.remyducros.dofuswindowmanager.move-up" })
 export class MoveUpAction extends CommandAction {
 	protected readonly actionKind: ActionKind = "move-up";

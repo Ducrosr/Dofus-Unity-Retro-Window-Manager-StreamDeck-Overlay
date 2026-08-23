@@ -107,6 +107,16 @@ class DisplayOverlayTests(unittest.TestCase):
         self.assertEqual(rows[0].portrait_data, "portrait-data")
         self.assertEqual(rows[0].badge, "ankama_force")
 
+    def test_attention_queue_order_is_exposed_independently_from_rotation_order(self) -> None:
+        windows = {
+            10: GameWindow(10, "A - Dofus", "A", "Cra"),
+            20: GameWindow(20, "B - Dofus", "B", "Féca"),
+        }
+
+        rows = build_rotation_displays(windows, [10, 20], {}, None, [20, 10])
+
+        self.assertEqual([row.attention_order for row in rows], [2, 1])
+
     def test_overlay_text_scales_with_width_and_available_row_height(self) -> None:
         self.assertEqual(
             calculate_overlay_text_scale(300, 208, 4, locked=False, fixed_height=True),

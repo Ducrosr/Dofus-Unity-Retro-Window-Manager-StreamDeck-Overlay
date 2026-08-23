@@ -295,7 +295,9 @@ export class CharacterAction extends SingletonAction<CharacterSettings> {
 				const aliasSuffix = alias && alias !== characterName ? ` · ${text.alias} : ${alias}` : "";
 				const position = window.position == null ? "—" : String(window.position);
 				const ignoredSuffix = window.ignored ? ` · ${text.ignored}` : "";
-				const attentionSuffix = window.attention ? ` · ${text.attention}` : "";
+				const attentionSuffix = window.attention
+					? ` · !${window.attention_order ?? ""} ${text.attention}`
+					: "";
 				items.push({
 					label: `${position} — ${characterName}${classSuffix}${aliasSuffix}${ignoredSuffix}${attentionSuffix}`,
 					value: String(window.slot),

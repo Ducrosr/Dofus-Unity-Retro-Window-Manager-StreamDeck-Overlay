@@ -69,6 +69,21 @@ class StreamDeckStateTests(unittest.TestCase):
         self.assertEqual(entries[0]["badge"], "ankama_force")
         self.assertTrue(str(entries[0]["badge_image"]).startswith("data:image/png;base64,"))
 
+    def test_attention_queue_order_is_published_for_each_key(self) -> None:
+        entries = build_streamdeck_windows(
+            self.windows,
+            [101, 102, 103],
+            [101, 102, 103],
+            set(),
+            {},
+            None,
+            [103, 101],
+        )
+
+        self.assertEqual(entries[0]["attention_order"], 2)
+        self.assertIsNone(entries[1]["attention_order"])
+        self.assertEqual(entries[2]["attention_order"], 1)
+
     def test_bundled_game_icon_is_published_as_a_local_png(self) -> None:
         entries = build_streamdeck_windows(
             self.windows,

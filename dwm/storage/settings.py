@@ -131,6 +131,7 @@ class Settings:
             "forward": "F5",
             "backward": "F6",
             "ignore": "F7",
+            "next_attention": "F8",
             "refresh": "Ctrl+Alt+R",
         }
         for k, v in defaults.items():

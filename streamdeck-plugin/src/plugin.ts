@@ -4,6 +4,7 @@ import { CharacterAction } from "./actions/character";
 import {
 	MoveDownAction,
 	MoveUpAction,
+	NextAttentionAction,
 	NextAction,
 	PreviousAction,
 	RefreshAction,
@@ -17,6 +18,7 @@ streamDeck.actions.registerAction(new CharacterAction());
 streamDeck.actions.registerAction(new LaunchAction());
 streamDeck.actions.registerAction(new NextAction());
 streamDeck.actions.registerAction(new PreviousAction());
+streamDeck.actions.registerAction(new NextAttentionAction());
 streamDeck.actions.registerAction(new MoveUpAction());
 streamDeck.actions.registerAction(new MoveDownAction());
 streamDeck.actions.registerAction(new RefreshAction());

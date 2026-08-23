@@ -30,6 +30,7 @@ La versión 2.20.0 es la beta pública actual. Reúne la interfaz multilingüe, 
 - notificación de cambio personalizable: contenido, posición, duración y opacidad;
 - overlay de rotación transparente, desplazable y redimensionable;
 - indicador naranja `!` de solicitud de atención, con parpadeo suave opcional, en la aplicación, el overlay y Stream Deck;
+- cola cronológica `!1`, `!2`… con acción **Siguiente alerta** en la aplicación, el overlay, el atajo F8 y Stream Deck;
 - doce temas disponibles en ambos modos: Standard, Bonta, Brakmar, Tribute, Gold and Steel, Belladone, Unicorn, Emerald Mine, Sufokia, Pandala, Wabbit y Retro;
 - francés por defecto, además de inglés y español seleccionables con un clic;
 - restablecimiento independiente de la visualización que conserva perfiles y personalizaciones de personajes;
@@ -37,9 +38,9 @@ La versión 2.20.0 es la beta pública actual. Reúne la interfaz multilingüe, 
 
 Standard es el tema predeterminado de Unity y Retro el de Dofus Retro. Todos los temas pueden utilizarse en ambos modos y la aplicación recuerda una preferencia distinta para cada versión del juego.
 
-## Stream Deck 0.6.1
+## Stream Deck 0.7.0
 
-El plugin incluye ocho teclas de personaje y acciones Anterior, Siguiente, Subir, Bajar, Ignorar/restaurar, Actualizar y Abrir/mostrar. En cada tecla se puede colocar el número, nombre, clase y alias de forma independiente en cuatro líneas. Los retratos, iconos, solicitudes de atención, tema activo e idioma se sincronizan automáticamente.
+El plugin incluye ocho teclas de personaje y acciones Anterior, Siguiente, Siguiente alerta, Subir, Bajar, Ignorar/restaurar, Actualizar y Abrir/mostrar. La tecla Siguiente alerta muestra el número pendiente y activa la solicitud más antigua. En cada tecla se puede colocar el número, nombre, clase y alias de forma independiente en cuatro líneas. Los retratos, iconos, orden de alertas, tema activo e idioma se sincronizan automáticamente.
 
 El perfil incluido está preparado para el Stream Deck estándar de 15 teclas. Una ventana excluida de la rotación sigue siendo accesible desde su tecla asignada.
 
@@ -73,7 +74,7 @@ Instala el plugin desde **Aplicación → Instalar plugin de Stream Deck** y ace
 3. Comprueba los nombres y las clases detectados.
 4. Arrastra los personajes al orden deseado.
 5. Añade opcionalmente un alias, retrato e icono mediante **Personalizar…**.
-6. Prueba F5, F6, F7 y Ctrl+Alt+R.
+6. Prueba F5, F6, F7, F8 y Ctrl+Alt+R.
 7. Guarda un perfil.
 8. Configura el overlay y la notificación en **Ajustes → Visualización en el juego**.
 

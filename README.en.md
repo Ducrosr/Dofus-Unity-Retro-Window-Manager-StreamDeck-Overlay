@@ -30,6 +30,7 @@ Version 2.20.0 is the current public beta. It brings together the multilingual i
 - customizable switch notification, including content, position, duration and opacity;
 - transparent, movable and resizable rotation overlay;
 - orange `!` attention request indicator with optional subtle blinking in the app, overlay and Stream Deck;
+- chronological `!1`, `!2`… queue with a **Next alert** action in the app, overlay, F8 shortcut and Stream Deck;
 - twelve themes available in both game modes: Standard, Bonta, Brakmar, Tribute, Gold and Steel, Belladone, Unicorn, Emerald Mine, Sufokia, Pandala, Wabbit and Retro;
 - French by default, plus English and Spanish selected with one click;
 - separate display reset that preserves profiles and character customization;
@@ -37,9 +38,9 @@ Version 2.20.0 is the current public beta. It brings together the multilingual i
 
 Standard is the default Unity theme and Retro is the default Retro theme. Every theme can be selected in either mode, and the application remembers one preference for each game version.
 
-## Stream Deck 0.6.1
+## Stream Deck 0.7.0
 
-The bundled plugin provides eight character keys and actions for Previous, Next, Move up, Move down, Ignore/restore, Refresh and Launch/show. Character keys can place the number, name, class and alias independently on four lines. Portraits, badges, attention state, current application theme and language are synchronized automatically.
+The bundled plugin provides eight character keys and actions for Previous, Next, Next alert, Move up, Move down, Ignore/restore, Refresh and Launch/show. The Next alert key displays the pending count and focuses the oldest request. Character keys can place the number, name, class and alias independently on four lines. Portraits, badges, attention order, current application theme and language are synchronized automatically.
 
 The bundled profile targets the standard 15-key Stream Deck. A window excluded from rotation remains directly accessible through its assigned character key.
 
@@ -73,7 +74,7 @@ Install the Stream Deck plugin from **Application → Install Stream Deck plugin
 3. Verify detected names and classes.
 4. Drag characters into the desired order.
 5. Optionally add an alias, portrait and badge through **Customize…**.
-6. Test F5, F6, F7 and Ctrl+Alt+R.
+6. Test F5, F6, F7, F8 and Ctrl+Alt+R.
 7. Save a profile.
 8. Configure the overlay and notification under **Settings → In-game display**.
 

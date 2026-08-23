@@ -45,6 +45,7 @@ Le code source 2.20.0 est proposé en **bêta publique**. Il réunit l’interfa
 - notification de changement de personnage et overlay de rotation transparent, configurables et désactivables ;
 - contenu de l’overlay et de la notification personnalisable : numéro, nom, classe et alias peuvent être déplacés ou masqués ;
 - signalement orange avec `!` et léger clignotement facultatif des fenêtres demandant l’attention ;
+- file d’attente chronologique `!1`, `!2`… et action **Prochaine alerte** dans l’application, l’overlay, le raccourci F8 et le Stream Deck ;
 - portrait local, 38 portraits de classes, 39 icônes officielles de caractéristiques et 20 icônes officielles de métiers personnalisables par personnage ;
 - ordre modifiable depuis l’overlay par flèches ou glisser-déposer, avec taille ajustable directement à la souris ;
 - thème sombre moderne et interface à défilement vertical ;
@@ -52,14 +53,15 @@ Le code source 2.20.0 est proposé en **bêta publique**. Il réunit l’interfa
 
 ## Intégration Stream Deck
 
-Le plugin 0.6.1 fourni avec le projet comprend :
+Le plugin 0.7.0 fourni avec le projet comprend :
 
 - huit touches Personnage avec numéro, nom, classe et alias ;
 - choix individuel des lignes de texte et de leur visibilité ;
 - couleur de bordure par personnage : Terre, Feu, Eau, Air, Neutre ou Violet ;
 - bordure orange, repère `!` et léger clignotement facultatif lorsqu’une fenêtre demande l’attention ;
+- ordre des alertes visible sur chaque touche et action **Prochaine alerte** affichant le nombre de demandes en attente ;
 - portrait et icône du personnage en arrière-plan, selon les préférences définies dans l’application ;
-- actions Précédent, Suivant, Monter, Descendre, Ignorer/réintégrer et Actualiser ;
+- actions Précédent, Suivant, Prochaine alerte, Monter, Descendre, Ignorer/réintégrer et Actualiser ;
 - touche Lancer/afficher Dofus Window Manager ;
 - profil prêt à l’emploi pour le Stream Deck standard à 15 touches ;
 - aperçu interactif de la disposition directement dans l’application.
@@ -117,7 +119,7 @@ Le guide détaillé couvre l'exécutable, l’installation depuis un ZIP, les mi
 3. Vérifiez les noms et les classes détectés.
 4. Réorganisez les personnages par glisser-déposer.
 5. Dans **Personnaliser…**, ajoutez si besoin un alias, un portrait personnel ou de classe et une icône.
-6. Testez les raccourcis F5, F6, F7 et Ctrl+Alt+R.
+6. Testez les raccourcis F5, F6, F7, F8 et Ctrl+Alt+R.
 7. Enregistrez un profil lorsque l’ordre vous convient.
 8. Ouvrez **Aperçu Stream Deck…** pour contrôler la disposition avant ou après l’installation du plugin.
 9. Essayez **Mode compact** ou **Afficher l’overlay**, puis ajustez leur comportement dans **Paramètres → Affichage en jeu**.

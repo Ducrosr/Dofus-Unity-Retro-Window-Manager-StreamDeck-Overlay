@@ -25,6 +25,27 @@ class AttentionStateTests(unittest.TestCase):
         self.assertTrue(state.discard_unknown({10}))
         self.assertEqual(state.snapshot(), set())
 
+    def test_queue_keeps_first_request_order_without_reordering_duplicates(self) -> None:
+        state = WindowAttentionState()
+
+        state.mark(20, {10, 20, 30})
+        state.mark(10, {10, 20, 30})
+        state.mark(20, {10, 20, 30})
+        state.mark(30, {10, 20, 30})
+
+        self.assertEqual(state.queue(), (20, 10, 30))
+        self.assertEqual(state.next(), 20)
+        self.assertEqual(state.rank(10), 2)
+        self.assertIsNone(state.rank(99))
+
+    def test_discard_unknown_preserves_remaining_queue_order(self) -> None:
+        state = WindowAttentionState()
+        for hwnd in (30, 10, 20):
+            state.mark(hwnd, {10, 20, 30})
+
+        self.assertTrue(state.discard_unknown({10, 30}))
+        self.assertEqual(state.queue(), (30, 10))
+
 
 if __name__ == "__main__":
     unittest.main()

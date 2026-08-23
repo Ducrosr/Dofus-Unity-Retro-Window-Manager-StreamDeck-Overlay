@@ -34,6 +34,10 @@ def build_streamdeck_windows(
 ) -> list[dict[str, object]]:
     """Build the public window list without dropping ignored characters."""
     managed_positions = {hwnd: position for position, hwnd in enumerate(managed_order, start=1)}
+    attention_positions = {
+        int(hwnd): position
+        for position, hwnd in enumerate(dict.fromkeys(attention_hwnds), start=1)
+    }
     result: list[dict[str, object]] = []
 
     for slot, hwnd in enumerate(streamdeck_order, start=1):
@@ -58,7 +62,8 @@ def build_streamdeck_windows(
                 "title": window.title,
                 "active": hwnd == active_hwnd,
                 "ignored": hwnd in ignored,
-                "attention": hwnd in attention_hwnds,
+                "attention": hwnd in attention_positions,
+                "attention_order": attention_positions.get(hwnd),
                 "portrait": str(appearance.get("portrait") or ""),
                 "badge": badge,
                 "badge_image": bundled_icon_data_uri(badge),

@@ -489,6 +489,7 @@ class WindowManagerApp:
         self.log_visible = BooleanVar(value=False)
         self.selected_profile = StringVar(value=self.settings.last_profile or "")
         self.overlay_button_text = StringVar(value=tr("Afficher l’overlay"))
+        self.next_attention_button_text = StringVar()
         self.character_preview_var = StringVar(value=tr("Sélectionnez un personnage"))
         self._character_preview_photo: ImageTk.PhotoImage | None = None
         self._preview_selected_hwnd: int | None = None
@@ -507,6 +508,7 @@ class WindowManagerApp:
             save_compact_geometry=self._save_compact_geometry,
             save_overlay_size=self._save_overlay_size,
             reorder_character=self._reorder_from_overlay,
+            focus_next_attention=lambda: self.focus_next_attention(source="Overlay"),
             palette=resolved_theme_palette(self.root, self.settings.theme),
         )
         self._apply_display_preferences()
@@ -651,6 +653,7 @@ class WindowManagerApp:
             if self.settings.rotation_overlay_enabled
             else tr("Afficher l’overlay")
         )
+        self._update_next_attention_controls()
         for language, button in getattr(self, "language_buttons", {}).items():
             button.configure(
                 style="LanguageActive.TButton" if language == self.settings.language else "Language.TButton"
@@ -824,6 +827,15 @@ class WindowManagerApp:
         )
         TtkButton(navigation, text="↓ Descendre", command=lambda: self.move_selected(1)).grid(
             row=1, column=1, sticky="ew", padx=(3, 0), pady=2
+        )
+        self.next_attention_button = TtkButton(
+            navigation,
+            textvariable=self.next_attention_button_text,
+            command=lambda: self.focus_next_attention(source="Application"),
+            style="Accent.TButton",
+        )
+        self.next_attention_button.grid(
+            row=2, column=0, columnspan=2, sticky="ew", pady=(5, 2)
         )
 
         selection = TtkLabelFrame(right, text="Fenêtre sélectionnée", padding=8)
@@ -1255,14 +1267,17 @@ class WindowManagerApp:
             self._managed_order,
             self.aliases,
             active_hwnd,
-            self.attention_state.snapshot(),
+            self.attention_state.queue(),
             self.settings.character_visuals,
         )
 
     def _refresh_auxiliary_displays(self) -> None:
         overlay_ui = getattr(self, "overlay_ui", None)
         if overlay_ui is not None:
-            overlay_ui.update_characters(self._rotation_display_entries())
+            overlay_ui.update_characters(
+                self._rotation_display_entries(),
+                attention_count=len(self.attention_state.queue()),
+            )
 
     def _apply_display_preferences(self) -> None:
         overlay_ui = getattr(self, "overlay_ui", None)
@@ -1416,6 +1431,58 @@ class WindowManagerApp:
         self._record_character_focus(hwnd, notify=True)
         self.update_listboxes()
         self._log(f"Mode compact / overlay → {window.title}")
+
+    def _activate_next_attention(self, *, source: str) -> dict[str, object]:
+        """Focus the oldest valid request and clear it only after focus succeeds."""
+        discarded_stale = False
+        while True:
+            hwnd = self.attention_state.next()
+            if hwnd is None:
+                if discarded_stale:
+                    self.update_listboxes()
+                else:
+                    self._update_next_attention_controls()
+                return {
+                    "ok": False,
+                    "error": "Aucune fenêtre ne demande votre attention.",
+                    "_status": 404,
+                }
+
+            window = self._all_windows.get(hwnd)
+            if window is None or not is_window(hwnd):
+                self.attention_state.clear(hwnd)
+                discarded_stale = True
+                continue
+
+            try:
+                focus_hwnd(hwnd)
+            except FocusError as exc:
+                self._log(f"{source}, prochaine alerte : focus échoué ({exc})")
+                return {"ok": False, "error": str(exc), "_status": 409}
+
+            self._record_character_focus(hwnd, notify=True)
+            self.update_listboxes()
+            remaining = len(self.attention_state.queue())
+            name = self.aliases.get(window.pseudo) or window.pseudo
+            self._log(f"{source}, prochaine alerte → {window.title}")
+            return {
+                "ok": True,
+                "hwnd": hwnd,
+                "name": name,
+                "remaining": remaining,
+            }
+
+    def focus_next_attention(self, *, source: str = "Application") -> bool:
+        return bool(self._activate_next_attention(source=source).get("ok"))
+
+    def _update_next_attention_controls(self) -> None:
+        count = len(self.attention_state.queue())
+        variable = getattr(self, "next_attention_button_text", None)
+        if variable is not None:
+            variable.set(tr("⚠ Prochaine alerte ({count})", count=count))
+        button = getattr(self, "next_attention_button", None)
+        if button is not None:
+            button.configure(state=("normal" if count else "disabled"))
 
     def _poll_active_game_window(self) -> None:
         if self._stop_event.is_set():
@@ -2588,6 +2655,9 @@ class WindowManagerApp:
                 return {"ok": False, "error": "Direction invalide.", "_status": 400}
             return self._reorder_current_window(direction)
 
+        if command == "next_attention":
+            return self._activate_next_attention(source="Stream Deck")
+
         if command == "rotate":
             direction = str(payload.get("direction", "")).strip().lower()
             if direction not in {"forward", "backward"}:
@@ -2743,7 +2813,7 @@ class WindowManagerApp:
             self._ignored,
             self.aliases,
             active_hwnd,
-            self.attention_state.snapshot(),
+            self.attention_state.queue(),
             self.settings.character_visuals,
         )
         self._streamdeck_preview_entries = windows
@@ -2765,6 +2835,8 @@ class WindowManagerApp:
                 "show_character_badges": bool(self.settings.show_character_badges),
                 "attention_blink_enabled": bool(self.settings.attention_blink_enabled),
                 "attention_blink_phase": bool(self._attention_blink_phase),
+                "attention_count": len(self.attention_state.queue()),
+                "next_attention_hwnd": self.attention_state.next(),
                 "windows": windows,
             }
         )
@@ -3061,6 +3133,7 @@ class WindowManagerApp:
         self._publish_streamdeck_state()
         self._refresh_auxiliary_displays()
         self._refresh_character_preview()
+        self._update_next_attention_controls()
 
     def _selected_managed_hwnd(self) -> int | None:
         selection = self.managed_tree.selection()
@@ -3257,7 +3330,12 @@ class WindowManagerApp:
         label.configure(image=photo, background=palette["bg2"])
         alias = (self.aliases.get(window.pseudo) or "").strip() or "—"
         badge = badge_label(appearance.get("badge"))
-        attention = "\n! Demande d’attention" if hwnd in self.attention_state.snapshot() else ""
+        attention_order = self.attention_state.rank(hwnd)
+        attention = (
+            f"\n!{attention_order} Demande d’attention"
+            if attention_order is not None
+            else ""
+        )
         self.character_preview_var.set(
             f"{window.pseudo}\n{window.character_class or 'Classe inconnue'}\n"
             f"Alias : {alias}\nIcône : {badge}{attention}"
@@ -3498,6 +3576,7 @@ class WindowManagerApp:
         hk_fwd = StringVar(value=self.settings.hotkeys.get("forward", "F5"))
         hk_bwd = StringVar(value=self.settings.hotkeys.get("backward", "F6"))
         hk_ign = StringVar(value=self.settings.hotkeys.get("ignore", "F7"))
+        hk_attention = StringVar(value=self.settings.hotkeys.get("next_attention", "F8"))
         hk_ref = StringVar(value=self.settings.hotkeys.get("refresh", "Ctrl+Alt+R"))
         evt_hook = BooleanVar(value=bool(getattr(self.settings, "event_hook_enabled", True)))
         popup_watch = BooleanVar(value=bool(getattr(self.settings, "popup_watch_enabled", False)))
@@ -3849,6 +3928,7 @@ class WindowManagerApp:
             ("Personnage suivant", hk_fwd),
             ("Personnage précédent", hk_bwd),
             ("Ignorer la fenêtre", hk_ign),
+            ("Prochaine fenêtre en attente", hk_attention),
             ("Actualiser la liste", hk_ref),
         )
         for row_index, (label, variable) in enumerate(hotkey_rows):
@@ -3918,11 +3998,13 @@ class WindowManagerApp:
             fwd = hk_fwd.get().strip() or "F5"
             bwd = hk_bwd.get().strip() or "F6"
             ign = hk_ign.get().strip() or "F7"
+            next_attention = hk_attention.get().strip() or "F8"
             ref = hk_ref.get().strip() or "Ctrl+Alt+R"
             try:
                 parse_hotkey(fwd)
                 parse_hotkey(bwd)
                 parse_hotkey(ign)
+                parse_hotkey(next_attention)
                 parse_hotkey(ref)
             except ValueError as e:
                 messagebox.showerror("Hotkeys", str(e))
@@ -3931,6 +4013,7 @@ class WindowManagerApp:
             self.settings.hotkeys["forward"] = fwd
             self.settings.hotkeys["backward"] = bwd
             self.settings.hotkeys["ignore"] = ign
+            self.settings.hotkeys["next_attention"] = next_attention
             self.settings.hotkeys["refresh"] = ref
 
             self.settings.event_hook_enabled = bool(evt_hook.get())
@@ -4197,8 +4280,9 @@ class WindowManagerApp:
             self.hotkeys.set_hotkey(2, self.settings.hotkeys.get("backward", "F6"), lambda: self.root.after(0, lambda: self.rotate("backward")))
             self.hotkeys.set_hotkey(3, self.settings.hotkeys.get("ignore", "F7"), lambda: self.root.after(0, self.ignore_selected))
             self.hotkeys.set_hotkey(4, self.settings.hotkeys.get("refresh", "Ctrl+Alt+R"), lambda: self.root.after(0, lambda: self.refresh_windows(quiet=True, force=True)))
+            self.hotkeys.set_hotkey(5, self.settings.hotkeys.get("next_attention", "F8"), lambda: self.root.after(0, lambda: self.focus_next_attention(source="Raccourci")))
             self._log(
-                f"Hotkeys: {self.settings.hotkeys.get('forward')} / {self.settings.hotkeys.get('backward')} / {self.settings.hotkeys.get('ignore')} / {self.settings.hotkeys.get('refresh')}"
+                f"Hotkeys: {self.settings.hotkeys.get('forward')} / {self.settings.hotkeys.get('backward')} / {self.settings.hotkeys.get('ignore')} / {self.settings.hotkeys.get('next_attention')} / {self.settings.hotkeys.get('refresh')}"
             )
         except Exception as e:
             self._log(f"Hotkeys non appliqués: {e}")

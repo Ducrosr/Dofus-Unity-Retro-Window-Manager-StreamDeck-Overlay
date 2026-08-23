@@ -111,7 +111,7 @@ test("la couleur d’élément personnalise la bordure sans masquer l’état ac
 
 test("une demande d’attention prend la priorité sur les autres états", () => {
 	const svg = buildCharacterKeySvg(
-		{ ...nealla, attention: true, ignored: true },
+		{ ...nealla, attention: true, attention_order: 2, ignored: true },
 		4,
 		defaultTextLayout(),
 		false,
@@ -119,7 +119,7 @@ test("une demande d’attention prend la priorité sur les autres états", () =>
 	);
 
 	assert.match(svg, /stroke="#f59e0b" stroke-width="7"/u);
-	assert.match(svg, />!<\/text>/u);
+	assert.match(svg, />!2<\/text>/u);
 	assert.doesNotMatch(svg, /stroke="#f87171"/u);
 });
 

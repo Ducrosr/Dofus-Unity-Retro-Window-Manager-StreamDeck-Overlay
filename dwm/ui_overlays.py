@@ -25,6 +25,7 @@ from .services.display_overlay import (
     place_inside_rect,
 )
 from .services.character_visuals import build_avatar_image, build_badge_tile_image
+from .services.i18n import tr
 
 
 DEFAULT_PALETTE = {
@@ -151,6 +152,7 @@ class OverlayUI:
         save_compact_geometry: Callable[[str], None],
         save_overlay_size: Callable[[int, int], None] | None = None,
         reorder_character: Callable[[int, str | int], None] | None = None,
+        focus_next_attention: Callable[[], bool] | None = None,
         palette: Mapping[str, str] | None = None,
     ) -> None:
         self.root = root
@@ -159,16 +161,19 @@ class OverlayUI:
         self.save_compact_geometry = save_compact_geometry
         self.save_overlay_size = save_overlay_size or (lambda _width, _height: None)
         self.reorder_character = reorder_character or (lambda _hwnd, _direction: None)
+        self.focus_next_attention = focus_next_attention or (lambda: False)
         self.palette = dict(DEFAULT_PALETTE)
         if palette:
             self.palette.update(palette)
 
         self.entries: list[CharacterDisplay] = []
+        self.attention_count = 0
         self.toast_window: Toplevel | None = None
         self.toast_job: str | None = None
         self.persistent_window: Toplevel | None = None
         self.compact_window: Toplevel | None = None
         self.compact_tree: Treeview | None = None
+        self.compact_attention_button: TtkButton | None = None
 
         self.persistent_enabled = False
         self.persistent_x = 24
@@ -218,8 +223,18 @@ class OverlayUI:
                 pass
         self._refresh_compact()
 
-    def update_characters(self, entries: Sequence[CharacterDisplay]) -> None:
+    def update_characters(
+        self,
+        entries: Sequence[CharacterDisplay],
+        *,
+        attention_count: int | None = None,
+    ) -> None:
         self.entries = list(entries)
+        self.attention_count = (
+            max(0, int(attention_count))
+            if attention_count is not None
+            else sum(1 for entry in self.entries if entry.attention)
+        )
         if self.persistent_enabled:
             self._ensure_persistent()
             self._render_persistent()
@@ -286,6 +301,11 @@ class OverlayUI:
 
         toolbar = TtkFrame(window, padding=(6, 6, 6, 0))
         toolbar.pack(fill="x")
+        self.compact_attention_button = TtkButton(
+            toolbar,
+            command=self.focus_next_attention,
+        )
+        self.compact_attention_button.pack(side="left")
         TtkButton(
             toolbar,
             text="Quitter le mode compact",
@@ -305,6 +325,7 @@ class OverlayUI:
         window = self.compact_window
         self.compact_window = None
         self.compact_tree = None
+        self.compact_attention_button = None
         if window is not None:
             try:
                 self.save_compact_geometry(window.geometry())
@@ -341,21 +362,27 @@ class OverlayUI:
             foreground=self.palette["on_attention"],
         )
         tree.tag_configure("normal", background=self.palette["bg2"], foreground=self.palette["fg"])
+        attention_count = self.attention_count
+        if self.compact_attention_button is not None:
+            self.compact_attention_button.configure(
+                text=tr("⚠ Prochaine alerte ({count})", count=attention_count),
+                state=("normal" if attention_count else "disabled"),
+            )
         if not self.entries:
-            tree.insert("", "end", text="Aucune fenêtre en rotation", tags=("normal",))
+            tree.insert("", "end", text=tr("Aucune fenêtre en rotation"), tags=("normal",))
             return
         for entry in self.entries:
             details = entry.character_class
             if entry.alias:
                 details = f"{entry.pseudo} · {entry.character_class}".strip(" ·")
             suffix = f"  —  {details}" if details else ""
+            attention_prefix = f"!{entry.attention_order or ''}  " if entry.attention else ""
             tree.insert(
                 "",
                 "end",
                 iid=str(entry.hwnd),
                 text=(
-                    f"{'!  ' if entry.attention else ''}{entry.position}.  "
-                    f"{entry.primary_text}{suffix}"
+                    f"{attention_prefix}{entry.position}.  {entry.primary_text}{suffix}"
                 ),
                 tags=("attention" if entry.attention else "active" if entry.active else "normal",),
             )
@@ -466,9 +493,14 @@ class OverlayUI:
         body = TkFrame(window, background=self.palette["bg"], padx=2, pady=2)
         body.pack(fill="both", expand=True, padx=1, pady=1)
         if not self.persistent_locked:
-            header = TkLabel(
+            header = TkFrame(
                 body,
-                text="ROTATION  ·  déplacer ici  ·  glisser une ligne = ordre",
+                background=self.palette["bg3"],
+            )
+            header.pack(fill="x")
+            drag_label = TkLabel(
+                header,
+                text=tr("ROTATION  ·  déplacer ici  ·  glisser une ligne = ordre"),
                 background=self.palette["bg3"],
                 foreground=self.palette["on_dark"],
                 anchor="w",
@@ -476,14 +508,29 @@ class OverlayUI:
                 pady=4,
                 font=("Segoe UI", 8, "bold"),
             )
-            header.pack(fill="x")
-            self._register_scaled_text(header, 8, bold=True)
-            self._bind_drag(header, None)
+            drag_label.pack(side="left", fill="x", expand=True)
+            self._register_scaled_text(drag_label, 8, bold=True)
+            self._bind_drag(drag_label, None)
+            attention_count = self.attention_count
+            if attention_count:
+                alert_button = TkLabel(
+                    header,
+                    text=f"⚠ {attention_count}",
+                    background=self._attention_background(),
+                    foreground=self.palette["on_attention"],
+                    cursor="hand2",
+                    padx=8,
+                    pady=4,
+                    font=("Segoe UI", 8, "bold"),
+                )
+                alert_button.pack(side="right")
+                self._register_scaled_text(alert_button, 8, bold=True)
+                alert_button.bind("<Button-1>", lambda _event: self.focus_next_attention())
 
         if not self.entries:
             empty = TkLabel(
                 body,
-                text="Aucune fenêtre en rotation",
+                text=tr("Aucune fenêtre en rotation"),
                 background=self.palette["bg2"],
                 foreground=self.palette["muted"],
                 padx=10,
@@ -526,8 +573,8 @@ class OverlayUI:
                 if entry.attention:
                     attention_marker = TkLabel(
                         row,
-                        text="!",
-                        width=2,
+                        text=f"!{entry.attention_order or ''}",
+                        width=3,
                         background=background,
                         foreground=foreground,
                         anchor="center",

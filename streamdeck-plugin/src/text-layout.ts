@@ -151,7 +151,7 @@ export function buildCharacterKeySvg(
 		? `<image href="${portrait}" x="0" y="0" width="144" height="144" preserveAspectRatio="xMidYMid slice" opacity="0.68"/><rect width="144" height="144" rx="18" fill="${background}" opacity="0.58"/>`
 		: "";
 	const attentionMarker = window.attention
-		? `<circle cx="126" cy="18" r="11" fill="${attentionColor}"/><text x="126" y="19" fill="#111827" font-family="Arial, sans-serif" font-size="17" font-weight="900" text-anchor="middle" dominant-baseline="middle">!</text>`
+		? `<circle cx="126" cy="18" r="11" fill="${attentionColor}"/><text x="126" y="19" fill="#111827" font-family="Arial, sans-serif" font-size="${window.attention_order && window.attention_order > 9 ? 11 : 15}" font-weight="900" text-anchor="middle" dominant-baseline="middle">!${window.attention_order ?? ""}</text>`
 		: active
 			? '<circle cx="126" cy="18" r="7" fill="#4ade80"/>'
 			: "";

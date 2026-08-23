@@ -28,11 +28,12 @@ Le mode Unity cible les fenêtres Unity. Le mode Retro combine la classe de fen�
 
 - **F5** ou **Suivant** active le personnage suivant ;
 - **F6** ou **Précédent** active le personnage précédent ;
+- **F8**, **Prochaine alerte** ou l’action Stream Deck correspondante active la plus ancienne demande d’attention ;
 - un clic sur une touche Personnage du Stream Deck active directement sa fenêtre.
 
 La ligne active est mise en évidence dans l’application. Le bouton Stream Deck actif utilise un état vert.
 
-Lorsqu’une fenêtre Dofus fait clignoter son bouton dans la barre des tâches Windows, elle passe en orange avec un repère `!` dans l’application, le mode compact, l’overlay et le Stream Deck. Un léger clignotement rend l’alerte plus visible ; il peut être désactivé dans **Paramètres → Affichage en jeu** sans retirer la couleur orange ni le `!`. Ce signal reste visible jusqu’à ce que la fenêtre obtienne réellement le focus. La détection est volontairement limitée aux demandes d’attention Windows : un événement affiché uniquement à l’intérieur du jeu, sans clignotement ni événement d’accessibilité, peut ne pas être détecté.
+Lorsqu’une fenêtre Dofus fait clignoter son bouton dans la barre des tâches Windows, elle passe en orange avec un repère `!` dans l’application, le mode compact, l’overlay et le Stream Deck. Plusieurs demandes forment une file chronologique : `!1` est la prochaine, puis `!2`, etc. Un signal répété pour la même fenêtre ne change pas sa place. Le bouton **Prochaine alerte** indique le nombre restant ; il est également disponible dans le mode compact, l’en-tête de l’overlay déverrouillé et parmi les actions Stream Deck. Un léger clignotement rend l’alerte plus visible ; il peut être désactivé dans **Paramètres → Demandes d’attention** sans retirer la couleur orange ni le repère. L’alerte n’est retirée qu’après un focus réussi. La détection est volontairement limitée aux demandes d’attention Windows : un événement affiché uniquement à l’intérieur du jeu, sans clignotement ni événement d’accessibilité, peut ne pas être détecté.
 
 ## Modifier l’ordre
 
@@ -170,7 +171,7 @@ Pour chaque personnage, la position, le nom, la classe et l’alias peuvent êtr
 - classe ligne 3 ;
 - alias ligne 4.
 
-La disposition et la couleur de bordure sont mémorisées par personnage et le suivent lorsqu’il change de touche. Le portrait et l’icône définis dans l’application sont également repris par le plugin 0.6.1. Le fond et l’accent des touches suivent le thème actif de l’application ; leurs libellés courts suivent sa langue. Une demande d’attention utilise temporairement une bordure orange épaisse et un repère `!`.
+La disposition et la couleur de bordure sont mémorisées par personnage et le suivent lorsqu’il change de touche. Le portrait et l’icône définis dans l’application sont également repris par le plugin 0.7.0. Le fond et l’accent des touches suivent le thème actif de l’application ; leurs libellés courts suivent sa langue. Une demande d’attention utilise temporairement une bordure orange épaisse et affiche son rang `!1`, `!2`… dans la file.
 
 L’option **Aperçu Stream Deck…** reproduit la disposition dans l’application et permet de tester le focus, la rotation, l’ordre, l’actualisation et l’exclusion temporaire. Les préférences visuelles avancées restent configurées dans Stream Deck.
 
