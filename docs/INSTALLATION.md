@@ -1,6 +1,6 @@
 # Installer Dofus Window Manager
 
-Ce guide installe le code source 2.20.0 ou l’exécutable public 2.19.0 depuis le dépôt officiel.
+Ce guide installe le code source ou l’exécutable public 2.20.0 depuis le dépôt officiel.
 
 > [!CAUTION]
 > Utilisez uniquement <https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay>. Le programme officiel ne demande jamais d’identifiant Ankama, de mot de passe, de code de double authentification ou de jeton de session. N’exécutez pas une copie reçue en message privé et ne désactivez pas votre antivirus pour l’installer.
@@ -11,7 +11,7 @@ Ce guide installe le code source 2.20.0 ou l’exécutable public 2.19.0 depuis 
 
 Cette méthode ne nécessite ni Python, ni Git, ni compilation.
 
-1. Ouvrez la [préversion officielle v2.19.0-beta.1](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.19.0-beta.1) puis téléchargez `DofusWindowManager.exe`.
+1. Ouvrez la [préversion officielle v2.20.0-beta.1](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.1) puis téléchargez `DofusWindowManager.exe`.
 2. Vérifiez si possible son empreinte avec la commande PowerShell suivante :
 
 ~~~powershell
@@ -21,7 +21,7 @@ Get-FileHash .\DofusWindowManager.exe -Algorithm SHA256
 La valeur attendue pour cette bêta est :
 
 ~~~text
-01f9c139acaebdcca8ca4df85daa8c4e034b24be1859728b39788658b34840f9
+7f095d73345b95c0e973e539cb751178dd486dc65b6a0a3aa2e2dc382c94196f
 ~~~
 
 3. Déplacez le fichier dans un dossier permanent, par exemple `%LOCALAPPDATA%\Programs\DofusWindowManager\`.
@@ -31,7 +31,7 @@ Le binaire n'est pas encore signé numériquement. SmartScreen peut donc demande
 
 Cet exécutable est la version standard. La gestion des fenêtres Dofus Retro est incluse, mais pas la détection visuelle expérimentale des invitations Retro. Pour utiliser cette fonction facultative, installez l'application depuis les sources puis suivez la section correspondante de ce guide.
 
-L’exécutable publié correspond encore à la bêta 2.19.0. L’installation depuis les sources est nécessaire pour tester immédiatement l’interface multilingue, les overlays, les thèmes et les visuels de la bêta 2.20.0.
+L’exécutable publié correspond à la bêta 2.20.0 et contient l’interface multilingue, les overlays, les thèmes et les visuels présentés dans ce dépôt.
 
 ## Installation depuis les sources
 

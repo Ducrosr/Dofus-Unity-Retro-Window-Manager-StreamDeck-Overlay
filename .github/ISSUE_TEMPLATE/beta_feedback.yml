@@ -1,6 +1,6 @@
 name: Partager un retour de bêta
 description: Résumer une session de test, même si tout a fonctionné
-title: "[Bêta source 2.20.0] "
+title: "[Bêta 2.20.0] "
 body:
   - type: markdown
     attributes:
@@ -15,7 +15,7 @@ body:
       label: Méthode d'installation
       options:
         - Installation 2.20.0 depuis les sources
-        - Ancien exécutable v2.19.0-beta.1
+        - Exécutable v2.20.0-beta.1
         - Autre méthode
     validations:
       required: true

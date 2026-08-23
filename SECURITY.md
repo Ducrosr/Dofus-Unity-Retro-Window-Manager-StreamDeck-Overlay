@@ -65,8 +65,8 @@ Un avertissement SmartScreen peut provenir de l’absence de signature numériqu
 
 | Version | Statut sécurité |
 |---|---|
-| 2.20.x | bêta source actuelle |
-| 2.19.x | ancien exécutable public, maintenance de sécurité uniquement |
+| 2.20.x | bêta publique actuelle, source et exécutable pris en charge |
+| 2.19.x | ancienne bêta, mise à jour recommandée |
 | versions antérieures | mise à jour recommandée avant tout rapport |
 
 ## Signaler une vulnérabilité
