@@ -1,6 +1,6 @@
 # Historique
 
-## 2.20.0-beta.2 — en préparation
+## 2.20.0-beta.2 — préversion Windows
 
 - écritures atomiques des réglages, des profils et des exports JSON afin qu’une interruption ne laisse jamais un fichier partiellement remplacé ;
 - conservation automatique de la dernière version valide des réglages dans `settings.json.bak` et restauration transparente depuis cette copie si le fichier principal est illisible ;

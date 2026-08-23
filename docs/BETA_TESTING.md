@@ -9,7 +9,7 @@ Merci de participer à la bêta de Dofus Window Manager. Un retour indiquant que
 3. Sauvegardez une configuration existante avec **Sauvegarder/restaurer…**.
 4. N'utilisez pas de compte ou d'identifiant Ankama dans un rapport de test.
 
-L’exécutable public `v2.20.0-beta.1` contient les nouveautés 2.20.0, mais pas la détection visuelle expérimentale des invitations Retro. Vous pouvez tester l’exécutable standard ou l’installation depuis les sources en indiquant la méthode utilisée dans votre retour.
+L’exécutable public `v2.20.0-beta.2` contient les nouveautés 2.20.0, mais pas la détection visuelle expérimentale des invitations Retro. Vous pouvez tester l’exécutable standard ou l’installation depuis les sources en indiquant la méthode utilisée dans votre retour.
 
 ## Parcours conseillé
 

@@ -5,7 +5,7 @@
 > [!NOTE]
 > Les versions anglaise et espagnole ont été traduites avec l’aide d’une IA et peuvent contenir des erreurs. Les corrections sont bienvenues dans les Issues ou Pull Requests du dépôt officiel.
 
-[![Version](https://img.shields.io/badge/version-2.20.0--beta-22b8f0)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.20.0--beta.2-22b8f0)](CHANGELOG.md)
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows)](docs/INSTALLATION.md)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Tests](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/actions/workflows/tests.yml/badge.svg)](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/actions/workflows/tests.yml)
@@ -78,12 +78,12 @@ Les préférences visuelles suivent le personnage lorsqu’il change de position
 
 Pour utiliser l'application sans installer Python ni compiler le projet :
 
-1. ouvrez la **[préversion officielle v2.20.0-beta.1](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.1)** puis téléchargez `DofusWindowManager.exe` ;
-2. vérifiez si possible son empreinte SHA-256 à l'aide du fichier [`DofusWindowManager.exe.sha256`](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/download/v2.20.0-beta.1/DofusWindowManager.exe.sha256) ;
+1. ouvrez la **[préversion officielle v2.20.0-beta.2](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.2)** puis téléchargez `DofusWindowManager.exe` ;
+2. vérifiez si possible son empreinte SHA-256 à l'aide du fichier [`DofusWindowManager.exe.sha256`](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/download/v2.20.0-beta.2/DofusWindowManager.exe.sha256) ;
 3. placez l'exécutable dans un dossier permanent puis lancez-le.
 
 > [!IMPORTANT]
-> L’exécutable `v2.20.0-beta.1` contient les nouveautés de la bêta 2.20. Il s’agit de la variante standard, sans détection visuelle expérimentale des invitations Retro.
+> L’exécutable `v2.20.0-beta.2` contient les nouveautés de la bêta 2.20. Il s’agit de la variante standard, sans détection visuelle expérimentale des invitations Retro.
 
 Cette bêta n'est pas encore signée numériquement. Windows SmartScreen peut donc afficher un avertissement, même pour le fichier officiel. Ne contournez jamais cet avertissement pour une copie obtenue ailleurs que sur ce dépôt.
 
@@ -179,7 +179,7 @@ Le résultat PyInstaller est créé dans **dist\DofusWindowManager.exe**. La com
 
 ## Participer à la bêta
 
-Pour la bêta 2.20.0, utilisez l’**[exécutable officiel v2.20.0-beta.1](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.1)** ou installez les sources, puis suivez le **[guide de test bêta](docs/BETA_TESTING.md)**. Vous pouvez transmettre un **[retour de session](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/issues/new?template=beta_feedback.yml)** même si tout a fonctionné.
+Pour la bêta 2.20.0, utilisez l’**[exécutable officiel v2.20.0-beta.2](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.2)** ou installez les sources, puis suivez le **[guide de test bêta](docs/BETA_TESTING.md)**. Vous pouvez transmettre un **[retour de session](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/issues/new?template=beta_feedback.yml)** même si tout a fonctionné.
 
 Avant de signaler un problème :
 

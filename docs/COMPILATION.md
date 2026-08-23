@@ -103,7 +103,9 @@ Testez toujours sur un compte Windows distinct ou une machine virtuelle avant de
 
 Le workflow GitHub Actions **Compiler et publier une version** reproduit ces contrôles sur un environnement Windows propre. Il exécute les tests Python et Stream Deck, Ruff, le contrôle TypeScript, la validation Elgato, la compilation du plugin et le build PyInstaller standard.
 
-Une publication normale se déclenche en poussant un tag dont la version de base correspond à `pyproject.toml` :
+Une publication normale se déclenche lorsque `__release_tag__` dans `dwm/__init__.py` est mis à jour sur `main`. Le workflow compile d’abord le commit exact, puis crée automatiquement le tag et la Release si tous les contrôles réussissent.
+
+Il reste également possible de déclencher la compilation en poussant manuellement un tag dont la version de base correspond à `pyproject.toml` :
 
 ~~~powershell
 git tag v2.20.0-beta.2

@@ -2,8 +2,12 @@ name: Compiler et publier une version
 
 on:
   push:
+    branches:
+      - "main"
     tags:
       - "v*.*.*"
+    paths:
+      - "dwm/__init__.py"
   workflow_dispatch:
     inputs:
       tag:
@@ -53,8 +57,10 @@ jobs:
         run: |
           $tag = if ($env:GITHUB_EVENT_NAME -eq "workflow_dispatch") {
             $env:MANUAL_TAG
-          } else {
+          } elseif ($env:GITHUB_REF_TYPE -eq "tag") {
             $env:GITHUB_REF_NAME
+          } else {
+            python -c "import dwm; print(dwm.__release_tag__)"
           }
 
           if ($tag -notmatch '^v(?<version>\d+\.\d+\.\d+)(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?$') {
@@ -68,9 +74,14 @@ jobs:
           }
 
           $targetSha = (git rev-parse HEAD).Trim()
-          $tagSha = (git rev-parse "$tag^{commit}").Trim()
-          if ($targetSha -ne $tagSha) {
-            throw "Le code récupéré ($targetSha) ne correspond pas au tag $tag ($tagSha)."
+          $existingTag = git tag --list $tag
+          if ($existingTag -eq $tag) {
+            $tagSha = (git rev-parse "$tag^{commit}").Trim()
+            if ($targetSha -ne $tagSha) {
+              throw "Le code récupéré ($targetSha) ne correspond pas au tag $tag ($tagSha)."
+            }
+          } elseif ($env:GITHUB_EVENT_NAME -ne "push" -or $env:GITHUB_REF_TYPE -ne "branch") {
+            throw "Le tag $tag n'existe pas pour cette republication manuelle."
           }
 
           $packageVersion = node -p "require('./streamdeck-plugin/package.json').version"
