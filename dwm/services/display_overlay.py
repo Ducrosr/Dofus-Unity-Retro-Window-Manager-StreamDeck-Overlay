@@ -16,6 +16,8 @@ OVERLAY_ANCHORS = (
     "bottom_right",
 )
 
+OVERLAY_ORIENTATIONS = ("vertical", "horizontal")
+
 OVERLAY_LAYOUT_SLOTS = ("left", "line1", "line2_left", "line2_right")
 OVERLAY_FIELDS = ("none", "position", "name", "class", "alias")
 DEFAULT_ROTATION_OVERLAY_LAYOUT = {
@@ -76,6 +78,11 @@ def normalize_overlay_layout(value: object) -> dict[str, str]:
             else DEFAULT_ROTATION_OVERLAY_LAYOUT[slot]
         )
     return result
+
+
+def normalize_overlay_orientation(value: object) -> str:
+    normalized = str(value or "").strip().lower()
+    return normalized if normalized in OVERLAY_ORIENTATIONS else "vertical"
 
 
 def overlay_field_text(entry: CharacterDisplay, field: str) -> str:

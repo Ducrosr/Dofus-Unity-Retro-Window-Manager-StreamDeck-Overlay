@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 
 from dwm.models import GameWindow
 from dwm.services.attention_state import WindowAttentionState
+from dwm.storage.profiles import Profile
 
 if os.name != "nt":
     hotkeys_stub = types.ModuleType("dwm.services.hotkeys_win")
@@ -81,6 +82,83 @@ class AppOrderSyncTests(unittest.TestCase):
             app._move_managed_window(103, 101, after=False)
 
         self.assert_published_order(app, [103, 101, 102])
+
+    def test_direct_position_focus_uses_current_managed_order(self) -> None:
+        app = self.make_app()
+        app._focus_from_auxiliary_display = Mock()
+        app._log = Mock()
+
+        self.assertTrue(app.focus_managed_position(3))
+        self.assertEqual(app.rotation_index, 2)
+        app._focus_from_auxiliary_display.assert_called_once_with(103)
+        self.assertFalse(app.focus_managed_position(9))
+
+    def test_only_configured_direct_hotkeys_are_registered(self) -> None:
+        app = self.make_app()
+        app.hotkeys = Mock()
+        app.root = SimpleNamespace(after=lambda _delay, callback: callback())
+        app._log = Mock()
+        app.focus_managed_position = Mock(return_value=True)
+        app.settings.hotkeys = {
+            "forward": "F5",
+            "backward": "F6",
+            "ignore": "F7",
+            "next_attention": "F8",
+            "refresh": "Ctrl+Alt+R",
+            "window_1": "1",
+            "window_2": "",
+            "window_3": "3",
+        }
+        app.request_rotation = Mock()
+        app.ignore_selected = Mock()
+        app.focus_next_attention = Mock()
+        app.refresh_windows = Mock()
+
+        app._register_hotkeys()
+
+        registered_ids = [call.args[0] for call in app.hotkeys.set_hotkey.call_args_list]
+        self.assertEqual(registered_ids, [1, 2, 3, 4, 5, 101, 103])
+        self.assertEqual(
+            [call.args[0] for call in app.hotkeys.clear_hotkey.call_args_list],
+            list(range(101, 109)),
+        )
+        direct_callback = next(
+            call.args[2]
+            for call in app.hotkeys.set_hotkey.call_args_list
+            if call.args[0] == 103
+        )
+        direct_callback()
+        app.focus_managed_position.assert_called_once_with(3)
+
+    def test_profiles_can_customize_the_same_character_differently(self) -> None:
+        app = WindowManagerApp.__new__(WindowManagerApp)
+        app.aliases = {}
+        app._legacy_character_visuals = {}
+        app.character_visuals = {}
+        app.game_mode = "unity"
+        first = Profile(
+            "Serveur A",
+            ["Nealla"],
+            {"Nealla": "Terre"},
+            "",
+            "",
+            visuals={"Nealla": {"portrait": "", "badge": "ankama_force"}},
+        )
+        second = Profile(
+            "Serveur B",
+            ["Nealla"],
+            {"Nealla": "Eau"},
+            "",
+            "",
+            visuals={"Nealla": {"portrait": "", "badge": "ankama_chance"}},
+        )
+
+        app._apply_loaded_profile(first, migrate_legacy=False)
+        self.assertEqual(app.aliases["Nealla"], "Terre")
+        self.assertEqual(app.character_visuals["Nealla"]["badge"], "ankama_force")
+        app._apply_loaded_profile(second, migrate_legacy=False)
+        self.assertEqual(app.aliases["Nealla"], "Eau")
+        self.assertEqual(app.character_visuals["Nealla"]["badge"], "ankama_chance")
 
 
 if __name__ == "__main__":

@@ -133,7 +133,9 @@ THEME_PALETTES: Mapping[str, dict[str, str]] = {
 
 
 def default_theme_for_mode(game_mode: str) -> str:
-    return RETRO_THEME if (game_mode or "").strip().lower() == "retro" else UNITY_STANDARD_THEME
+    # Keep the first-run experience consistent in both client generations.
+    # Retro remains available as an explicit theme choice.
+    return UNITY_STANDARD_THEME
 
 
 def normalize_theme(theme_name: str | None, game_mode: str = "unity") -> str:

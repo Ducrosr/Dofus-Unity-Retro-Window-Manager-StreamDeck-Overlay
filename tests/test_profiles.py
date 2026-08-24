@@ -21,6 +21,8 @@ class ProfileTests(unittest.TestCase):
                 aliases={"Iop": "Tank"},
                 created_at=now,
                 updated_at=now,
+                visuals={"Iop": {"portrait": "", "badge": "ankama_force"}},
+                game_mode="retro",
             )
             save_profile(profiles_dir, profile)
 
@@ -33,6 +35,21 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(loaded.name, profile.name)
         self.assertEqual(loaded.order, ["Iop", "Eni"])
         self.assertEqual(loaded.aliases, {"Iop": "Tank"})
+        self.assertEqual(loaded.visuals, {"Iop": {"portrait": "", "badge": "ankama_force"}})
+        self.assertEqual(loaded.game_mode, "retro")
+
+    def test_legacy_profile_keeps_visuals_unspecified_for_migration(self) -> None:
+        profile = Profile.from_dict(
+            {
+                "schema_version": 1,
+                "name": "Ancien serveur",
+                "order": ["Iop"],
+                "aliases": {},
+            }
+        )
+
+        self.assertIsNone(profile.visuals)
+        self.assertEqual(profile.game_mode, "")
 
     def test_list_profiles_is_case_insensitive_sorted(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

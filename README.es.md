@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.2"><strong>⬇ Descargar para Windows</strong></a>
+  <a href="https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.3"><strong>⬇ Descargar para Windows</strong></a>
   ·
   <a href="docs/INSTALLATION.md">Guía de instalación</a>
   ·
@@ -33,31 +33,33 @@ Gestor local de ventanas para Windows compatible con **Dofus Unity** y **Dofus R
 >
 > Consulta también la guía oficial de Ankama: **[Reconocer el phishing y protegerse](https://support.ankama.com/hc/fr/articles/201376953-Reconna%C3%AEtre-le-phishing-et-s-en-prot%C3%A9ger)**.
 
-La versión 2.20.0 es la beta pública actual. Reúne la interfaz multilingüe, los overlays, las solicitudes de atención, los retratos, los iconos oficiales y los temas Unity/Retro. El ejecutable de Windows correspondiente está disponible en la [Release oficial v2.20.0-beta.2](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.2).
+La versión 2.20.0 es la beta pública actual. Reúne la interfaz multilingüe, los overlays, las solicitudes de atención, los retratos, los iconos oficiales y los temas Unity/Retro. El ejecutable de Windows correspondiente está disponible en la [Release oficial v2.20.0-beta.3](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.3).
 
 ## Funciones principales
 
 - detección nativa de ventanas Dofus Unity y Retro;
-- atajos globales para el personaje siguiente y anterior;
+- atajos globales para el personaje siguiente y anterior, además de ocho atajos directos opcionales para las posiciones 1 a 8;
 - orden por botones o arrastrar y soltar;
 - alias, retrato personalizado o de clase incluido, 39 iconos oficiales de características y 20 iconos oficiales de oficios por personaje;
 - las ventanas ignoradas conservan su tecla de Stream Deck, pero salen de la rotación automática;
-- perfiles JSON y copia completa de la configuración;
+- perfiles JSON por servidor con orden, alias, retratos e iconos independientes, además de una copia completa de la configuración;
 - escritura atómica de ajustes y perfiles, con copia automática de los últimos ajustes válidos;
-- cambio instantáneo entre Unity y Retro;
+- cambio instantáneo entre Unity y Retro con preferencias de visualización separadas para cada versión;
 - modo compacto siempre visible;
 - recuperación automática del modo compacto y del overlay tras un cambio de monitores;
 - notificación de cambio personalizable con anchura automática según el contenido, posición, duración y opacidad;
-- overlay de rotación transparente, desplazable y redimensionable, con anchura automática opcional;
+- overlay de rotación transparente vertical u horizontal, desplazable y redimensionable, con anchura automática opcional;
 - retratos e iconos visibles u ocultables de forma independiente en la notificación, el overlay y Stream Deck;
 - indicador naranja `!` de solicitud de atención, con parpadeo suave opcional, en la aplicación, el overlay y Stream Deck;
 - cola cronológica `!1`, `!2`… con acción **Siguiente alerta** en la aplicación, el overlay, el atajo F8 y Stream Deck;
 - doce temas disponibles en ambos modos: Standard, Bonta, Brakmar, Tribute, Gold and Steel, Belladone, Unicorn, Emerald Mine, Sufokia, Pandala, Wabbit y Retro;
-- francés por defecto, además de inglés y español seleccionables con un clic;
+- francés por defecto, además de inglés y español seleccionables mediante botones con banderas gráficas;
+- ajustes organizados en las pestañas General, Apariencia y Atajos;
+- aviso de seguridad obligatorio en el primer inicio, antes de activar los atajos globales;
 - restablecimiento independiente de la visualización que conserva perfiles y personalizaciones de personajes;
 - comprobación opcional de Releases oficiales, sin descarga automática.
 
-Standard es el tema predeterminado de Unity y Retro el de Dofus Retro. Todos los temas pueden utilizarse en ambos modos y la aplicación recuerda una preferencia distinta para cada versión del juego.
+Standard es el tema predeterminado tanto para Unity como para Retro. Todos los temas pueden utilizarse en ambos modos y la aplicación recuerda un tema y un conjunto de preferencias de visualización distintos para cada versión del juego.
 
 ## Stream Deck 0.7.0
 
@@ -91,12 +93,12 @@ Instala el plugin desde **Aplicación → Instalar plugin de Stream Deck** y ace
 ## Primeros pasos
 
 1. Inicia el gestor y elige Unity o Retro.
-2. Abre los clientes de Dofus y pulsa **Actualizar**.
+2. Lee el aviso de seguridad, confirma que tu copia procede del repositorio oficial, abre los clientes de Dofus y pulsa **Actualizar**.
 3. Comprueba los nombres y las clases detectados.
 4. Arrastra los personajes al orden deseado.
-5. Añade opcionalmente un alias, retrato e icono mediante **Personalizar…**.
-6. Prueba F5, F6, F7, F8 y Ctrl+Alt+R.
-7. Guarda un perfil.
+5. Crea o carga un perfil por servidor y añade opcionalmente un alias, retrato e icono mediante **Personalizar…**.
+6. Prueba F5, F6, F7, F8 y Ctrl+Alt+R; los accesos directos a las ventanas 1 a 8 se configuran en Ajustes.
+7. Guarda el perfil.
 8. Configura el overlay y la notificación en **Ajustes → Visualización en el juego**.
 
 Atajos predeterminados:
@@ -112,7 +114,7 @@ Atajos predeterminados:
 
 Dofus Window Manager no lee la memoria ni los paquetes de red de Dofus, no inyecta código, no envía comandos al juego, no solicita credenciales de Ankama y no sube retratos. El puente de Stream Deck escucha únicamente en `127.0.0.1:32145`. Los ajustes, perfiles y registros permanecen en `%APPDATA%\DofusUnityWindowManager\`.
 
-Ejecuta el gestor y Dofus con el mismo nivel de privilegios de Windows. Lee [SECURITY.md](SECURITY.md) y la guía [anti-phishing de Ankama](https://support.ankama.com/hc/fr/articles/201376953-Reconna%C3%AEtre-le-phishing-et-s-en-prot%C3%A9ger) antes de instalar un binario obtenido fuera del repositorio oficial.
+Ejecuta el gestor y Dofus con el mismo nivel de privilegios de Windows. En el primer inicio, la aplicación exige leer un aviso y confirmar que la copia procede del repositorio oficial. Si ya ejecutaste una copia no oficial, ciérrala, desconecta el equipo si es necesario, cambia inmediatamente las contraseñas de Ankama y del correo asociado desde otro dispositivo de confianza, activa la doble autenticación y ejecuta un análisis antivirus completo o sin conexión. Lee [SECURITY.md](SECURITY.md) y la guía [anti-phishing de Ankama](https://support.ankama.com/hc/fr/articles/201376953-Reconna%C3%AEtre-le-phishing-et-s-en-prot%C3%A9ger).
 
 ## Compilación y pruebas
 

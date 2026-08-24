@@ -14,6 +14,7 @@ from dwm.services.display_overlay import (
     format_tk_geometry,
     normalize_overlay_anchor,
     normalize_overlay_layout,
+    normalize_overlay_orientation,
     parse_tk_geometry,
     place_inside_rect,
     recover_window_position,
@@ -56,6 +57,8 @@ class DisplayOverlayTests(unittest.TestCase):
         self.assertEqual(clamp_overlay_opacity(120), 100)
         self.assertEqual(clamp_notification_duration(100), 600)
         self.assertEqual(clamp_notification_duration(9000), 5000)
+        self.assertEqual(normalize_overlay_orientation("horizontal"), "horizontal")
+        self.assertEqual(normalize_overlay_orientation("diagonal"), "vertical")
         self.assertEqual(format_tk_geometry(320, 90, -25, 40), "320x90-25+40")
 
     def test_tk_geometry_parser_supports_negative_monitor_coordinates(self) -> None:

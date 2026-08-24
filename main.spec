@@ -23,6 +23,7 @@ a = Analysis(
     binaries=[],
     datas=[
         (icon_path, "icons"),
+        (str(project_dir / "assets" / "flags"), "assets/flags"),
         (str(project_dir / "assets" / "ankama"), "assets/ankama"),
         (streamdeck_plugin_path, "streamdeck-plugin"),
     ],

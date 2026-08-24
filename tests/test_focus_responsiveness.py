@@ -184,7 +184,8 @@ class OverlayResponsivenessTests(unittest.TestCase):
     def test_adaptive_width_uses_natural_content_size_with_safe_bounds(self) -> None:
         self.assertEqual(_adaptive_display_width(104), 104)
         self.assertEqual(_adaptive_display_width(20), DISPLAY_MIN_WIDTH)
-        self.assertEqual(_adaptive_display_width(1200), DISPLAY_MAX_WIDTH)
+        self.assertEqual(_adaptive_display_width(1200), 1200)
+        self.assertEqual(_adaptive_display_width(2400), DISPLAY_MAX_WIDTH)
         self.assertEqual(_adaptive_display_width(700, 460), 460)
 
     def test_focus_only_update_does_not_rebuild_overlay_rows(self) -> None:
@@ -208,6 +209,34 @@ class OverlayResponsivenessTests(unittest.TestCase):
         overlay._render_persistent.assert_not_called()
         overlay._refresh_compact_focus.assert_called_once_with()
         overlay._refresh_compact.assert_not_called()
+
+    def test_horizontal_drag_order_uses_left_to_right_midpoints(self) -> None:
+        overlay = OverlayUI.__new__(OverlayUI)
+        overlay.entries = [
+            display(1, active=False),
+            display(2, active=False),
+            display(3, active=True),
+        ]
+        overlay.persistent_orientation = "horizontal"
+        overlay._drag_target_hwnd = 3
+        overlay._drop_target_index = None
+        overlay._drop_preview_hwnd = None
+        overlay.palette = {"attention": "#ff9900"}
+        overlay._persistent_rows = {
+            hwnd: SimpleNamespace(
+                winfo_rootx=lambda start=start: start,
+                winfo_width=lambda: 80,
+                winfo_rooty=lambda: 0,
+                winfo_height=lambda: 40,
+                configure=Mock(),
+            )
+            for hwnd, start in ((1, 0), (2, 100), (3, 200))
+        }
+
+        overlay._update_drop_preview(20, 999)
+
+        self.assertEqual(overlay._drop_target_index, 0)
+        self.assertEqual(overlay._drop_preview_hwnd, 1)
 
     def test_rapid_notifications_keep_only_the_latest_request(self) -> None:
         overlay = OverlayUI.__new__(OverlayUI)

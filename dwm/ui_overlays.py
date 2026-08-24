@@ -23,6 +23,7 @@ from .services.display_overlay import (
     compose_overlay_row,
     format_tk_geometry,
     normalize_overlay_layout,
+    normalize_overlay_orientation,
     parse_tk_geometry,
     place_inside_rect,
     recover_window_position,
@@ -47,7 +48,7 @@ DEFAULT_PALETTE = {
 
 SWAP_NOTIFICATION_DEBOUNCE_MS = 55
 DISPLAY_MIN_WIDTH = 80
-DISPLAY_MAX_WIDTH = 900
+DISPLAY_MAX_WIDTH = 1800
 
 
 @dataclass(frozen=True)
@@ -269,6 +270,7 @@ class OverlayUI:
         self.persistent_opacity = 88
         self.persistent_locked = False
         self.persistent_layout = dict(DEFAULT_ROTATION_OVERLAY_LAYOUT)
+        self.persistent_orientation = "vertical"
         self.persistent_width = 300
         self.persistent_auto_width = True
         self.persistent_height = 0
@@ -584,6 +586,7 @@ class OverlayUI:
         opacity: int,
         locked: bool,
         layout: Mapping[str, str] | None = None,
+        orientation: str = "vertical",
         width: int = 300,
         auto_width: bool = True,
         height: int = 0,
@@ -597,6 +600,7 @@ class OverlayUI:
         self.persistent_opacity = clamp_overlay_opacity(opacity)
         self.persistent_locked = bool(locked)
         self.persistent_layout = normalize_overlay_layout(layout)
+        self.persistent_orientation = normalize_overlay_orientation(orientation)
         self.persistent_width = max(DISPLAY_MIN_WIDTH, min(DISPLAY_MAX_WIDTH, int(width)))
         self.persistent_auto_width = bool(auto_width)
         requested_height = int(height)
@@ -717,6 +721,8 @@ class OverlayUI:
             if not self.persistent_locked:
                 self._bind_drag(empty, None)
         else:
+            rows = TkFrame(body, background=self.palette["bg"])
+            rows.pack(fill="both", expand=True)
             for entry in self.entries:
                 if entry.attention:
                     background = self._attention_background()
@@ -728,18 +734,27 @@ class OverlayUI:
                     background = self.palette["bg2"]
                     foreground = self.palette["fg"]
                 row = TkFrame(
-                    body,
+                    rows,
                     background=background,
                     padx=8,
                     pady=4,
                     highlightthickness=0,
                     highlightbackground=self.palette["accent"],
                 )
-                row.pack(
-                    fill="both" if self.persistent_height > 0 else "x",
-                    expand=self.persistent_height > 0,
-                    pady=(1, 0),
-                )
+                if self.persistent_orientation == "horizontal":
+                    row.pack(
+                        side="left",
+                        fill="y" if self.persistent_height > 0 else "both",
+                        expand=False,
+                        padx=(0, 1),
+                        pady=(1, 0),
+                    )
+                else:
+                    row.pack(
+                        fill="both" if self.persistent_height > 0 else "x",
+                        expand=self.persistent_height > 0,
+                        pady=(1, 0),
+                    )
                 self._persistent_rows[entry.hwnd] = row
                 left_text, primary_text, secondary_text = compose_overlay_row(
                     entry,
@@ -836,7 +851,7 @@ class OverlayUI:
                     controls.pack(side="right", padx=(4, 0))
                     up = TkLabel(
                         controls,
-                        text="▲",
+                        text="◀" if self.persistent_orientation == "horizontal" else "▲",
                         background=background,
                         foreground=foreground,
                         cursor="hand2",
@@ -844,7 +859,7 @@ class OverlayUI:
                     )
                     down = TkLabel(
                         controls,
-                        text="▼",
+                        text="▶" if self.persistent_orientation == "horizontal" else "▼",
                         background=background,
                         foreground=foreground,
                         cursor="hand2",
@@ -876,8 +891,13 @@ class OverlayUI:
                         self._bind_drag(widget, entry.hwnd)
 
         window.update_idletasks()
+        display_rects = _get_display_rects(self.root)
+        available_width = max(
+            (right - left for left, _top, right, _bottom in display_rects),
+            default=DISPLAY_MAX_WIDTH,
+        )
         width = (
-            _adaptive_display_width(body.winfo_reqwidth() + 2)
+            _adaptive_display_width(body.winfo_reqwidth() + 2, available_width)
             if self.persistent_auto_width
             else self.persistent_width
         )
@@ -891,7 +911,7 @@ class OverlayUI:
             height,
             self.persistent_x,
             self.persistent_y,
-            _get_display_rects(self.root),
+            display_rects,
         )
         position_changed = (recovered_x, recovered_y) != (
             self.persistent_x,
@@ -924,7 +944,7 @@ class OverlayUI:
         return calculate_overlay_text_scale(
             300 if self.persistent_auto_width else width,
             height,
-            len(self.entries),
+            1 if self.persistent_orientation == "horizontal" and self.entries else len(self.entries),
             locked=self.persistent_locked,
             fixed_height=self.persistent_height > 0,
         )
@@ -964,7 +984,7 @@ class OverlayUI:
         self._drag_distance = max(self._drag_distance, abs(delta_x) + abs(delta_y))
         if self._drag_target_hwnd is not None:
             if self._drag_distance >= 5:
-                self._update_drop_preview(int(event.y_root))
+                self._update_drop_preview(int(event.x_root), int(event.y_root))
             return
         self.persistent_x = self._drag_window_origin[0] + delta_x
         self.persistent_y = self._drag_window_origin[1] + delta_y
@@ -985,7 +1005,7 @@ class OverlayUI:
         elif target is None:
             self.save_overlay_position(self.persistent_x, self.persistent_y)
 
-    def _update_drop_preview(self, pointer_y: int) -> None:
+    def _update_drop_preview(self, pointer_x: int, pointer_y: int) -> None:
         if not self.entries:
             return
         insertion_index = len(self.entries)
@@ -994,8 +1014,13 @@ class OverlayUI:
             row = self._persistent_rows.get(entry.hwnd)
             if row is None:
                 continue
-            midpoint = row.winfo_rooty() + row.winfo_height() // 2
-            if pointer_y < midpoint:
+            if self.persistent_orientation == "horizontal":
+                pointer = pointer_x
+                midpoint = row.winfo_rootx() + row.winfo_width() // 2
+            else:
+                pointer = pointer_y
+                midpoint = row.winfo_rooty() + row.winfo_height() // 2
+            if pointer < midpoint:
                 insertion_index = index
                 preview_hwnd = entry.hwnd
                 break

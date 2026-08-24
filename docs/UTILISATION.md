@@ -29,9 +29,12 @@ Le mode Unity cible les fenêtres Unity. Le mode Retro combine la classe de fen�
 - **F5** ou **Suivant** active le personnage suivant ;
 - **F6** ou **Précédent** active le personnage précédent ;
 - **F8**, **Prochaine alerte** ou l’action Stream Deck correspondante active la plus ancienne demande d’attention ;
+- les huit raccourcis facultatifs **Fenêtre 1** à **Fenêtre 8** activent directement la position correspondante dans l’ordre courant ;
 - un clic sur une touche Personnage du Stream Deck active directement sa fenêtre.
 
 La ligne active est mise en évidence dans l’application. Le bouton Stream Deck actif utilise un état vert.
+
+Ces raccourcis sont globaux tant que le gestionnaire fonctionne. Une touche seule comme `1` est donc réservée par le gestionnaire ; laissez l’accès direct vide ou utilisez une combinaison telle que `Ctrl+Alt+1` si la touche doit rester disponible dans le jeu ou dans les autres applications.
 
 Lorsqu’une fenêtre Dofus fait clignoter son bouton dans la barre des tâches Windows, elle passe en orange avec un repère `!` dans l’application, le mode compact, l’overlay et le Stream Deck. Plusieurs demandes forment une file chronologique : `!1` est la prochaine, puis `!2`, etc. Un signal répété pour la même fenêtre ne change pas sa place. Le bouton **Prochaine alerte** indique le nombre restant ; il est également disponible dans le mode compact, l’en-tête de l’overlay déverrouillé et parmi les actions Stream Deck. Un léger clignotement rend l’alerte plus visible ; il peut être désactivé dans **Paramètres → Demandes d’attention** sans retirer la couleur orange ni le repère. L’alerte n’est retirée qu’après un focus réussi. La détection est volontairement limitée aux demandes d’attention Windows : un événement affiché uniquement à l’intérieur du jeu, sans clignotement ni événement d’accessibilité, peut ne pas être détecté.
 
@@ -59,7 +62,7 @@ Un alias court améliore la lecture sur le Stream Deck, notamment :
 
 Supprimer le contenu rend l’alias vierge. La touche Stream Deck affiche alors un tiret lorsque la ligne Alias est visible.
 
-Le même panneau permet de choisir un portrait PNG, JPEG, WebP ou BMP, ou l’un des 38 portraits de classes fournis. L’image est recadrée en carré, réduite puis enregistrée localement dans les réglages ; elle n’est envoyée à aucun service. **Retirer** restaure la vignette générée avec l’initiale du personnage.
+Le même panneau permet de choisir un portrait PNG, JPEG, WebP ou BMP, ou l’un des 38 portraits de classes fournis. L’image est recadrée en carré, réduite puis enregistrée localement dans le profil sélectionné ; elle n’est envoyée à aucun service. **Retirer** restaure la vignette générée avec l’initiale du personnage.
 
 Une icône peut compléter le portrait : le catalogue comprend uniquement les ressources officielles fournies, soit 39 icônes de caractéristiques et 20 icônes de métiers issues de l’univers Dofus. Les anciens symboles génériques créés pour le projet ont été retirés. Les illustrations et icônes de jeu intégrées sont la propriété d’**Ankama Games** ; Dofus Window Manager reste un projet communautaire indépendant, non affilié à Ankama. Ces ressources sont isolées dans `assets/ankama` et ne sont pas couvertes par la licence GPL-3.0 du code. Les portraits personnalisés doivent être des images que l’utilisateur est autorisé à employer.
 
@@ -75,7 +78,7 @@ Une fenêtre ignorée peut toujours être activée directement. Elle conserve sa
 
 ## Profils
 
-Un profil enregistre l’ordre des personnages et leurs alias en les associant à leur pseudo plutôt qu’à un identifiant de fenêtre temporaire.
+Un profil enregistre l’ordre des personnages, leurs alias, leurs portraits et leurs icônes en les associant à leur pseudo plutôt qu’à un identifiant de fenêtre temporaire. Créez un profil par serveur : deux personnages portant le même nom sur des serveurs différents peuvent ainsi avoir une classe, un alias et une apparence distincts.
 
 - **Enregistrer…** conserve le profil dans les données locales ;
 - **Charger** restaure la formation sélectionnée ;
@@ -98,17 +101,17 @@ Les réglages, les profils et les exports JSON sont écrits dans un fichier temp
 
 ## Paramètres et zone de notification
 
-Les paramètres permettent notamment de personnaliser les raccourcis, l’actualisation, le thème, la réduction dans la zone de notification et le démarrage avec Windows.
+Les paramètres sont répartis dans trois onglets défilants : **Général** pour l’actualisation, le démarrage, les mises à jour et la détection ; **Apparence** pour le thème, les demandes d’attention, la notification et l’overlay ; **Raccourcis** pour les actions habituelles et les huit accès directs facultatifs aux positions 1 à 8.
 
 La section **Demandes d’attention**, placée près du haut des paramètres, permet d’activer ou de désactiver le léger clignotement. La couleur orange et le repère `!` restent actifs dans les deux cas.
 
-Trois petits drapeaux en haut de l’interface sélectionnent immédiatement le français, l’anglais ou l’espagnol. Le français reste la langue par défaut. Les traductions anglaise et espagnole ont été réalisées avec l’aide d’une IA et peuvent contenir des erreurs ; un avertissement le rappelle lors de leur sélection.
+Trois drapeaux graphiques en haut de l’interface sélectionnent immédiatement le français, l’anglais ou l’espagnol. Le français reste la langue par défaut. Les traductions anglaise et espagnole ont été réalisées avec l’aide d’une IA et peuvent contenir des erreurs ; un avertissement le rappelle lors de leur sélection.
 
-Les douze thèmes sont disponibles dans les deux modes : **Standard**, **Bonta**, **Brakmar**, **Tribute**, **Gold and Steel**, **Belladone**, **Unicorn**, **Emerald Mine**, **Sufokia**, **Pandala**, **Wabbit** et **Retro**. **Standard** reste le choix par défaut en Unity et **Retro** en Dofus Retro. L’application mémorise un choix distinct pour chaque version du jeu.
+Les douze thèmes sont disponibles dans les deux modes : **Standard**, **Bonta**, **Brakmar**, **Tribute**, **Gold and Steel**, **Belladone**, **Unicorn**, **Emerald Mine**, **Sufokia**, **Pandala**, **Wabbit** et **Retro**. **Standard** est le choix par défaut en Unity comme en Retro. L’application mémorise un thème et un ensemble complet de paramètres d’affichage distincts pour chaque version du jeu.
 
 Le thème **Retro — parchemin et orange** reprend les tons historiques de l’interface : crème parchemin, beige/kaki, brun-charbon et orange vif. Il ne contient aucune image ou ressource extraite du jeu.
 
-La fenêtre des paramètres possède son propre défilement vertical. La molette permet donc d’atteindre les options d’affichage en jeu même avec une mise à l’échelle Windows élevée.
+Chaque onglet des paramètres possède son propre défilement vertical. La molette permet donc d’atteindre toutes les options même avec une mise à l’échelle Windows élevée.
 
 Le bouton **Réinitialiser l’affichage…**, disponible dans le panneau Application et dans le pied fixe des paramètres, restaure le thème, l’ordre des colonnes, la notification et la géométrie de l’overlay. Il conserve les profils, alias, portraits, icônes et raccourcis. La réinitialisation complète reste disponible dans **Sauvegarder/restaurer…**.
 
@@ -136,21 +139,21 @@ Après un changement réussi depuis les raccourcis, l’application, le Stream D
 - le nom ou l’alias lorsqu’il existe ;
 - le pseudo et la classe en complément.
 
-La notification est activée par défaut. Elle ne prend pas le focus, ignore les clics, adapte automatiquement sa largeur aux informations visibles et disparaît automatiquement. Dans **Paramètres → Affichage en jeu**, elle peut être désactivée, placée dans l’un des six emplacements de la fenêtre Dofus ciblée, affichée entre 600 et 5 000 ms et réglée entre 35 et 100 % d’opacité. Son emplacement gauche et ses deux lignes utilisent les mêmes choix **Numéro**, **Nom**, **Classe**, **Alias** ou **Masqué** que l’overlay. Le portrait et l’icône peuvent chacun être activés ou masqués ; l’un peut rester visible sans l’autre.
+La notification est activée par défaut avec une opacité de 88 %. Elle ne prend pas le focus, ignore les clics, adapte automatiquement sa largeur aux informations visibles et disparaît automatiquement. Dans **Paramètres → Affichage en jeu**, elle peut être désactivée, placée dans l’un des six emplacements de la fenêtre Dofus ciblée, affichée entre 600 et 5 000 ms et réglée entre 35 et 100 % d’opacité. Son emplacement gauche et ses deux lignes utilisent les mêmes choix **Numéro**, **Nom**, **Classe**, **Alias** ou **Masqué** que l’overlay. Le portrait et l’icône peuvent chacun être activés ou masqués ; l’un peut rester visible sans l’autre.
 
 ## Overlay de rotation
 
-**Afficher l’overlay** ouvre une liste transparente toujours visible, comparable à une liste de participants en communication. Il est masqué par défaut. Seuls les personnages inclus dans la rotation apparaissent et le personnage actuel est mis en évidence.
+**Afficher l’overlay** ouvre une liste transparente toujours visible, comparable à une liste de participants en communication. Il est activé par défaut sur une nouvelle installation. Seuls les personnages inclus dans la rotation apparaissent et le personnage actuel est mis en évidence.
 
 Lorsqu’il est déverrouillé :
 
 - glissez l’en-tête pour déplacer l’overlay ;
-- glissez une ligne vers une autre position, ou utilisez ses flèches ▲/▼, pour modifier l’ordre de rotation ;
+- glissez une ligne vers une autre position, ou utilisez ses flèches ▲/▼ (vertical) ou ◀/▶ (horizontal), pour modifier l’ordre de rotation ;
 - étirez la poignée ◢ dans l’angle inférieur droit pour passer en largeur manuelle et ajuster ses dimensions ;
 - cliquez brièvement sur un personnage pour activer sa fenêtre ;
 - la position, l’ordre et les dimensions sont mémorisés automatiquement.
 
-Les paramètres permettent aussi de saisir les coordonnées X/Y, de régler l’opacité entre 35 et 100 % et de verrouiller l’overlay. Une fois verrouillé, il ignore les clics afin de ne pas gêner le jeu ; repassez par les paramètres pour le déverrouiller.
+Les paramètres permettent aussi de choisir une orientation verticale ou horizontale, de saisir les coordonnées X/Y, de régler l’opacité entre 35 et 100 % et de verrouiller l’overlay. En mode horizontal, la première fenêtre est placée à gauche et l’ordre continue vers la droite. Une fois verrouillé, l’overlay ignore les clics afin de ne pas gêner le jeu ; repassez par les paramètres pour le déverrouiller.
 
 Le contenu de chaque ligne est personnalisable avec les champs **Numéro**, **Nom**, **Classe**, **Alias** ou **Masqué**. La disposition par défaut place le numéro à gauche, le nom sur la première ligne et `classe · alias` sur la seconde. Lorsqu’un alias n’est pas renseigné, un tiret est affiché.
 

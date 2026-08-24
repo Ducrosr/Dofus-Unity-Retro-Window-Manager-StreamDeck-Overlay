@@ -34,7 +34,7 @@ L’application officielle :
 - affiche le mode compact, les notifications et l’overlay dans des fenêtres Windows séparées, sans modifier le rendu ou la mémoire de Dofus ;
 - ne capture pas les identifiants, le clavier du jeu ou les paquets réseau ;
 - stocke ses réglages, profils et journaux dans %APPDATA%\DofusUnityWindowManager\ ;
-- recadre les portraits choisis par l’utilisateur et les conserve uniquement dans les réglages locaux ;
+- recadre les portraits choisis par l’utilisateur et les conserve uniquement dans le profil local sélectionné ;
 - expose au plugin Stream Deck un petit pont HTTP lié exclusivement à 127.0.0.1:32145 ;
 - refuse les commandes portant un en-tête Origin de navigateur et limite la taille des requêtes ;
 - peut consulter la liste publique des Releases sur `api.github.com`, au maximum une fois toutes les 24 heures par défaut ;
@@ -60,6 +60,15 @@ Le gestionnaire doit fonctionner au même niveau de privilèges que Dofus. Le mo
 5. En cas de doute, exécutez les sources après les avoir examinées ou attendez une version vérifiée.
 
 Un avertissement SmartScreen peut provenir de l’absence de signature numérique, mais il ne constitue pas une preuve de sécurité. La provenance, le code source et l’empreinte restent essentiels.
+
+## Réagir à une copie non officielle ou suspecte
+
+1. Ne l’exécutez pas. Si elle a déjà été lancée, fermez-la et déconnectez la machine du réseau si nécessaire.
+2. Depuis un autre appareil de confiance, changez immédiatement le mot de passe Ankama et celui de l’adresse e-mail associée. Activez la double authentification et ne réutilisez pas les anciens mots de passe.
+3. Lancez une analyse complète, idéalement l’analyse hors ligne de Sécurité Windows ou l’équivalent d’un antivirus à jour. Supprimez ou mettez en quarantaine le fichier détecté.
+4. Vérifiez les connexions, appareils et activités inhabituelles des comptes concernés. Contactez les supports Ankama et de votre messagerie en cas de doute ou d’accès non reconnu.
+
+Au premier lancement, Dofus Window Manager affiche ce rappel avant d’activer ses raccourcis globaux. La validation indique uniquement que l’utilisateur a lu l’avertissement et confirmé la provenance de sa copie ; elle ne remplace pas la vérification de l’adresse et de l’empreinte du fichier.
 
 ## Versions prises en charge
 

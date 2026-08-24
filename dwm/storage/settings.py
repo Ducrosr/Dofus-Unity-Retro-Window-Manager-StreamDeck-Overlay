@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict
@@ -10,6 +11,7 @@ from ..services.display_overlay import (
     clamp_notification_duration,
     clamp_overlay_opacity,
     normalize_overlay_anchor,
+    normalize_overlay_orientation,
     normalize_overlay_layout,
 )
 from ..services.character_visuals import sanitize_character_visuals
@@ -21,9 +23,103 @@ from ..services.themes import (
 from .atomic import atomic_write_text
 
 
-SETTINGS_SCHEMA_VERSION = 16
+SETTINGS_SCHEMA_VERSION = 18
 MODERN_DARK_THEME = UNITY_STANDARD_THEME  # Backward-compatible public name.
 DEFAULT_WINDOW_COLUMN_ORDER = ("class", "name", "alias", "hwnd")
+
+
+def _default_display_preferences() -> dict[str, object]:
+    return {
+        "compact_window_geometry": "",
+        "swap_notification_enabled": True,
+        "swap_notification_anchor": "top_center",
+        "swap_notification_duration_ms": 1400,
+        "swap_notification_opacity": 88,
+        "swap_notification_layout": dict(DEFAULT_ROTATION_OVERLAY_LAYOUT),
+        "rotation_overlay_enabled": True,
+        "rotation_overlay_x": 24,
+        "rotation_overlay_y": 160,
+        "rotation_overlay_opacity": 88,
+        "rotation_overlay_locked": False,
+        "rotation_overlay_layout": dict(DEFAULT_ROTATION_OVERLAY_LAYOUT),
+        "rotation_overlay_width": 300,
+        "rotation_overlay_auto_width": True,
+        "rotation_overlay_height": 0,
+        "rotation_overlay_orientation": "vertical",
+        "attention_blink_enabled": True,
+        "show_popup_portraits": True,
+        "show_popup_badges": True,
+        "show_overlay_portraits": True,
+        "show_overlay_badges": True,
+        "show_character_portraits": True,
+        "show_character_badges": True,
+    }
+
+
+def _normalized_display_preferences(
+    value: object,
+    *,
+    fallback: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+    raw = value if isinstance(value, Mapping) else {}
+    base = dict(_default_display_preferences())
+    if fallback:
+        base.update(fallback)
+    base.update(raw)
+
+    def safe_int(key: str, default: int) -> int:
+        try:
+            return int(base.get(key, default))
+        except (TypeError, ValueError):
+            return default
+
+    requested_height = safe_int("rotation_overlay_height", 0)
+    return {
+        "compact_window_geometry": str(base.get("compact_window_geometry") or "").strip(),
+        "swap_notification_enabled": bool(base.get("swap_notification_enabled", True)),
+        "swap_notification_anchor": normalize_overlay_anchor(
+            str(base.get("swap_notification_anchor") or "top_center")
+        ),
+        "swap_notification_duration_ms": clamp_notification_duration(
+            base.get("swap_notification_duration_ms", 1400)
+        ),
+        "swap_notification_opacity": clamp_overlay_opacity(
+            base.get("swap_notification_opacity", 88)
+        ),
+        "swap_notification_layout": normalize_overlay_layout(
+            base.get("swap_notification_layout")
+        ),
+        "rotation_overlay_enabled": bool(base.get("rotation_overlay_enabled", True)),
+        "rotation_overlay_x": safe_int("rotation_overlay_x", 24),
+        "rotation_overlay_y": safe_int("rotation_overlay_y", 160),
+        "rotation_overlay_opacity": clamp_overlay_opacity(
+            base.get("rotation_overlay_opacity", 88)
+        ),
+        "rotation_overlay_locked": bool(base.get("rotation_overlay_locked", False)),
+        "rotation_overlay_layout": normalize_overlay_layout(
+            base.get("rotation_overlay_layout")
+        ),
+        "rotation_overlay_width": max(
+            80,
+            min(1800, safe_int("rotation_overlay_width", 300)),
+        ),
+        "rotation_overlay_auto_width": bool(
+            base.get("rotation_overlay_auto_width", True)
+        ),
+        "rotation_overlay_height": (
+            0 if requested_height <= 0 else max(80, min(1600, requested_height))
+        ),
+        "rotation_overlay_orientation": normalize_overlay_orientation(
+            base.get("rotation_overlay_orientation")
+        ),
+        "attention_blink_enabled": bool(base.get("attention_blink_enabled", True)),
+        "show_popup_portraits": bool(base.get("show_popup_portraits", True)),
+        "show_popup_badges": bool(base.get("show_popup_badges", True)),
+        "show_overlay_portraits": bool(base.get("show_overlay_portraits", True)),
+        "show_overlay_badges": bool(base.get("show_overlay_badges", True)),
+        "show_character_portraits": bool(base.get("show_character_portraits", True)),
+        "show_character_badges": bool(base.get("show_character_badges", True)),
+    }
 
 
 @dataclass
@@ -31,7 +127,9 @@ class Settings:
     # UI
     theme: str = ""
     theme_by_game_mode: dict[str, str] | None = None
+    display_by_game_mode: dict[str, dict[str, object]] | None = None
     language: str = "fr"
+    security_notice_accepted: bool = False
     window_column_order: list[str] | None = None
     minimize_to_tray: bool = True
     start_with_windows: bool = False
@@ -42,9 +140,9 @@ class Settings:
     swap_notification_enabled: bool = True
     swap_notification_anchor: str = "top_center"
     swap_notification_duration_ms: int = 1400
-    swap_notification_opacity: int = 96
+    swap_notification_opacity: int = 88
     swap_notification_layout: dict[str, str] | None = None
-    rotation_overlay_enabled: bool = False
+    rotation_overlay_enabled: bool = True
     rotation_overlay_x: int = 24
     rotation_overlay_y: int = 160
     rotation_overlay_opacity: int = 88
@@ -53,6 +151,7 @@ class Settings:
     rotation_overlay_width: int = 300
     rotation_overlay_auto_width: bool = True
     rotation_overlay_height: int = 0
+    rotation_overlay_orientation: str = "vertical"
     attention_blink_enabled: bool = True
     show_popup_portraits: bool = True
     show_popup_badges: bool = True
@@ -89,39 +188,69 @@ class Settings:
     retro_process_keyword: str = ""
 
     def reset_display_preferences(self, game_mode: str | None = None) -> None:
-        """Restore UI/overlay defaults without deleting profiles or character visuals."""
+        """Restore display defaults for one game mode without touching user profiles."""
         mode = (game_mode or self.game_mode or "unity").strip().lower()
         if mode not in {"unity", "retro"}:
             mode = "unity"
         self.game_mode = mode
-        self.theme_by_game_mode = {
-            "unity": default_theme_for_mode("unity"),
-            "retro": default_theme_for_mode("retro"),
-        }
+        self.theme_by_game_mode = dict(self.theme_by_game_mode or {})
+        self.theme_by_game_mode[mode] = default_theme_for_mode(mode)
         self.theme = self.theme_by_game_mode[mode]
         self.window_column_order = list(DEFAULT_WINDOW_COLUMN_ORDER)
-        self.compact_window_geometry = ""
-        self.swap_notification_enabled = True
-        self.swap_notification_anchor = "top_center"
-        self.swap_notification_duration_ms = 1400
-        self.swap_notification_opacity = 96
-        self.swap_notification_layout = dict(DEFAULT_ROTATION_OVERLAY_LAYOUT)
-        self.rotation_overlay_enabled = False
-        self.rotation_overlay_x = 24
-        self.rotation_overlay_y = 160
-        self.rotation_overlay_opacity = 88
-        self.rotation_overlay_locked = False
-        self.rotation_overlay_layout = dict(DEFAULT_ROTATION_OVERLAY_LAYOUT)
-        self.rotation_overlay_width = 300
-        self.rotation_overlay_auto_width = True
-        self.rotation_overlay_height = 0
-        self.attention_blink_enabled = True
-        self.show_popup_portraits = True
-        self.show_popup_badges = True
-        self.show_overlay_portraits = True
-        self.show_overlay_badges = True
-        self.show_character_portraits = True
-        self.show_character_badges = True
+        display_modes = dict(self.display_by_game_mode or {})
+        display_modes[mode] = _default_display_preferences()
+        self.display_by_game_mode = display_modes
+        self.activate_display_preferences(mode)
+
+    def _display_preferences_snapshot(self) -> dict[str, object]:
+        return _normalized_display_preferences(
+            {
+                "compact_window_geometry": self.compact_window_geometry,
+                "swap_notification_enabled": self.swap_notification_enabled,
+                "swap_notification_anchor": self.swap_notification_anchor,
+                "swap_notification_duration_ms": self.swap_notification_duration_ms,
+                "swap_notification_opacity": self.swap_notification_opacity,
+                "swap_notification_layout": self.swap_notification_layout,
+                "rotation_overlay_enabled": self.rotation_overlay_enabled,
+                "rotation_overlay_x": self.rotation_overlay_x,
+                "rotation_overlay_y": self.rotation_overlay_y,
+                "rotation_overlay_opacity": self.rotation_overlay_opacity,
+                "rotation_overlay_locked": self.rotation_overlay_locked,
+                "rotation_overlay_layout": self.rotation_overlay_layout,
+                "rotation_overlay_width": self.rotation_overlay_width,
+                "rotation_overlay_auto_width": self.rotation_overlay_auto_width,
+                "rotation_overlay_height": self.rotation_overlay_height,
+                "rotation_overlay_orientation": self.rotation_overlay_orientation,
+                "attention_blink_enabled": self.attention_blink_enabled,
+                "show_popup_portraits": self.show_popup_portraits,
+                "show_popup_badges": self.show_popup_badges,
+                "show_overlay_portraits": self.show_overlay_portraits,
+                "show_overlay_badges": self.show_overlay_badges,
+                "show_character_portraits": self.show_character_portraits,
+                "show_character_badges": self.show_character_badges,
+            }
+        )
+
+    def remember_display_preferences(self, game_mode: str | None = None) -> None:
+        mode = (game_mode or self.game_mode or "unity").strip().lower()
+        if mode not in {"unity", "retro"}:
+            mode = "unity"
+        remembered = dict(self.display_by_game_mode or {})
+        remembered[mode] = self._display_preferences_snapshot()
+        self.display_by_game_mode = remembered
+
+    def activate_display_preferences(self, game_mode: str | None = None) -> None:
+        mode = (game_mode or self.game_mode or "unity").strip().lower()
+        if mode not in {"unity", "retro"}:
+            mode = "unity"
+        preferences = _normalized_display_preferences(
+            (self.display_by_game_mode or {}).get(mode)
+        )
+        for key, value in preferences.items():
+            setattr(self, key, value)
+        remembered = dict(self.display_by_game_mode or {})
+        remembered[mode] = preferences
+        self.display_by_game_mode = remembered
 
     def __post_init__(self):
         requested_columns = self.window_column_order or []
@@ -144,6 +273,8 @@ class Settings:
         for k, v in defaults.items():
             if not (self.hotkeys or {}).get(k):
                 self.hotkeys[k] = v
+        for position in range(1, 9):
+            self.hotkeys.setdefault(f"window_{position}", "")
 
         gm = (self.game_mode or "unity").strip().lower()
         if gm not in ("unity", "retro"):
@@ -176,8 +307,11 @@ class Settings:
         self.swap_notification_layout = normalize_overlay_layout(self.swap_notification_layout)
         self.rotation_overlay_opacity = clamp_overlay_opacity(self.rotation_overlay_opacity)
         self.rotation_overlay_layout = normalize_overlay_layout(self.rotation_overlay_layout)
+        self.rotation_overlay_orientation = normalize_overlay_orientation(
+            self.rotation_overlay_orientation
+        )
         try:
-            self.rotation_overlay_width = max(80, min(900, int(self.rotation_overlay_width)))
+            self.rotation_overlay_width = max(80, min(1800, int(self.rotation_overlay_width)))
             requested_height = int(self.rotation_overlay_height)
             self.rotation_overlay_height = 0 if requested_height <= 0 else max(80, min(1600, requested_height))
         except (TypeError, ValueError):
@@ -191,12 +325,36 @@ class Settings:
             self.rotation_overlay_x = 24
             self.rotation_overlay_y = 160
 
+        legacy_display = self._display_preferences_snapshot()
+        raw_display_modes = (
+            self.display_by_game_mode
+            if isinstance(self.display_by_game_mode, Mapping)
+            else {}
+        )
+        self.display_by_game_mode = {
+            mode: _normalized_display_preferences(
+                raw_display_modes.get(mode),
+                fallback=(legacy_display if mode == gm else None),
+            )
+            for mode in ("unity", "retro")
+        }
+        self.activate_display_preferences(gm)
+
     def to_dict(self) -> dict:
+        display_modes = {
+            mode: _normalized_display_preferences(
+                (self.display_by_game_mode or {}).get(mode)
+            )
+            for mode in ("unity", "retro")
+        }
+        display_modes[self.game_mode] = self._display_preferences_snapshot()
         return {
             "schema_version": SETTINGS_SCHEMA_VERSION,
             "theme": self.theme,
             "theme_by_game_mode": dict(self.theme_by_game_mode or {}),
+            "display_by_game_mode": display_modes,
             "language": self.language,
+            "security_notice_accepted": bool(self.security_notice_accepted),
             "window_column_order": list(self.window_column_order or DEFAULT_WINDOW_COLUMN_ORDER),
             "minimize_to_tray": bool(self.minimize_to_tray),
             "start_with_windows": bool(self.start_with_windows),
@@ -222,6 +380,7 @@ class Settings:
             "rotation_overlay_width": int(self.rotation_overlay_width),
             "rotation_overlay_auto_width": bool(self.rotation_overlay_auto_width),
             "rotation_overlay_height": int(self.rotation_overlay_height),
+            "rotation_overlay_orientation": self.rotation_overlay_orientation,
             "attention_blink_enabled": bool(self.attention_blink_enabled),
             "show_popup_portraits": bool(self.show_popup_portraits),
             "show_popup_badges": bool(self.show_popup_badges),
@@ -272,7 +431,9 @@ class Settings:
         return Settings(
             theme=theme,
             theme_by_game_mode=d.get("theme_by_game_mode") or None,
+            display_by_game_mode=d.get("display_by_game_mode") or None,
             language=str(d.get("language") or "fr"),
+            security_notice_accepted=bool(d.get("security_notice_accepted", False)),
             window_column_order=d.get("window_column_order") or None,
             minimize_to_tray=bool(d.get("minimize_to_tray", True)),
             start_with_windows=bool(d.get("start_with_windows", False)),
@@ -283,9 +444,13 @@ class Settings:
             swap_notification_enabled=bool(d.get("swap_notification_enabled", True)),
             swap_notification_anchor=str(d.get("swap_notification_anchor") or "top_center"),
             swap_notification_duration_ms=int(d.get("swap_notification_duration_ms", 1400)),
-            swap_notification_opacity=int(d.get("swap_notification_opacity", 96)),
+            swap_notification_opacity=int(
+                d.get("swap_notification_opacity", 88 if schema >= 17 else 96)
+            ),
             swap_notification_layout=d.get("swap_notification_layout") or None,
-            rotation_overlay_enabled=bool(d.get("rotation_overlay_enabled", False)),
+            rotation_overlay_enabled=bool(
+                d.get("rotation_overlay_enabled", schema >= 17)
+            ),
             rotation_overlay_x=int(d.get("rotation_overlay_x", 24)),
             rotation_overlay_y=int(d.get("rotation_overlay_y", 160)),
             rotation_overlay_opacity=int(d.get("rotation_overlay_opacity", 88)),
@@ -296,6 +461,9 @@ class Settings:
                 d.get("rotation_overlay_auto_width", auto_width_default)
             ),
             rotation_overlay_height=int(d.get("rotation_overlay_height", 0)),
+            rotation_overlay_orientation=str(
+                d.get("rotation_overlay_orientation") or "vertical"
+            ),
             attention_blink_enabled=bool(d.get("attention_blink_enabled", True)),
             show_popup_portraits=bool(d.get("show_popup_portraits", legacy_portraits)),
             show_popup_badges=bool(d.get("show_popup_badges", legacy_badges)),

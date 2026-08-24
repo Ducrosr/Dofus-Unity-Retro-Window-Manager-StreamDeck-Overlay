@@ -11,7 +11,7 @@ Ce guide installe le code source ou l’exécutable public 2.20.0 depuis le dép
 
 Cette méthode ne nécessite ni Python, ni Git, ni compilation.
 
-1. Ouvrez la [préversion officielle v2.20.0-beta.2](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.2) puis téléchargez `DofusWindowManager.exe`.
+1. Ouvrez la [préversion officielle v2.20.0-beta.3](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.3) puis téléchargez `DofusWindowManager.exe`.
 2. Vérifiez si possible son empreinte avec la commande PowerShell suivante :
 
 ~~~powershell
@@ -74,13 +74,19 @@ py -3.14 -m venv .venv
 
 ## Premier lancement
 
-1. Choisissez **Dofus Unity** ou **Dofus Retro**.
-2. Laissez l’option de mémorisation activée si ce choix doit être repris au prochain lancement.
-3. Ouvrez vos fenêtres Dofus.
-4. Cliquez sur **Rafraîchir**.
-5. Vérifiez que chaque personnage apparaît avec son nom et sa classe.
+1. Choisissez **Dofus Unity** ou **Dofus Retro** et laissez l’option de mémorisation activée si ce choix doit être repris au prochain lancement.
+2. Lisez l’avertissement de sécurité affiché avant l’interface principale.
+3. Vérifiez que votre copie provient bien des Releases du dépôt GitHub officiel, cochez la confirmation de lecture puis sélectionnez **Continuer**. Sans cette confirmation, l’application se ferme et aucun raccourci global n’est activé.
+4. Ouvrez vos fenêtres Dofus, cliquez sur **Rafraîchir** puis vérifiez que chaque personnage apparaît avec son nom et sa classe.
 
 Le mode peut ensuite être changé directement dans la section **Application**, sans redémarrer le gestionnaire.
+
+### Si le fichier est non officiel ou suspect
+
+- ne l’exécutez pas ; s’il est déjà ouvert, fermez-le et déconnectez le PC du réseau si nécessaire ;
+- depuis un autre appareil de confiance, changez immédiatement les mots de passe du compte Ankama et de l’adresse e-mail associée, puis activez la double authentification ;
+- lancez une analyse complète, idéalement hors ligne, avec Sécurité Windows ou un antivirus à jour, puis supprimez ou placez le fichier en quarantaine ;
+- contrôlez les connexions et activités inhabituelles des comptes concernés et contactez leur support en cas de doute.
 
 ## Installer le plugin Stream Deck
 

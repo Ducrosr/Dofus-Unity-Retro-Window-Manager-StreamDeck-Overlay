@@ -1,5 +1,18 @@
 # Historique
 
+## 2.20.0-beta.3 — préversion Windows
+
+- correction du contraste du bouton **Prochaine alerte** dans tous les thèmes, y compris lorsqu’aucune alerte n’est en attente ;
+- remplacement des symboles de langue par les drapeaux graphiques français, britannique et espagnol fournis pour le projet ;
+- réorganisation des paramètres en trois onglets défilants **Général**, **Apparence** et **Raccourcis** ;
+- ajout au premier lancement d’un avertissement de sécurité bloquant, avec confirmation de lecture et rappel de l’unique dépôt GitHub officiel, des risques de phishing et des mesures à prendre face à une copie suspecte ;
+- ajout d’une orientation horizontale pour l’overlay, avec la première fenêtre à gauche et la réorganisation par glisser-déposer de gauche à droite ;
+- ajout de huit raccourcis globaux facultatifs et personnalisables pour activer directement les fenêtres 1 à 8 de l’ordre courant ;
+- activation de l’overlay sur une nouvelle installation, opacité initiale de la notification fixée à 88 % et thème Standard utilisé par défaut en Unity comme en Retro ;
+- mémorisation indépendante de tous les paramètres d’affichage pour Unity et Retro ;
+- déplacement des alias, portraits et icônes dans chaque profil afin qu’un même nom de personnage puisse recevoir une personnalisation différente selon le serveur ;
+- migration transparente des anciens profils et conservation de leurs apparences existantes au premier chargement.
+
 ## 2.20.0-beta.2 — préversion Windows
 
 - écritures atomiques des réglages, des profils et des exports JSON afin qu’une interruption ne laisse jamais un fichier partiellement remplacé ;

@@ -22,6 +22,7 @@ class SettingsTests(unittest.TestCase):
     def test_defaults_are_complete(self) -> None:
         settings = Settings()
         self.assertEqual(settings.game_mode, "unity")
+        self.assertFalse(settings.security_notice_accepted)
         self.assertEqual(settings.hotkeys["forward"], "F5")
         self.assertEqual(settings.hotkeys["next_attention"], "F8")
         self.assertEqual(settings.hotkeys["refresh"], "Ctrl+Alt+R")
@@ -35,14 +36,15 @@ class SettingsTests(unittest.TestCase):
         self.assertTrue(settings.swap_notification_enabled)
         self.assertEqual(settings.swap_notification_anchor, "top_center")
         self.assertEqual(settings.swap_notification_duration_ms, 1400)
-        self.assertEqual(settings.swap_notification_opacity, 96)
-        self.assertFalse(settings.rotation_overlay_enabled)
+        self.assertEqual(settings.swap_notification_opacity, 88)
+        self.assertTrue(settings.rotation_overlay_enabled)
         self.assertEqual(settings.rotation_overlay_opacity, 88)
         self.assertFalse(settings.rotation_overlay_locked)
         self.assertEqual(settings.rotation_overlay_layout, DEFAULT_ROTATION_OVERLAY_LAYOUT)
         self.assertEqual(settings.swap_notification_layout, DEFAULT_ROTATION_OVERLAY_LAYOUT)
         self.assertEqual((settings.rotation_overlay_width, settings.rotation_overlay_height), (300, 0))
         self.assertTrue(settings.rotation_overlay_auto_width)
+        self.assertEqual(settings.rotation_overlay_orientation, "vertical")
         self.assertTrue(settings.attention_blink_enabled)
         self.assertTrue(settings.show_popup_portraits)
         self.assertTrue(settings.show_popup_badges)
@@ -51,6 +53,7 @@ class SettingsTests(unittest.TestCase):
         self.assertTrue(settings.show_character_portraits)
         self.assertTrue(settings.show_character_badges)
         self.assertEqual(settings.character_visuals, {})
+        self.assertTrue(all(settings.hotkeys[f"window_{position}"] == "" for position in range(1, 9)))
 
     def test_column_order_is_sanitized_and_completed(self) -> None:
         settings = Settings(window_column_order=["alias", "invalid", "class", "alias"])
@@ -84,6 +87,7 @@ class SettingsTests(unittest.TestCase):
             expected = Settings(
                 game_mode="retro",
                 language="es",
+                security_notice_accepted=True,
                 refresh_seconds=7,
                 last_profile="Équipe",
                 window_column_order=["name", "alias", "class", "hwnd"],
@@ -129,6 +133,7 @@ class SettingsTests(unittest.TestCase):
 
         self.assertEqual(actual.game_mode, "retro")
         self.assertEqual(actual.language, "es")
+        self.assertTrue(actual.security_notice_accepted)
         self.assertEqual(actual.refresh_seconds, 7)
         self.assertEqual(actual.last_profile, "Équipe")
         self.assertEqual(actual.window_column_order, ["name", "alias", "class", "hwnd"])
@@ -226,10 +231,10 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.theme_by_game_mode["unity"], "unity-bonta")
         self.assertEqual(settings.theme_by_game_mode["retro"], RETRO_THEME)
 
-    def test_retro_uses_retro_theme_by_default(self) -> None:
+    def test_retro_uses_standard_theme_by_default(self) -> None:
         settings = Settings(game_mode="retro")
 
-        self.assertEqual(settings.theme, RETRO_THEME)
+        self.assertEqual(settings.theme, UNITY_STANDARD_THEME)
 
     def test_invalid_theme_and_language_use_safe_defaults(self) -> None:
         settings = Settings(game_mode="unity", theme="arc", language="de")
@@ -240,8 +245,10 @@ class SettingsTests(unittest.TestCase):
     def test_previous_schema_receives_safe_display_defaults(self) -> None:
         settings = Settings.from_dict({"schema_version": 10, "theme": MODERN_DARK_THEME})
 
+        self.assertFalse(settings.security_notice_accepted)
         self.assertTrue(settings.swap_notification_enabled)
         self.assertFalse(settings.rotation_overlay_enabled)
+        self.assertEqual(settings.swap_notification_opacity, 96)
         self.assertFalse(settings.rotation_overlay_locked)
         self.assertEqual(settings.rotation_overlay_layout, DEFAULT_ROTATION_OVERLAY_LAYOUT)
 
@@ -291,7 +298,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.character_visuals, {"Nealla": {"portrait": "", "badge": "ankama_force"}})
         self.assertEqual(settings.theme, UNITY_STANDARD_THEME)
         self.assertEqual(settings.window_column_order, list(DEFAULT_WINDOW_COLUMN_ORDER))
-        self.assertFalse(settings.rotation_overlay_enabled)
+        self.assertTrue(settings.rotation_overlay_enabled)
         self.assertEqual((settings.rotation_overlay_x, settings.rotation_overlay_y), (24, 160))
         self.assertEqual((settings.rotation_overlay_width, settings.rotation_overlay_height), (300, 0))
         self.assertTrue(settings.rotation_overlay_auto_width)
@@ -300,6 +307,34 @@ class SettingsTests(unittest.TestCase):
         self.assertTrue(settings.show_popup_badges)
         self.assertTrue(settings.show_overlay_portraits)
         self.assertTrue(settings.show_overlay_badges)
+
+    def test_display_preferences_are_independent_per_game_mode(self) -> None:
+        settings = Settings(game_mode="unity")
+        settings.rotation_overlay_enabled = False
+        settings.swap_notification_opacity = 61
+        settings.rotation_overlay_orientation = "horizontal"
+        settings.remember_display_preferences("unity")
+
+        settings.game_mode = "retro"
+        settings.activate_display_preferences("retro")
+        self.assertTrue(settings.rotation_overlay_enabled)
+        self.assertEqual(settings.swap_notification_opacity, 88)
+        self.assertEqual(settings.rotation_overlay_orientation, "vertical")
+
+        settings.rotation_overlay_opacity = 54
+        settings.remember_display_preferences("retro")
+        settings.game_mode = "unity"
+        settings.activate_display_preferences("unity")
+
+        self.assertFalse(settings.rotation_overlay_enabled)
+        self.assertEqual(settings.swap_notification_opacity, 61)
+        self.assertEqual(settings.rotation_overlay_orientation, "horizontal")
+
+        restored = Settings.from_dict(settings.to_dict())
+        self.assertEqual(
+            restored.display_by_game_mode["retro"]["rotation_overlay_opacity"],
+            54,
+        )
 
 
 if __name__ == "__main__":

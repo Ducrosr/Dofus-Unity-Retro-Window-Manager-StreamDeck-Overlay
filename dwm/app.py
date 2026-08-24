@@ -17,13 +17,14 @@ from tkinter.ttk import (
     Frame as TtkFrame,
     Label as TtkLabel,
     LabelFrame as TtkLabelFrame,
+    Notebook,
     Scrollbar,
     Spinbox,
     Style,
     Treeview,
 )
 
-from PIL import ImageTk
+from PIL import Image, ImageTk
 
 from . import __release_tag__, __version__
 from .models import GameWindow
@@ -83,6 +84,7 @@ from .services.display_overlay import (
     build_single_display,
     clamp_notification_duration,
     clamp_overlay_opacity,
+    normalize_overlay_orientation,
 )
 from .services.attention_state import WindowAttentionState
 from .services.character_visuals import (
@@ -170,6 +172,11 @@ ANKAMA_ANTI_PHISHING_URL = (
     "https://support.ankama.com/hc/fr/articles/201376953-"
     "Reconna%C3%AEtre-le-phishing-et-s-en-prot%C3%A9ger"
 )
+LANGUAGE_FLAG_ASSETS = {
+    "fr": ("assets", "flags", "fr.png"),
+    "en": ("assets", "flags", "en.png"),
+    "es": ("assets", "flags", "es.png"),
+}
 
 
 def app_theme_palette(theme_name: str) -> dict[str, str]:
@@ -284,6 +291,25 @@ def apply_dark_theme(root, theme_name: str = MODERN_DARK_THEME) -> None:
         background=[("active", C["accent_hover"]), ("pressed", C["accent_pressed"])],
     )
     style.configure(
+        "AttentionAction.TButton",
+        background=C["attention"],
+        foreground=C["on_attention"],
+        font=("Segoe UI", 10, "bold"),
+    )
+    style.map(
+        "AttentionAction.TButton",
+        background=[
+            ("disabled", C["bg3"]),
+            ("active", C["attention"]),
+            ("pressed", C["attention"]),
+        ],
+        foreground=[
+            ("disabled", C["on_dark"]),
+            ("active", C["on_attention"]),
+            ("pressed", C["on_attention"]),
+        ],
+    )
+    style.configure(
         "Language.TButton",
         background=C["bg2"],
         foreground=C["fg"],
@@ -378,6 +404,7 @@ class WindowManagerApp:
         gm = normalize_game_mode(game_mode, self.settings.game_mode)
         self.game_mode = gm
         self.settings.game_mode = gm
+        self.settings.activate_display_preferences(gm)
         self.settings.theme = (self.settings.theme_by_game_mode or {}).get(
             gm,
             default_theme_for_mode(gm),
@@ -425,6 +452,11 @@ class WindowManagerApp:
         self.attention_state = WindowAttentionState()
         self._attention_blink_phase = True
         self.aliases: dict[str, str] = {}
+        self._active_profile_name = ""
+        self._legacy_character_visuals = sanitize_character_visuals(
+            self.settings.character_visuals
+        )
+        self.character_visuals = dict(self._legacy_character_visuals)
         self.desired_order_pseudos: list[str] = []  # current profile order
 
         # Heuristics (fiabilité)
@@ -467,7 +499,6 @@ class WindowManagerApp:
 
         # ---- Hotkeys ----
         self.hotkeys = HotkeyManager()
-        self.hotkeys.start()
 
         # ---- UI ----
         self.root = Tk()
@@ -502,6 +533,14 @@ class WindowManagerApp:
         self.style = Style(self.root)
         self.style.theme_use(self.settings.theme)
 
+        if (
+            not self.settings.security_notice_accepted
+            and not self._show_first_run_security_notice()
+        ):
+            self.root.destroy()
+            raise SystemExit("Avertissement de sécurité non accepté")
+
+        self.hotkeys.start()
         self._build_ui()
         self._localize_ui()
         self.root.after(400, self._localization_tick)
@@ -593,6 +632,120 @@ class WindowManagerApp:
                 self._log("Zone de notification indisponible : l’application reste affichée.")
 
     # ---------------------------- UI ----------------------------
+
+    def _show_first_run_security_notice(self) -> bool:
+        accepted = False
+        confirmed = BooleanVar(value=False)
+        self.root.withdraw()
+
+        dialog = Toplevel(self.root)
+        dialog.title(tr("Avertissement de sécurité"))
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+        try:
+            dialog.iconbitmap(resource_path("icons", "dofus.ico"))
+        except Exception:
+            pass
+
+        content = TtkFrame(dialog, padding=18)
+        content.pack(fill="both", expand=True)
+        TtkLabel(
+            content,
+            text=tr("Avant d’utiliser Dofus Window Manager"),
+            style="Header.TLabel",
+        ).pack(anchor="w", pady=(0, 10))
+        TtkLabel(
+            content,
+            text=tr(
+                "Téléchargez l’exécutable uniquement depuis les Releases du dépôt GitHub officiel. "
+                "Une copie reçue ailleurs peut avoir été modifiée pour contenir un virus, voler vos "
+                "identifiants Ankama ou compromettre votre ordinateur."
+            ),
+            justify="left",
+            wraplength=620,
+        ).pack(anchor="w")
+        TtkButton(
+            content,
+            text=tr("Ouvrir le dépôt GitHub officiel"),
+            command=lambda: webbrowser.open(OFFICIAL_REPOSITORY_URL),
+        ).pack(anchor="w", pady=(10, 14))
+
+        TtkLabel(
+            content,
+            text=tr("Si le fichier provient d’une source non officielle ou vous paraît suspect :"),
+            style="Header.TLabel",
+        ).pack(anchor="w", pady=(0, 6))
+        TtkLabel(
+            content,
+            text=tr(
+                "• Ne l’exécutez pas, ou fermez-le immédiatement et déconnectez le PC du réseau.\n"
+                "• Depuis un autre appareil de confiance, changez immédiatement les mots de passe "
+                "Ankama et de l’adresse e-mail associée, puis activez la double authentification.\n"
+                "• Lancez une analyse complète, idéalement hors ligne, avec Sécurité Windows ou un "
+                "antivirus à jour, puis supprimez ou mettez le fichier en quarantaine.\n"
+                "• Vérifiez les connexions et activités inhabituelles de vos comptes et contactez le "
+                "support concerné en cas de doute."
+            ),
+            justify="left",
+            wraplength=620,
+        ).pack(anchor="w", pady=(0, 14))
+
+        confirmation = TtkCheckbutton(
+            content,
+            text=tr(
+                "J’ai lu cet avertissement et je confirme utiliser une copie provenant du dépôt officiel."
+            ),
+            variable=confirmed,
+        )
+        confirmation.pack(anchor="w", pady=(0, 14))
+
+        buttons = TtkFrame(content)
+        buttons.pack(fill="x")
+        continue_button = TtkButton(
+            buttons,
+            text=tr("Continuer"),
+            style="Accent.TButton",
+            state="disabled",
+        )
+        continue_button.pack(side="right")
+
+        def update_continue_state(*_args) -> None:
+            continue_button.configure(state="normal" if confirmed.get() else "disabled")
+
+        def accept_notice() -> None:
+            nonlocal accepted
+            if not confirmed.get():
+                return
+            self.settings.security_notice_accepted = True
+            try:
+                save_settings(self.settings_path, self.settings)
+            except OSError as exc:
+                self.settings.security_notice_accepted = False
+                messagebox.showerror(
+                    tr("Enregistrement impossible"),
+                    str(exc),
+                    parent=dialog,
+                )
+                return
+            accepted = True
+            dialog.destroy()
+
+        def decline_notice() -> None:
+            dialog.destroy()
+
+        continue_button.configure(command=accept_notice)
+        confirmed.trace_add("write", update_continue_state)
+        TtkButton(buttons, text=tr("Quitter"), command=decline_notice).pack(side="right", padx=(0, 8))
+        dialog.protocol("WM_DELETE_WINDOW", decline_notice)
+        dialog.update_idletasks()
+        x = max(0, (dialog.winfo_screenwidth() - dialog.winfo_reqwidth()) // 2)
+        y = max(0, (dialog.winfo_screenheight() - dialog.winfo_reqheight()) // 2)
+        dialog.geometry(f"+{x}+{y}")
+        dialog.wait_window()
+        if accepted:
+            self.root.deiconify()
+        return accepted
 
     def _localize_widget_tree(self, widget) -> None:
         try:
@@ -711,6 +864,18 @@ class WindowManagerApp:
             title, notice = translation_notice(language)
             messagebox.showwarning(title, notice, parent=self.root)
 
+    def _load_language_flag_images(self) -> dict[str, ImageTk.PhotoImage]:
+        images: dict[str, ImageTk.PhotoImage] = {}
+        for language, path_parts in LANGUAGE_FLAG_ASSETS.items():
+            try:
+                with Image.open(resource_path(*path_parts)) as source:
+                    flag = source.convert("RGB")
+                    flag.thumbnail((34, 20), Image.Resampling.LANCZOS)
+                    images[language] = ImageTk.PhotoImage(flag, master=self.root)
+            except Exception:
+                continue
+        return images
+
     def _build_ui(self):
         viewport = TtkFrame(self.root)
         viewport.pack(fill="both", expand=True)
@@ -747,14 +912,18 @@ class WindowManagerApp:
         language_box = TtkFrame(header)
         language_box.pack(side="right", padx=(10, 0))
         self.language_buttons: dict[str, TtkButton] = {}
+        self._language_flag_images = self._load_language_flag_images()
         for language in LANGUAGES:
+            flag_image = self._language_flag_images.get(language)
             button = TtkButton(
                 language_box,
-                text=LANGUAGE_FLAGS[language],
-                width=3,
+                text="" if flag_image is not None else LANGUAGE_FLAGS[language],
+                image=flag_image or "",
                 style="LanguageActive.TButton" if language == self.settings.language else "Language.TButton",
                 command=lambda selected=language: self._select_language(selected),
             )
+            if flag_image is None:
+                button.configure(width=3)
             button.pack(side="left", padx=1)
             self.language_buttons[language] = button
 
@@ -836,7 +1005,7 @@ class WindowManagerApp:
             navigation,
             textvariable=self.next_attention_button_text,
             command=lambda: self.focus_next_attention(source="Application"),
-            style="Accent.TButton",
+            style="AttentionAction.TButton",
         )
         self.next_attention_button.grid(
             row=2, column=0, columnspan=2, sticky="ew", pady=(5, 2)
@@ -1261,6 +1430,14 @@ class WindowManagerApp:
 
     # ---------------------------- Compact mode and overlays ----------------------------
 
+    def _active_character_visuals(self) -> dict[str, dict[str, str]]:
+        visuals = getattr(self, "character_visuals", None)
+        if visuals is not None:
+            return visuals
+        return sanitize_character_visuals(
+            getattr(getattr(self, "settings", None), "character_visuals", None)
+        )
+
     def _rotation_display_entries(self):
         active_hwnd = self._active_game_hwnd
         if active_hwnd not in self._all_windows and self._managed_order:
@@ -1272,7 +1449,7 @@ class WindowManagerApp:
             self.aliases,
             active_hwnd,
             self.attention_state.queue(),
-            self.settings.character_visuals,
+            self._active_character_visuals(),
         )
 
     def _refresh_auxiliary_displays(self) -> None:
@@ -1299,6 +1476,7 @@ class WindowManagerApp:
             opacity=self.settings.rotation_overlay_opacity,
             locked=self.settings.rotation_overlay_locked,
             layout=self.settings.rotation_overlay_layout,
+            orientation=self.settings.rotation_overlay_orientation,
             width=self.settings.rotation_overlay_width,
             auto_width=self.settings.rotation_overlay_auto_width,
             height=self.settings.rotation_overlay_height,
@@ -1350,7 +1528,7 @@ class WindowManagerApp:
         save_settings(self.settings_path, self.settings)
 
     def _save_overlay_size(self, width: int, height: int, *, auto_width: bool = False) -> None:
-        normalized = (max(80, min(900, int(width))), max(80, min(1600, int(height))))
+        normalized = (max(80, min(1800, int(width))), max(80, min(1600, int(height))))
         if (*normalized, bool(auto_width)) == (
             self.settings.rotation_overlay_width,
             self.settings.rotation_overlay_height,
@@ -1414,7 +1592,7 @@ class WindowManagerApp:
             managed_order=self._managed_order,
             active=True,
             attention=False,
-            appearance=(self.settings.character_visuals or {}).get(window.pseudo),
+            appearance=self._active_character_visuals().get(window.pseudo),
         )
         self.overlay_ui.show_swap_notification(
             entry,
@@ -1439,6 +1617,19 @@ class WindowManagerApp:
             return
         self._record_character_focus(hwnd, notify=True)
         self._log(f"Mode compact / overlay → {window.title}")
+
+    def focus_managed_position(self, position: int) -> bool:
+        try:
+            index = int(position) - 1
+        except (TypeError, ValueError):
+            return False
+        if index < 0 or index >= len(self._managed_order):
+            self._log(f"Raccourci fenêtre {index + 1} : aucune fenêtre à cette position")
+            return False
+        hwnd = self._managed_order[index]
+        self.rotation_index = index
+        self._focus_from_auxiliary_display(hwnd)
+        return True
 
     def _activate_next_attention(self, *, source: str) -> dict[str, object]:
         """Focus the oldest valid request and clear it only after focus succeeds."""
@@ -1666,6 +1857,45 @@ class WindowManagerApp:
     def _refresh_profile_combo(self):
         self.profile_combo["values"] = self._get_profiles()
 
+    def _apply_loaded_profile(self, profile: Profile, *, migrate_legacy: bool = True) -> None:
+        self._active_profile_name = profile.name
+        self.aliases.clear()
+        self.aliases.update(
+            {pseudo: alias.strip() for pseudo, alias in profile.aliases.items() if alias.strip()}
+        )
+        if profile.visuals is None:
+            self.character_visuals = dict(self._legacy_character_visuals)
+            if migrate_legacy:
+                profile.visuals = dict(self.character_visuals)
+                profile.game_mode = profile.game_mode or self.game_mode
+                try:
+                    save_profile(self.dirs["profiles"], profile)
+                except OSError:
+                    pass
+        else:
+            self.character_visuals = sanitize_character_visuals(profile.visuals)
+        self.desired_order_pseudos = list(profile.order)
+
+    def _save_active_profile_customizations(self) -> bool:
+        """Persist aliases and appearances without changing the saved window order."""
+        name = self._active_profile_name.strip()
+        if not name:
+            return False
+        try:
+            profile = load_profile(self.dirs["profiles"], name)
+        except Exception:
+            return False
+        profile.aliases = {
+            pseudo: alias.strip() for pseudo, alias in self.aliases.items() if alias.strip()
+        }
+        profile.visuals = sanitize_character_visuals(self.character_visuals)
+        profile.game_mode = self.game_mode
+        try:
+            save_profile(self.dirs["profiles"], profile)
+        except OSError:
+            return False
+        return True
+
     def save_profile_dialog(self):
         current_name = self.selected_profile.get().strip()
         name = simpledialog.askstring(
@@ -1679,18 +1909,27 @@ class WindowManagerApp:
         name = name.strip()
         if name in self._get_profiles() and not messagebox.askyesno(
             "Mettre à jour le profil",
-            f"Le profil « {name} » existe déjà. Remplacer son ordre et ses alias ?",
+            f"Le profil « {name} » existe déjà. Remplacer son ordre, ses alias et ses apparences ?",
             parent=self.root,
         ):
             return
         order_pseudos = [self._all_windows[hwnd].pseudo for hwnd in self._managed_order if hwnd in self._all_windows]
         saved_aliases = {pseudo: alias.strip() for pseudo, alias in self.aliases.items() if alias.strip()}
-        pr = Profile(name=name, order=order_pseudos, aliases=saved_aliases, created_at="", updated_at="")
+        pr = Profile(
+            name=name,
+            order=order_pseudos,
+            aliases=saved_aliases,
+            created_at="",
+            updated_at="",
+            visuals=sanitize_character_visuals(self.character_visuals),
+            game_mode=self.game_mode,
+        )
         self.desired_order_pseudos = list(order_pseudos)
         save_profile(self.dirs["profiles"], pr)
         self._log(f"Profil '{name}' enregistré")
         self._refresh_profile_combo()
         self.selected_profile.set(name)
+        self._active_profile_name = name
         self.settings.last_profile = name
         save_settings(self.settings_path, self.settings)
 
@@ -1705,9 +1944,7 @@ class WindowManagerApp:
             messagebox.showerror("Erreur", f"Impossible de charger: {e}")
             return
 
-        self.aliases.clear()
-        self.aliases.update({pseudo: alias.strip() for pseudo, alias in pr.aliases.items() if alias.strip()})
-        self.desired_order_pseudos = list(pr.order)
+        self._apply_loaded_profile(pr)
         self.apply_order_by_pseudo(pr.order)
         self._log(f"Profil '{name}' chargé")
         self.settings.last_profile = name
@@ -1723,6 +1960,8 @@ class WindowManagerApp:
         try:
             delete_profile(self.dirs["profiles"], name)
             self._log(f"Profil '{name}' supprimé")
+            if name == self._active_profile_name:
+                self._active_profile_name = ""
             self.selected_profile.set("")
             self._refresh_profile_combo()
         except Exception as e:
@@ -2227,6 +2466,10 @@ class WindowManagerApp:
 
         restored_settings.game_mode = restored_settings.game_mode or self.game_mode
         self.settings = restored_settings
+        self._legacy_character_visuals = sanitize_character_visuals(
+            self.settings.character_visuals
+        )
+        self.character_visuals = dict(self._legacy_character_visuals)
         set_language(self.settings.language)
         save_settings(self.settings_path, self.settings)
         self.auto_refresh_enabled.set(self.settings.auto_refresh)
@@ -2245,6 +2488,16 @@ class WindowManagerApp:
         order = list(session.get("order") or [])
         aliases = dict(session.get("aliases") or {})
         self.selected_profile.set(active_profile)
+        self._active_profile_name = active_profile
+        if active_profile:
+            try:
+                active_profile_data = load_profile(self.dirs["profiles"], active_profile)
+                if active_profile_data.visuals is not None:
+                    self.character_visuals = sanitize_character_visuals(
+                        active_profile_data.visuals
+                    )
+            except Exception:
+                pass
         self.aliases.clear()
         self.aliases.update(aliases)
         self.desired_order_pseudos = order
@@ -2288,7 +2541,7 @@ class WindowManagerApp:
         self._log("Affichage réinitialisé")
         messagebox.showinfo(
             "Affichage réinitialisé",
-            "L’affichage par défaut est restauré et l’overlay hors écran a été désactivé.",
+            "L’affichage par défaut est restauré et l’overlay est activé à sa position initiale.",
             parent=dialog_parent,
         )
         return True
@@ -2342,6 +2595,7 @@ class WindowManagerApp:
             return False
 
         previous_label = self.game_label
+        self.settings.remember_display_preferences(self.game_mode)
         self._stop_win_event_hook()
         if self.popup_watcher is not None:
             self._shutdown_popup_watcher()
@@ -2349,11 +2603,13 @@ class WindowManagerApp:
         self.game_mode = new_mode
         self.game_label = game_mode_label(new_mode)
         self.settings.game_mode = new_mode
+        self.settings.activate_display_preferences(new_mode)
         selected_theme = (self.settings.theme_by_game_mode or {}).get(
             new_mode,
             default_theme_for_mode(new_mode),
         )
         self._apply_runtime_theme(selected_theme)
+        self._apply_display_preferences()
         self._game_mode_revision += 1
         self.game_mode_var.set(self.game_label)
         self.game_subtitle_var.set(
@@ -2819,7 +3075,7 @@ class WindowManagerApp:
             self.aliases,
             active_hwnd,
             self.attention_state.queue(),
-            self.settings.character_visuals,
+            self._active_character_visuals(),
         )
         self._streamdeck_preview_entries = windows
 
@@ -3371,7 +3627,7 @@ class WindowManagerApp:
             self.character_preview_var.set("Sélectionnez un personnage")
             return
 
-        appearance = (self.settings.character_visuals or {}).get(window.pseudo, {})
+        appearance = self._active_character_visuals().get(window.pseudo, {})
         palette = resolved_theme_palette(self.root, self.settings.theme)
         avatar = build_avatar_image(
             window.pseudo,
@@ -3409,7 +3665,7 @@ class WindowManagerApp:
             )
             return
 
-        appearance = dict((self.settings.character_visuals or {}).get(window.pseudo, {}))
+        appearance = dict(self._active_character_visuals().get(window.pseudo, {}))
         portrait_data = str(appearance.get("portrait") or "")
         alias_var = StringVar(value=self.aliases.get(window.pseudo, ""))
         badge_var = StringVar(value=badge_label(appearance.get("badge")))
@@ -3535,16 +3791,25 @@ class WindowManagerApp:
             else:
                 self.aliases.pop(window.pseudo, None)
 
-            visuals = dict(self.settings.character_visuals or {})
+            visuals = dict(self.character_visuals)
             badge = badge_from_label(badge_var.get())
             if portrait_data or badge != "none":
                 visuals[window.pseudo] = {"portrait": portrait_data, "badge": badge}
             else:
                 visuals.pop(window.pseudo, None)
-            self.settings.character_visuals = sanitize_character_visuals(visuals)
-            save_settings(self.settings_path, self.settings)
+            self.character_visuals = sanitize_character_visuals(visuals)
+            profile_saved = self._save_active_profile_customizations()
             self.update_listboxes()
-            self._log(f"Apparence de {window.pseudo} mise à jour")
+            if profile_saved:
+                self._log(
+                    f"Apparence de {window.pseudo} mise à jour dans le profil "
+                    f"'{self._active_profile_name}'"
+                )
+            else:
+                self._log(
+                    f"Apparence de {window.pseudo} appliquée en mémoire — "
+                    "enregistrez un profil pour la conserver"
+                )
             win.destroy()
 
         badge_combo.bind("<<ComboboxSelected>>", refresh_preview)
@@ -3583,6 +3848,8 @@ class WindowManagerApp:
         else:
             self.aliases.pop(w.pseudo, None)
             self._log(f"Alias supprimé pour {w.pseudo}")
+        if not self._save_active_profile_customizations():
+            self._log("Enregistrez un profil pour conserver cet alias")
         self.update_listboxes()
 
     def apply_order_by_pseudo(self, pseudos: list[str]):
@@ -3635,6 +3902,10 @@ class WindowManagerApp:
         hk_ign = StringVar(value=self.settings.hotkeys.get("ignore", "F7"))
         hk_attention = StringVar(value=self.settings.hotkeys.get("next_attention", "F8"))
         hk_ref = StringVar(value=self.settings.hotkeys.get("refresh", "Ctrl+Alt+R"))
+        direct_hotkeys = [
+            StringVar(value=self.settings.hotkeys.get(f"window_{position}", ""))
+            for position in range(1, 9)
+        ]
         evt_hook = BooleanVar(value=bool(getattr(self.settings, "event_hook_enabled", True)))
         popup_watch = BooleanVar(value=bool(getattr(self.settings, "popup_watch_enabled", False)))
         minimize_to_tray = BooleanVar(value=bool(self.settings.minimize_to_tray))
@@ -3670,6 +3941,13 @@ class WindowManagerApp:
         overlay_width = StringVar(value=str(self.settings.rotation_overlay_width))
         overlay_auto_width = BooleanVar(value=bool(self.settings.rotation_overlay_auto_width))
         overlay_height = StringVar(value=str(self.settings.rotation_overlay_height))
+        overlay_orientation = StringVar(
+            value=(
+                "Horizontal"
+                if self.settings.rotation_overlay_orientation == "horizontal"
+                else "Vertical"
+            )
+        )
         show_portraits = BooleanVar(value=bool(self.settings.show_character_portraits))
         show_popup_portraits = BooleanVar(value=bool(self.settings.show_popup_portraits))
         show_popup_badges = BooleanVar(value=bool(self.settings.show_popup_badges))
@@ -3698,78 +3976,120 @@ class WindowManagerApp:
 
         settings_footer = TtkFrame(win, padding=(12, 8))
         settings_footer.pack(side="bottom", fill="x")
-        viewport = TtkFrame(win)
-        viewport.pack(fill="both", expand=True)
-        settings_canvas = Canvas(
-            viewport,
-            borderwidth=0,
-            highlightthickness=0,
-            background=resolved_theme_palette(self.root, self.settings.theme)["bg"],
-        )
-        settings_scrollbar = Scrollbar(viewport, orient="vertical", command=settings_canvas.yview)
-        settings_canvas.configure(yscrollcommand=settings_scrollbar.set)
-        settings_scrollbar.pack(side="right", fill="y")
-        settings_canvas.pack(side="left", fill="both", expand=True)
-        content = TtkFrame(settings_canvas, padding=12)
-        content_window = settings_canvas.create_window((0, 0), window=content, anchor="nw")
-        content.bind(
-            "<Configure>",
-            lambda _event: settings_canvas.configure(scrollregion=settings_canvas.bbox("all")),
-        )
-        settings_canvas.bind(
-            "<Configure>",
-            lambda event: settings_canvas.itemconfigure(content_window, width=event.width),
-        )
-        win.bind(
-            "<MouseWheel>",
-            lambda event: settings_canvas.yview_scroll(wheel_scroll_units(event.delta), "units"),
-        )
+        settings_notebook = Notebook(win)
+        settings_notebook.pack(fill="both", expand=True, padx=12, pady=(10, 0))
+        tab_canvases: dict[str, Canvas] = {}
+
+        def create_scrollable_tab(label: str) -> TtkFrame:
+            tab = TtkFrame(settings_notebook)
+            settings_notebook.add(tab, text=tr(label))
+            viewport = TtkFrame(tab)
+            viewport.pack(fill="both", expand=True)
+            canvas = Canvas(
+                viewport,
+                borderwidth=0,
+                highlightthickness=0,
+                background=resolved_theme_palette(self.root, self.settings.theme)["bg"],
+            )
+            scrollbar = Scrollbar(viewport, orient="vertical", command=canvas.yview)
+            canvas.configure(yscrollcommand=scrollbar.set)
+            scrollbar.pack(side="right", fill="y")
+            canvas.pack(side="left", fill="both", expand=True)
+            content = TtkFrame(canvas, padding=12)
+            content_window = canvas.create_window((0, 0), window=content, anchor="nw")
+            content.bind(
+                "<Configure>",
+                lambda _event, target=canvas: target.configure(
+                    scrollregion=target.bbox("all")
+                ),
+            )
+            canvas.bind(
+                "<Configure>",
+                lambda event, target=canvas, item=content_window: target.itemconfigure(
+                    item,
+                    width=event.width,
+                ),
+            )
+            tab_canvases[str(tab)] = canvas
+            return content
+
+        general_content = create_scrollable_tab("Général")
+        appearance_content = create_scrollable_tab("Apparence")
+        shortcuts_content = create_scrollable_tab("Raccourcis")
+
+        def scroll_active_tab(event) -> None:
+            canvas = tab_canvases.get(settings_notebook.select())
+            if canvas is not None:
+                canvas.yview_scroll(wheel_scroll_units(event.delta), "units")
+
+        win.bind("<MouseWheel>", scroll_active_tab)
 
         general = TtkLabelFrame(
-            content,
+            general_content,
             text=tr("Général · mode {game}", game=self.game_label),
             padding=10,
         )
         general.pack(fill="x", pady=(0, 8))
         general.columnconfigure(1, weight=1)
-        TtkLabel(general, text="Thème").grid(row=0, column=0, sticky="w", padx=(0, 12), pady=4)
-        Combobox(general, values=theme_labels, state="readonly", textvariable=theme_var).grid(
-            row=0, column=1, sticky="ew", pady=4
-        )
         TtkLabel(general, text="Intervalle d’actualisation").grid(
-            row=1, column=0, sticky="w", padx=(0, 12), pady=4
+            row=0, column=0, sticky="w", padx=(0, 12), pady=4
         )
         refresh_row = TtkFrame(general)
-        refresh_row.grid(row=1, column=1, sticky="w", pady=4)
+        refresh_row.grid(row=0, column=1, sticky="w", pady=4)
         Spinbox(refresh_row, from_=2, to=300, textvariable=refresh_var, width=6).pack(side="left")
         TtkLabel(refresh_row, text=" secondes", style="Muted.TLabel").pack(side="left")
         TtkCheckbutton(
             general,
             text="Réduire dans la zone de notification à la fermeture",
             variable=minimize_to_tray,
-        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 2))
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 2))
         TtkCheckbutton(
             general,
             text="Lancer avec Windows, directement dans la zone de notification",
             variable=start_with_windows,
-        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=2)
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=2)
         TtkCheckbutton(
             general,
             text="Rechercher automatiquement les mises à jour officielles",
             variable=check_updates,
-        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(8, 2))
+        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(8, 2))
         TtkCheckbutton(
             general,
             text="Inclure les versions bêta",
             variable=include_prereleases,
-        ).grid(row=5, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=2)
+        ).grid(row=4, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=2)
         TtkLabel(
             general,
             text="Vérification quotidienne au maximum ; aucun téléchargement automatique.",
             style="Muted.TLabel",
-        ).grid(row=6, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=(0, 4))
+        ).grid(row=5, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=(0, 4))
 
-        attention_display = TtkLabelFrame(content, text="Demandes d’attention", padding=10)
+        theme_section = TtkLabelFrame(
+            appearance_content,
+            text=tr("Thème · mode {game}", game=self.game_label),
+            padding=10,
+        )
+        theme_section.pack(fill="x", pady=(0, 8))
+        theme_section.columnconfigure(1, weight=1)
+        TtkLabel(theme_section, text="Thème").grid(
+            row=0,
+            column=0,
+            sticky="w",
+            padx=(0, 12),
+            pady=4,
+        )
+        Combobox(
+            theme_section,
+            values=theme_labels,
+            state="readonly",
+            textvariable=theme_var,
+        ).grid(row=0, column=1, sticky="ew", pady=4)
+
+        attention_display = TtkLabelFrame(
+            appearance_content,
+            text="Demandes d’attention",
+            padding=10,
+        )
         attention_display.pack(fill="x", pady=(0, 8))
         TtkCheckbutton(
             attention_display,
@@ -3783,7 +4103,11 @@ class WindowManagerApp:
             wraplength=560,
         ).pack(anchor="w", padx=(22, 0), pady=(3, 0))
 
-        in_game_display = TtkLabelFrame(content, text="Affichage en jeu", padding=10)
+        in_game_display = TtkLabelFrame(
+            appearance_content,
+            text=tr("Affichage en jeu · {game}", game=self.game_label),
+            padding=10,
+        )
         in_game_display.pack(fill="x", pady=(0, 8))
         in_game_display.columnconfigure(1, weight=1)
         TtkCheckbutton(
@@ -3873,6 +4197,14 @@ class WindowManagerApp:
         opacity_row.grid(row=5, column=1, sticky="w", pady=3)
         Spinbox(opacity_row, from_=35, to=100, textvariable=overlay_opacity, width=7).pack(side="left")
         TtkLabel(opacity_row, text=" %", style="Muted.TLabel").pack(side="left")
+        TtkLabel(opacity_row, text=tr("   Orientation"), style="Muted.TLabel").pack(side="left")
+        Combobox(
+            opacity_row,
+            values=(tr("Vertical"), tr("Horizontal")),
+            state="readonly",
+            textvariable=overlay_orientation,
+            width=11,
+        ).pack(side="left")
         TtkLabel(in_game_display, text="Position X / Y").grid(
             row=6, column=0, sticky="w", padx=(22, 12), pady=3
         )
@@ -3887,7 +4219,7 @@ class WindowManagerApp:
         )
         size_row = TtkFrame(in_game_display)
         size_row.grid(row=7, column=1, sticky="w", pady=3)
-        Spinbox(size_row, from_=80, to=900, textvariable=overlay_width, width=7).pack(side="left")
+        Spinbox(size_row, from_=80, to=1800, textvariable=overlay_width, width=7).pack(side="left")
         TtkLabel(size_row, text=" / ", style="Muted.TLabel").pack(side="left")
         Spinbox(size_row, from_=0, to=1600, textvariable=overlay_height, width=7).pack(side="left")
         TtkLabel(size_row, text=" px · hauteur 0 = automatique", style="Muted.TLabel").pack(side="left")
@@ -3996,7 +4328,7 @@ class WindowManagerApp:
             variable=show_badges,
         ).grid(row=17, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=2)
 
-        hotkeys = TtkLabelFrame(content, text="Raccourcis clavier", padding=10)
+        hotkeys = TtkLabelFrame(shortcuts_content, text="Raccourcis clavier", padding=10)
         hotkeys.pack(fill="x", pady=(0, 8))
         hotkeys.columnconfigure(1, weight=1)
         hotkey_rows = (
@@ -4016,8 +4348,39 @@ class WindowManagerApp:
             text="Exemples : F5, Ctrl+Alt+R, Shift+F6 ou Win+F7",
             style="Muted.TLabel",
         ).grid(row=len(hotkey_rows), column=0, columnspan=2, sticky="w", pady=(6, 0))
+        direct_start_row = len(hotkey_rows) + 1
+        TtkLabel(
+            hotkeys,
+            text=tr("Accès direct par position (facultatif)"),
+            style="Header.TLabel",
+        ).grid(row=direct_start_row, column=0, columnspan=2, sticky="w", pady=(12, 4))
+        for offset, variable in enumerate(direct_hotkeys, start=1):
+            TtkLabel(hotkeys, text=tr("Fenêtre {position}", position=offset)).grid(
+                row=direct_start_row + offset,
+                column=0,
+                sticky="w",
+                padx=(0, 12),
+                pady=3,
+            )
+            TtkEntry(hotkeys, textvariable=variable, width=22).grid(
+                row=direct_start_row + offset,
+                column=1,
+                sticky="ew",
+                pady=3,
+            )
+        TtkLabel(
+            hotkeys,
+            text=tr("Raccourcis globaux. Laissez vide pour désactiver. Exemple : 1 → première fenêtre."),
+            style="Muted.TLabel",
+        ).grid(
+            row=direct_start_row + len(direct_hotkeys) + 1,
+            column=0,
+            columnspan=2,
+            sticky="w",
+            pady=(5, 0),
+        )
 
-        detection = TtkLabelFrame(content, text="Détection des fenêtres", padding=10)
+        detection = TtkLabelFrame(general_content, text="Détection des fenêtres", padding=10)
         detection.pack(fill="x")
         TtkCheckbutton(
             detection,
@@ -4048,7 +4411,7 @@ class WindowManagerApp:
             try:
                 overlay_x_value = int(overlay_x.get())
                 overlay_y_value = int(overlay_y.get())
-                overlay_width_value = max(80, min(900, int(overlay_width.get())))
+                overlay_width_value = max(80, min(1800, int(overlay_width.get())))
                 requested_height = int(overlay_height.get())
                 overlay_height_value = 0 if requested_height <= 0 else max(80, min(1600, requested_height))
             except ValueError:
@@ -4075,12 +4438,29 @@ class WindowManagerApp:
             ign = hk_ign.get().strip() or "F7"
             next_attention = hk_attention.get().strip() or "F8"
             ref = hk_ref.get().strip() or "Ctrl+Alt+R"
+            direct_specs = [variable.get().strip() for variable in direct_hotkeys]
             try:
-                parse_hotkey(fwd)
-                parse_hotkey(bwd)
-                parse_hotkey(ign)
-                parse_hotkey(next_attention)
-                parse_hotkey(ref)
+                parsed_hotkeys: dict[tuple[int, int], str] = {}
+                named_specs = [
+                    ("Personnage suivant", fwd),
+                    ("Personnage précédent", bwd),
+                    ("Ignorer la fenêtre", ign),
+                    ("Prochaine fenêtre en attente", next_attention),
+                    ("Actualiser la liste", ref),
+                    *(
+                        (f"Fenêtre {position}", spec)
+                        for position, spec in enumerate(direct_specs, start=1)
+                        if spec
+                    ),
+                ]
+                for label, spec in named_specs:
+                    parsed = parse_hotkey(spec)
+                    duplicate = parsed_hotkeys.get(parsed)
+                    if duplicate is not None:
+                        raise ValueError(
+                            f"Le raccourci {spec} est utilisé à la fois pour « {duplicate} » et « {label} »."
+                        )
+                    parsed_hotkeys[parsed] = label
             except ValueError as e:
                 messagebox.showerror("Hotkeys", str(e))
                 return
@@ -4090,6 +4470,8 @@ class WindowManagerApp:
             self.settings.hotkeys["ignore"] = ign
             self.settings.hotkeys["next_attention"] = next_attention
             self.settings.hotkeys["refresh"] = ref
+            for position, spec in enumerate(direct_specs, start=1):
+                self.settings.hotkeys[f"window_{position}"] = spec
 
             self.settings.event_hook_enabled = bool(evt_hook.get())
             requested_startup = bool(start_with_windows.get())
@@ -4132,6 +4514,9 @@ class WindowManagerApp:
             self.settings.rotation_overlay_width = overlay_width_value
             self.settings.rotation_overlay_auto_width = bool(overlay_auto_width.get())
             self.settings.rotation_overlay_height = overlay_height_value
+            self.settings.rotation_overlay_orientation = normalize_overlay_orientation(
+                overlay_orientation.get()
+            )
             self.settings.rotation_overlay_locked = bool(overlay_locked.get())
             self.settings.rotation_overlay_layout = {
                 "left": reverse_overlay_fields.get(overlay_left.get(), "position"),
@@ -4146,6 +4531,7 @@ class WindowManagerApp:
             self.settings.show_overlay_badges = bool(show_overlay_badges.get())
             self.settings.attention_blink_enabled = bool(attention_blink.get())
             self.settings.show_character_badges = bool(show_badges.get())
+            self.settings.remember_display_preferences(self.game_mode)
 
             # Keep the remembered Retro preference untouched while configuring Unity.
             if self.game_mode == "retro":
@@ -4358,8 +4744,25 @@ class WindowManagerApp:
             self.hotkeys.set_hotkey(3, self.settings.hotkeys.get("ignore", "F7"), lambda: self.root.after(0, self.ignore_selected))
             self.hotkeys.set_hotkey(4, self.settings.hotkeys.get("refresh", "Ctrl+Alt+R"), lambda: self.root.after(0, lambda: self.refresh_windows(quiet=True, force=True)))
             self.hotkeys.set_hotkey(5, self.settings.hotkeys.get("next_attention", "F8"), lambda: self.root.after(0, lambda: self.focus_next_attention(source="Raccourci")))
+            direct_labels: list[str] = []
+            for position in range(1, 9):
+                hotkey_id = 100 + position
+                self.hotkeys.clear_hotkey(hotkey_id)
+                spec = self.settings.hotkeys.get(f"window_{position}", "").strip()
+                if not spec:
+                    continue
+                self.hotkeys.set_hotkey(
+                    hotkey_id,
+                    spec,
+                    lambda target=position: self.root.after(
+                        0,
+                        lambda: self.focus_managed_position(target),
+                    ),
+                )
+                direct_labels.append(f"{position}={spec}")
             self._log(
                 f"Hotkeys: {self.settings.hotkeys.get('forward')} / {self.settings.hotkeys.get('backward')} / {self.settings.hotkeys.get('ignore')} / {self.settings.hotkeys.get('next_attention')} / {self.settings.hotkeys.get('refresh')}"
+                + (f" / accès direct: {', '.join(direct_labels)}" if direct_labels else "")
             )
         except Exception as e:
             self._log(f"Hotkeys non appliqués: {e}")
@@ -4448,8 +4851,7 @@ def run(game_mode: str = "unity", *, start_minimized: bool = False) -> None:
     if last:
         try:
             pr = load_profile(app.dirs["profiles"], last)
-            app.aliases.update(pr.aliases)
-            app.desired_order_pseudos = list(pr.order)
+            app._apply_loaded_profile(pr)
             app._log(f"Profil auto-chargé: '{last}'")
         except Exception:
             pass

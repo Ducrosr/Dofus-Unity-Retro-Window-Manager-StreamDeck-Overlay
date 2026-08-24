@@ -8,9 +8,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
 
+from ..services.character_visuals import sanitize_character_visuals
 from .atomic import atomic_write_text
 
-PROFILE_SCHEMA_VERSION = 1
+PROFILE_SCHEMA_VERSION = 2
 
 
 class _LegacyProfileUnpickler(pickle.Unpickler):
@@ -34,6 +35,8 @@ class Profile:
     aliases: Dict[str, str]
     created_at: str
     updated_at: str
+    visuals: dict[str, dict[str, str]] | None = None
+    game_mode: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -41,6 +44,12 @@ class Profile:
             "name": self.name,
             "order": list(self.order),
             "aliases": dict(self.aliases),
+            "visuals": (
+                sanitize_character_visuals(self.visuals)
+                if self.visuals is not None
+                else None
+            ),
+            "game_mode": self.game_mode if self.game_mode in {"unity", "retro"} else "",
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
@@ -54,6 +63,16 @@ class Profile:
             aliases=dict(d.get("aliases", {}) or {}),
             created_at=d.get("created_at", now),
             updated_at=d.get("updated_at", now),
+            visuals=(
+                sanitize_character_visuals(d.get("visuals"))
+                if "visuals" in d
+                else None
+            ),
+            game_mode=(
+                str(d.get("game_mode") or "").strip().lower()
+                if str(d.get("game_mode") or "").strip().lower() in {"unity", "retro"}
+                else ""
+            ),
         )
 
 

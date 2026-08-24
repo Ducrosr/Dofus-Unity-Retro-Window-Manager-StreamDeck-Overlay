@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.2"><strong>⬇ Download for Windows</strong></a>
+  <a href="https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.3"><strong>⬇ Download for Windows</strong></a>
   ·
   <a href="docs/INSTALLATION.md">Installation guide</a>
   ·
@@ -33,31 +33,33 @@ A local Windows window manager for **Dofus Unity** and **Dofus Retro**, designed
 >
 > Also read Ankama’s official guidance: **[Recognizing and protecting yourself from phishing](https://support.ankama.com/hc/en-us/articles/201376953-Recognizing-and-Protecting-Yourself-from-Phishing)**.
 
-Version 2.20.0 is the current public beta. It brings together the multilingual interface, overlays, attention requests, portraits, official icons and Unity/Retro themes. The matching Windows executable is available from the [official v2.20.0-beta.2 Release](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.2).
+Version 2.20.0 is the current public beta. It brings together the multilingual interface, overlays, attention requests, portraits, official icons and Unity/Retro themes. The matching Windows executable is available from the [official v2.20.0-beta.3 Release](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.3).
 
 ## Main features
 
 - native Dofus Unity and Retro window detection;
-- next/previous character global shortcuts;
+- next/previous character global shortcuts plus eight optional direct shortcuts for positions 1 to 8;
 - ordering by buttons or drag and drop;
 - per-character alias, custom or bundled class portrait, 39 official stat icons and 20 official profession icons;
 - ignored windows remain bound to their Stream Deck keys but leave automatic rotation;
-- saved JSON profiles and complete configuration backups;
+- per-server JSON profiles containing independent order, aliases, portraits and icons, plus complete configuration backups;
 - atomic settings and profile writes, with an automatic backup of the last valid settings;
-- instant Unity/Retro switching;
+- instant Unity/Retro switching with separate display preferences for each version;
 - compact always-on-top mode;
 - automatic compact-window and overlay recovery after a monitor-layout change;
 - customizable switch notification with content-based automatic width, position, duration and opacity;
-- transparent, movable and resizable rotation overlay with optional automatic width;
+- transparent, movable and resizable vertical or horizontal rotation overlay with optional automatic width;
 - portraits and icons can be shown or hidden independently in the notification, overlay and Stream Deck;
 - orange `!` attention request indicator with optional subtle blinking in the app, overlay and Stream Deck;
 - chronological `!1`, `!2`… queue with a **Next alert** action in the app, overlay, F8 shortcut and Stream Deck;
 - twelve themes available in both game modes: Standard, Bonta, Brakmar, Tribute, Gold and Steel, Belladone, Unicorn, Emerald Mine, Sufokia, Pandala, Wabbit and Retro;
-- French by default, plus English and Spanish selected with one click;
+- French by default, plus English and Spanish selected with graphical flag buttons;
+- settings organized into General, Appearance and Shortcuts tabs;
+- a mandatory first-launch security warning shown before global shortcuts are enabled;
 - separate display reset that preserves profiles and character customization;
 - optional official-release update check with no automatic download.
 
-Standard is the default Unity theme and Retro is the default Retro theme. Every theme can be selected in either mode, and the application remembers one preference for each game version.
+Standard is the default theme for both Unity and Retro. Every theme can be selected in either mode, and the application remembers one theme and a separate set of display preferences for each game version.
 
 ## Stream Deck 0.7.0
 
@@ -91,12 +93,12 @@ Install the Stream Deck plugin from **Application → Install Stream Deck plugin
 ## First steps
 
 1. Start the manager and choose Unity or Retro.
-2. Open your Dofus clients and select **Refresh**.
+2. Read the security warning, confirm that your copy came from the official repository, then open your Dofus clients and select **Refresh**.
 3. Verify detected names and classes.
 4. Drag characters into the desired order.
-5. Optionally add an alias, portrait and badge through **Customize…**.
-6. Test F5, F6, F7, F8 and Ctrl+Alt+R.
-7. Save a profile.
+5. Create or load one profile per server, then optionally add an alias, portrait and badge through **Customize…**.
+6. Test F5, F6, F7, F8 and Ctrl+Alt+R; direct access to windows 1 to 8 can be configured in Settings.
+7. Save the profile.
 8. Configure the overlay and notification under **Settings → In-game display**.
 
 Default shortcuts:
@@ -112,7 +114,7 @@ Default shortcuts:
 
 Dofus Window Manager does not read Dofus memory or network packets, inject code, send in-game commands, request Ankama credentials or upload portraits. Its Stream Deck bridge listens only on `127.0.0.1:32145`. Settings, profiles and logs remain under `%APPDATA%\DofusUnityWindowManager\`.
 
-Run the manager and Dofus at the same Windows privilege level. Read [SECURITY.md](SECURITY.md) and Ankama’s [anti-phishing guidance](https://support.ankama.com/hc/en-us/articles/201376953-Recognizing-and-Protecting-Yourself-from-Phishing) before installing a binary obtained outside the official repository.
+Run the manager and Dofus at the same Windows privilege level. On first launch, the application requires you to read a warning and confirm that the copy came from the official repository. If you already ran an unofficial copy, close it, disconnect the computer if necessary, change the Ankama and associated email passwords immediately from another trusted device, enable two-factor authentication, and run a full or offline antivirus scan. Read [SECURITY.md](SECURITY.md) and Ankama’s [anti-phishing guidance](https://support.ankama.com/hc/en-us/articles/201376953-Recognizing-and-Protecting-Yourself-from-Phishing).
 
 ## Build and test
 

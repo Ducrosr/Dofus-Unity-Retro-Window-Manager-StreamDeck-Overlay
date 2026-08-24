@@ -108,8 +108,8 @@ Une publication normale se déclenche lorsque `__release_tag__` dans `dwm/__init
 Il reste également possible de déclencher la compilation en poussant manuellement un tag dont la version de base correspond à `pyproject.toml` :
 
 ~~~powershell
-git tag v2.20.0-beta.2
-git push origin v2.20.0-beta.2
+git tag v2.20.0-beta.3
+git push origin v2.20.0-beta.3
 ~~~
 
 Le workflow crée ou complète ensuite la Release avec :
