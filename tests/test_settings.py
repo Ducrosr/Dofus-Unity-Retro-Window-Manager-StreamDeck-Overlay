@@ -23,6 +23,7 @@ class SettingsTests(unittest.TestCase):
         settings = Settings()
         self.assertEqual(settings.game_mode, "unity")
         self.assertFalse(settings.security_notice_accepted)
+        self.assertFalse(settings.onboarding_completed)
         self.assertEqual(settings.hotkeys["forward"], "F5")
         self.assertEqual(settings.hotkeys["next_attention"], "F8")
         self.assertEqual(settings.hotkeys["refresh"], "Ctrl+Alt+R")
@@ -45,6 +46,8 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual((settings.rotation_overlay_width, settings.rotation_overlay_height), (300, 0))
         self.assertTrue(settings.rotation_overlay_auto_width)
         self.assertEqual(settings.rotation_overlay_orientation, "vertical")
+        self.assertTrue(settings.rotation_overlay_show_title)
+        self.assertTrue(settings.rotation_overlay_show_reorder_buttons)
         self.assertTrue(settings.attention_blink_enabled)
         self.assertTrue(settings.show_popup_portraits)
         self.assertTrue(settings.show_popup_badges)
@@ -53,6 +56,11 @@ class SettingsTests(unittest.TestCase):
         self.assertTrue(settings.show_character_portraits)
         self.assertTrue(settings.show_character_badges)
         self.assertEqual(settings.character_visuals, {})
+        self.assertTrue(settings.smart_profile_loading_enabled)
+        self.assertTrue(settings.adaptive_performance_enabled)
+        self.assertFalse(settings.accessibility_high_contrast)
+        self.assertFalse(settings.accessibility_reduce_motion)
+        self.assertEqual(settings.accessibility_ui_scale_percent, 100)
         self.assertTrue(all(settings.hotkeys[f"window_{position}"] == "" for position in range(1, 9)))
 
     def test_column_order_is_sanitized_and_completed(self) -> None:
@@ -76,6 +84,16 @@ class SettingsTests(unittest.TestCase):
 
         self.assertEqual(settings.theme, MODERN_DARK_THEME)
 
+    def test_existing_installation_does_not_reopen_the_new_onboarding(self) -> None:
+        settings = Settings.from_dict(
+            {
+                "schema_version": 19,
+                "security_notice_accepted": True,
+            }
+        )
+
+        self.assertTrue(settings.onboarding_completed)
+
     def test_removed_external_theme_is_migrated_to_standard(self) -> None:
         settings = Settings.from_dict({"schema_version": 7, "theme": "arc"})
 
@@ -88,7 +106,12 @@ class SettingsTests(unittest.TestCase):
                 game_mode="retro",
                 language="es",
                 security_notice_accepted=True,
+                onboarding_completed=True,
                 refresh_seconds=7,
+                adaptive_performance_enabled=False,
+                accessibility_high_contrast=True,
+                accessibility_reduce_motion=True,
+                accessibility_ui_scale_percent=125,
                 last_profile="Équipe",
                 window_column_order=["name", "alias", "class", "hwnd"],
                 check_updates_automatically=False,
@@ -113,6 +136,8 @@ class SettingsTests(unittest.TestCase):
                 rotation_overlay_width=440,
                 rotation_overlay_auto_width=False,
                 rotation_overlay_height=520,
+                rotation_overlay_show_title=False,
+                rotation_overlay_show_reorder_buttons=False,
                 attention_blink_enabled=False,
                 show_popup_portraits=False,
                 show_popup_badges=False,
@@ -134,8 +159,14 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(actual.game_mode, "retro")
         self.assertEqual(actual.language, "es")
         self.assertTrue(actual.security_notice_accepted)
+        self.assertTrue(actual.onboarding_completed)
         self.assertEqual(actual.refresh_seconds, 7)
+        self.assertFalse(actual.adaptive_performance_enabled)
+        self.assertTrue(actual.accessibility_high_contrast)
+        self.assertTrue(actual.accessibility_reduce_motion)
+        self.assertEqual(actual.accessibility_ui_scale_percent, 125)
         self.assertEqual(actual.last_profile, "Équipe")
+        self.assertTrue(actual.smart_profile_loading_enabled)
         self.assertEqual(actual.window_column_order, ["name", "alias", "class", "hwnd"])
         self.assertFalse(actual.check_updates_automatically)
         self.assertFalse(actual.include_prereleases)
@@ -160,6 +191,8 @@ class SettingsTests(unittest.TestCase):
         self.assertTrue(actual.rotation_overlay_locked)
         self.assertEqual((actual.rotation_overlay_width, actual.rotation_overlay_height), (440, 520))
         self.assertFalse(actual.rotation_overlay_auto_width)
+        self.assertFalse(actual.rotation_overlay_show_title)
+        self.assertFalse(actual.rotation_overlay_show_reorder_buttons)
         self.assertFalse(actual.attention_blink_enabled)
         self.assertFalse(actual.show_popup_portraits)
         self.assertFalse(actual.show_popup_badges)
@@ -251,6 +284,8 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.swap_notification_opacity, 96)
         self.assertFalse(settings.rotation_overlay_locked)
         self.assertEqual(settings.rotation_overlay_layout, DEFAULT_ROTATION_OVERLAY_LAYOUT)
+        self.assertTrue(settings.rotation_overlay_show_title)
+        self.assertTrue(settings.rotation_overlay_show_reorder_buttons)
 
     def test_legacy_portrait_preference_migrates_to_each_display(self) -> None:
         settings = Settings.from_dict({"schema_version": 14, "show_character_portraits": False})
@@ -302,6 +337,8 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual((settings.rotation_overlay_x, settings.rotation_overlay_y), (24, 160))
         self.assertEqual((settings.rotation_overlay_width, settings.rotation_overlay_height), (300, 0))
         self.assertTrue(settings.rotation_overlay_auto_width)
+        self.assertTrue(settings.rotation_overlay_show_title)
+        self.assertTrue(settings.rotation_overlay_show_reorder_buttons)
         self.assertTrue(settings.attention_blink_enabled)
         self.assertTrue(settings.show_popup_portraits)
         self.assertTrue(settings.show_popup_badges)
@@ -313,6 +350,8 @@ class SettingsTests(unittest.TestCase):
         settings.rotation_overlay_enabled = False
         settings.swap_notification_opacity = 61
         settings.rotation_overlay_orientation = "horizontal"
+        settings.rotation_overlay_show_title = False
+        settings.rotation_overlay_show_reorder_buttons = False
         settings.remember_display_preferences("unity")
 
         settings.game_mode = "retro"
@@ -320,6 +359,8 @@ class SettingsTests(unittest.TestCase):
         self.assertTrue(settings.rotation_overlay_enabled)
         self.assertEqual(settings.swap_notification_opacity, 88)
         self.assertEqual(settings.rotation_overlay_orientation, "vertical")
+        self.assertTrue(settings.rotation_overlay_show_title)
+        self.assertTrue(settings.rotation_overlay_show_reorder_buttons)
 
         settings.rotation_overlay_opacity = 54
         settings.remember_display_preferences("retro")
@@ -329,6 +370,8 @@ class SettingsTests(unittest.TestCase):
         self.assertFalse(settings.rotation_overlay_enabled)
         self.assertEqual(settings.swap_notification_opacity, 61)
         self.assertEqual(settings.rotation_overlay_orientation, "horizontal")
+        self.assertFalse(settings.rotation_overlay_show_title)
+        self.assertFalse(settings.rotation_overlay_show_reorder_buttons)
 
         restored = Settings.from_dict(settings.to_dict())
         self.assertEqual(

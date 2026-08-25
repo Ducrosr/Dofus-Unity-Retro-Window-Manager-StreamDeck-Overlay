@@ -5,7 +5,7 @@ Le plugin communique uniquement avec Dofus Window Manager sur `127.0.0.1:32145`.
 > [!WARNING]
 > Installe uniquement le paquet fourni par le [dépôt officiel](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay). Le plugin officiel ne demande jamais d’identifiant Ankama, de mot de passe, de code d’authentification ou de jeton de session.
 
-La version 0.7.0 ordonne les fenêtres qui demandent l’attention (`!1`, `!2`…) et ajoute l’action **Prochaine alerte**, qui affiche le nombre restant et active la demande la plus ancienne. Le léger clignotement reste facultatif et synchronisé avec l’application. Le plugin peut afficher le portrait ainsi qu’une des 39 icônes officielles de caractéristiques ou 20 icônes officielles de métiers intégrées, et reprend automatiquement le thème ainsi que la langue transmis par l’application. Les douze thèmes de l’application sont compatibles avec Unity comme avec Retro. Il conserve le secours Windows des actions Personnage, Suivant, Précédent et Prochaine alerte : si Stream Deck garde le premier plan, le plugin réduit sa propre fenêtre puis répète la commande une fois. Le script PowerShell fourni vérifie strictement que la fenêtre active appartient bien à Stream Deck avant toute réduction.
+La version 0.8.0 fournit cinq profils modifiables pour les modèles Standard 15 touches, Mini, XL, Plus et Neo. Elle ordonne aussi les fenêtres qui demandent l’attention (`!1`, `!2`…) et propose l’action **Prochaine alerte**, qui affiche le nombre restant et active la demande la plus ancienne. Le léger clignotement reste facultatif et synchronisé avec l’application. Le plugin peut afficher le portrait ainsi qu’une des 39 icônes officielles de caractéristiques ou 20 icônes officielles de métiers intégrées, et reprend automatiquement le thème ainsi que la langue transmis par l’application. Les douze thèmes de l’application sont compatibles avec Unity comme avec Retro. Il conserve le secours Windows des actions Personnage, Suivant, Précédent et Prochaine alerte : si Stream Deck garde le premier plan, le plugin réduit sa propre fenêtre puis répète la commande une fois. Le script PowerShell fourni vérifie strictement que la fenêtre active appartient bien à Stream Deck avant toute réduction.
 
 ## Développement et installation locale
 
@@ -15,11 +15,14 @@ Dans PowerShell, depuis ce dossier :
 
 ```powershell
 npm ci
+npm run build:profiles
 npm run build
 streamdeck link com.remyducros.dofuswindowmanager.sdPlugin
 ```
 
-Lors de la première installation, Stream Deck propose automatiquement le profil modifiable **Dofus Window Manager** pour les modèles standard à 15 touches. Il contient huit touches Personnage et toutes les commandes, disposées comme suit : **Monter** puis personnages 1 à 4 sur la première ligne, **Descendre** puis personnages 5 à 8 sur la deuxième, et **Lancer / afficher**, **Ignorer**, **Actualiser**, **Précédent**, **Suivant** sur la dernière ligne.
+Lors de la première installation, Stream Deck propose automatiquement le profil modifiable correspondant à l’appareil connecté : Standard 15 touches, Mini, XL, Plus ou Neo. Le profil standard contient huit touches Personnage et toutes les commandes. Les formats compacts privilégient les personnages et **Précédent/Suivant** ; le XL place les huit personnages sur la première ligne et toutes les commandes sur la deuxième.
+
+`npm run build:profiles` régénère de façon déterministe les cinq archives depuis une source unique.
 
 Lance le gestionnaire manuellement une première fois : il enregistre automatiquement sa commande de démarrage dans `%APPDATA%\DofusUnityWindowManager\streamdeck-launcher.json`. La touche **Lancer / afficher** utilise ensuite cet emplacement, que l’application soit exécutée depuis les sources Python ou sous forme d’exécutable. Si le gestionnaire est déjà ouvert, la même touche ramène simplement sa fenêtre au premier plan.
 
@@ -38,6 +41,7 @@ npm run watch
 Contrôles avant diffusion :
 
 ```powershell
+npm run build:profiles
 npm run typecheck
 npm run validate
 npm run pack

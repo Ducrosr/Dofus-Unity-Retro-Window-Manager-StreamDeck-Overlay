@@ -164,6 +164,7 @@ class HotkeyManager:
         self._lock = threading.Lock()
         self._running = threading.Event()
         self._last_error: Optional[str] = None
+        self._registration_errors: list[str] = []
         self._ready = threading.Event()
 
     def get_last_error(self) -> Optional[str]:
@@ -173,6 +174,13 @@ class HotkeyManager:
         error = self._last_error
         self._last_error = None
         return error
+
+    def consume_registration_errors(self) -> list[str]:
+        with self._lock:
+            errors = list(self._registration_errors)
+            self._registration_errors.clear()
+            self._last_error = None
+        return errors
 
     def is_alive(self) -> bool:
         """Return True if the message-loop thread is currently running."""
@@ -238,6 +246,8 @@ class HotkeyManager:
         if not ok:
             code = ctypes.get_last_error()
             self._last_error = f"RegisterHotKey a échoué (id={hotkey_id}, vk={vk}, mods={mods}) : { _format_win_error(code) }"
+            with self._lock:
+                self._registration_errors.append(self._last_error)
             return False
         return True
 

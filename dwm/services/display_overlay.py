@@ -212,6 +212,7 @@ def calculate_overlay_text_scale(
     *,
     locked: bool,
     fixed_height: bool,
+    show_title: bool = True,
 ) -> float:
     """Scale overlay text with both the available width and per-row height."""
     try:
@@ -225,7 +226,7 @@ def calculate_overlay_text_scale(
     if not fixed_height or safe_rows == 0:
         return max(0.55, min(2.2, width_scale))
 
-    header_height = 4 if locked else 24
+    header_height = 4 if locked or not show_title else 24
     row_height = max(1.0, (safe_height - header_height) / safe_rows)
     height_scale = row_height / 46
     return max(0.55, min(2.2, width_scale, height_scale))

@@ -9,6 +9,11 @@ from dwm.services.windows_startup import set_startup_enabled
 from dwm.storage.settings import load_settings, save_settings
 
 
+def should_prompt_for_game_mode(settings, *, use_saved_mode: bool) -> bool:
+    """Keep the legacy mode picker except while the guided setup is pending."""
+    return not bool(use_saved_mode) and bool(settings.onboarding_completed)
+
+
 def choose_game_dialog(default_mode: str = "unity", language: str = "fr") -> tuple[str, bool]:
     """Small startup dialog to pick Unity vs Retro.
 
@@ -110,13 +115,13 @@ def main() -> None:
         except OSError as exc:
             logger.warn(f"Impossible d’actualiser le démarrage Windows : {exc}")
 
-    if args.use_saved_mode:
-        mode = settings.game_mode
-    else:
+    if should_prompt_for_game_mode(settings, use_saved_mode=args.use_saved_mode):
         mode, remember = choose_game_dialog(settings.game_mode, settings.language)
         if remember:
             settings.game_mode = mode
             save_settings(settings_path, settings)
+    else:
+        mode = settings.game_mode
 
     from dwm.app import run
 

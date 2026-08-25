@@ -9,7 +9,9 @@ L’interface principale comporte deux tableaux et quatre groupes de commandes :
 - **Navigation** : rotation et changement d’ordre ;
 - **Fenêtre sélectionnée** : alias, portrait, icône et statut ignoré ;
 - **Profils** : enregistrement et restauration d’une formation ;
-- **Application** : mode Unity/Retro, mode compact, overlay, paramètres, aperçu Stream Deck, diagnostic, sauvegarde, installation du plugin et mises à jour.
+- **Application** : mode Unity/Retro, assistant de configuration, mode compact, overlay, paramètres, aperçu Stream Deck, diagnostic, sauvegarde, installation du plugin et mises à jour.
+
+Sur une nouvelle installation, l’assistant guide successivement le choix de la langue et du mode de jeu, la détection des clients, un test réel du focus, l’apparence initiale de l’overlay et l’installation facultative de Stream Deck. Il peut être relancé à tout moment depuis **Application → Assistant de configuration…**.
 
 La barre verticale à droite conserve l’accès aux commandes lorsque la fenêtre est courte ou que Windows utilise une mise à l’échelle élevée. La molette garde la priorité au tableau ou au journal lorsqu’elle se trouve au-dessus.
 
@@ -80,6 +82,8 @@ Une fenêtre ignorée peut toujours être activée directement. Elle conserve sa
 
 Un profil enregistre l’ordre des personnages, leurs alias, leurs portraits et leurs icônes en les associant à leur pseudo plutôt qu’à un identifiant de fenêtre temporaire. Créez un profil par serveur : deux personnages portant le même nom sur des serveurs différents peuvent ainsi avoir une classe, un alias et une apparence distincts.
 
+Au premier scan, la reconnaissance intelligente peut charger automatiquement un profil uniquement si son mode Unity/Retro et l’ensemble complet de ses personnages correspondent exactement aux fenêtres détectées. Si deux profils contiennent les mêmes personnages, aucun n’est choisi : sélectionnez alors le serveur manuellement. Les correspondances partielles et les anciens profils qui n’ont pas encore de mode enregistré ne sont jamais chargés automatiquement. Cette fonction peut être désactivée dans **Paramètres → Général → Profils**.
+
 - **Enregistrer…** conserve le profil dans les données locales ;
 - **Charger** restaure la formation sélectionnée ;
 - **Gérer les profils…** regroupe l’import, l’export et la suppression.
@@ -99,7 +103,17 @@ Les préférences internes des touches Stream Deck restent gérées par Stream D
 
 Les réglages, les profils et les exports JSON sont écrits dans un fichier temporaire puis remplacés en une seule opération : une fermeture ou une interruption pendant l’enregistrement ne peut donc pas laisser un fichier partiellement écrit. L’application conserve aussi la dernière version JSON valide des réglages dans `settings.json.bak`. Si `settings.json` devient illisible, cette copie est chargée automatiquement au prochain démarrage.
 
+Le panneau **Sauvegarder/restaurer…** conserve également les douze points de restauration complets les plus récents dans le dossier local `backups`. Utilisez **Créer un point maintenant** avant un essai important, ou sélectionnez une version datée pour la restaurer. Un point est créé automatiquement avant chaque import/restauration, réinitialisation complète et remplacement ou suppression d’un profil. La suppression automatique ne concerne que les anciens fichiers `DWM_snapshot_*.json` gérés par l’application.
+
 ## Paramètres et zone de notification
+
+Dans **Paramètres → Apparence**, les préréglages **Minimal**, **Équilibré** et **Complet** remplissent les options de contenu et de visuels sans toucher au thème, à l’orientation ou à la position. Minimal conserve le numéro et le nom sans portrait, icône, titre ni flèches ; Équilibré affiche les informations complètes et le portrait avec moins de commandes visibles ; Complet restaure portraits, icônes, titre et flèches. Sélectionnez ensuite **Appliquer** pour enregistrer le résultat dans les préférences Unity ou Retro actives.
+
+**Application → Simuler l’affichage…** ouvre le véritable composant d’overlay avec quatre personnages fictifs et permet de tester le changement de personnage, une demande d’attention et la notification. Cette simulation n’utilise aucun identifiant de fenêtre réel : ses clics, déplacements et flèches n’activent pas Dofus et ne modifient pas l’ordre enregistré.
+
+Dans **Paramètres → Raccourcis**, utilisez **Capturer** puis appuyez sur la combinaison souhaitée. Le formulaire contrôle immédiatement les touches non prises en charge et les doublons entre navigation, alerte, actualisation et accès directs. Après **Appliquer**, Windows peut encore refuser une combinaison réservée par le système ou déjà utilisée par un autre logiciel ; le message indique alors précisément l’action à modifier.
+
+Dans **Paramètres → Général → Accessibilité**, **Contraste renforcé** utilise des fonds noirs, des textes blancs et des séparateurs plus visibles tout en conservant l’accent du thème. L’échelle globale peut être réglée de 80 à 160 %. **Réduire les animations** maintient le repère orange des alertes mais désactive leur pulsation dans l’application, l’overlay et le Stream Deck.
 
 Les paramètres sont répartis dans trois onglets défilants : **Général** pour l’actualisation, le démarrage, les mises à jour et la détection ; **Apparence** pour le thème, les demandes d’attention, la notification et l’overlay ; **Raccourcis** pour les actions habituelles et les huit accès directs facultatifs aux positions 1 à 8.
 
@@ -147,13 +161,13 @@ La notification est activée par défaut avec une opacité de 88 %. Elle ne pren
 
 Lorsqu’il est déverrouillé :
 
-- glissez l’en-tête pour déplacer l’overlay ;
+- glissez le titre pour déplacer l’overlay ; s’il est masqué, utilisez la fine poignée supérieure qui reste visible lorsque l’overlay est déverrouillé ;
 - glissez une ligne vers une autre position, ou utilisez ses flèches ▲/▼ (vertical) ou ◀/▶ (horizontal), pour modifier l’ordre de rotation ;
 - étirez la poignée ◢ dans l’angle inférieur droit pour passer en largeur manuelle et ajuster ses dimensions ;
 - cliquez brièvement sur un personnage pour activer sa fenêtre ;
 - la position, l’ordre et les dimensions sont mémorisés automatiquement.
 
-Les paramètres permettent aussi de choisir une orientation verticale ou horizontale, de saisir les coordonnées X/Y, de régler l’opacité entre 35 et 100 % et de verrouiller l’overlay. En mode horizontal, la première fenêtre est placée à gauche et l’ordre continue vers la droite. Une fois verrouillé, l’overlay ignore les clics afin de ne pas gêner le jeu ; repassez par les paramètres pour le déverrouiller.
+Les paramètres permettent aussi de masquer indépendamment le titre et les flèches de réorganisation, de choisir une orientation verticale ou horizontale, de saisir les coordonnées X/Y, de régler l’opacité entre 35 et 100 % et de verrouiller l’overlay. Masquer les flèches ne désactive pas le glisser-déposer des lignes. En mode horizontal, la première fenêtre est placée à gauche et l’ordre continue vers la droite. Une fois verrouillé, l’overlay ignore les clics afin de ne pas gêner le jeu ; repassez par les paramètres pour le déverrouiller.
 
 Le contenu de chaque ligne est personnalisable avec les champs **Numéro**, **Nom**, **Classe**, **Alias** ou **Masqué**. La disposition par défaut place le numéro à gauche, le nom sur la première ligne et `classe · alias` sur la seconde. Lorsqu’un alias n’est pas renseigné, un tiret est affiché.
 
@@ -165,7 +179,7 @@ Lorsque l’overlay ou le mode compact est visible, un changement manuel vers un
 
 ## Stream Deck
 
-Le profil standard à 15 touches est organisé ainsi :
+Le paquet 0.8.0 fournit des profils pour les modèles Standard 15 touches, Mini, XL, Plus et Neo. Le profil standard est organisé ainsi :
 
 | Ligne | Touche 1 | Touche 2 | Touche 3 | Touche 4 | Touche 5 |
 |---|---|---|---|---|---|
@@ -180,12 +194,20 @@ Pour chaque personnage, la position, le nom, la classe et l’alias peuvent êtr
 - classe ligne 3 ;
 - alias ligne 4.
 
-La disposition et la couleur de bordure sont mémorisées par personnage et le suivent lorsqu’il change de touche. Le portrait et l’icône définis dans l’application sont également repris par le plugin 0.7.0. Le fond et l’accent des touches suivent le thème actif de l’application ; leurs libellés courts suivent sa langue. Une demande d’attention utilise temporairement une bordure orange épaisse et affiche son rang `!1`, `!2`… dans la file.
+La disposition et la couleur de bordure sont mémorisées par personnage et le suivent lorsqu’il change de touche. Le portrait et l’icône définis dans l’application sont également repris par le plugin 0.8.0. Le fond et l’accent des touches suivent le thème actif de l’application ; leurs libellés courts suivent sa langue. Une demande d’attention utilise temporairement une bordure orange épaisse et affiche son rang `!1`, `!2`… dans la file.
+
+L’aperçu intégré permet de sélectionner chaque modèle. Les profils Mini, Plus et Neo privilégient les touches Personnage et la navigation Précédent/Suivant ; le profil XL place les huit personnages sur sa première ligne et toutes les commandes sur la deuxième.
+
+**Installer ou réparer le plugin Stream Deck** compare la version du manifeste installé à celle du paquet fourni par l’application. Une version absente ou plus ancienne déclenche une recommandation ; une version plus récente est conservée. La réparation reste explicite et consiste à ouvrir le paquet embarqué dans Stream Deck, sans suppression directe de son dossier.
 
 L’option **Aperçu Stream Deck…** reproduit la disposition dans l’application et permet de tester le focus, la rotation, l’ordre, l’actualisation et l’exclusion temporaire. Les préférences visuelles avancées restent configurées dans Stream Deck.
 
 ## Diagnostic et journal
 
-**Diagnostic…** affiche la version de l’application et son tag de publication, la version du plugin installé et fourni, l’état du pont local, la dernière communication Stream Deck, la dernière recherche de mise à jour, la détection des fenêtres et les dossiers de journaux.
+**Diagnostic…** affiche la version de l’application et son tag de publication, la version du plugin installé et fourni, l’état du pont local, la dernière communication Stream Deck, la dernière recherche de mise à jour, la détection des fenêtres, les durées moyennes/maximales des scans et changements de focus, ainsi que les dossiers de journaux.
+
+Le mode performance adaptatif est actif par défaut. Lorsque la synchronisation Windows en temps réel est saine, les scans complets deviennent de simples contrôles de récupération espacés (20 secondes sans fenêtre, 60 secondes avec des fenêtres). Si le hook est désactivé ou s’arrête, l’intervalle configuré reprend automatiquement. L’option se trouve dans **Paramètres → Général → Détection des fenêtres**.
+
+**Créer un paquet de support…** enregistre, à l’emplacement choisi, une archive ZIP contenant le diagnostic, une vue non restaurable des réglages et les 256 Ko les plus récents de chaque journal. Les portraits ne sont jamais inclus ; les pseudos, alias, noms de profils, identifiants de fenêtres, chemins utilisateurs connus et adresses e-mail sont remplacés. Relisez tout de même le contenu avant de le joindre à une Issue : un texte libre écrit dans un journal peut échapper à une anonymisation automatique.
 
 Le journal principal est masqué par défaut. Activez **Afficher le journal** pour suivre les scans, changements de focus et erreurs. Avant de publier un rapport, retirez les noms ou chemins personnels si nécessaire et ne publiez jamais de donnée de connexion.

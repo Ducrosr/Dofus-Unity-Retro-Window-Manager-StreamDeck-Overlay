@@ -78,6 +78,21 @@ def _adaptive_display_width(
     )
 
 
+def _overlay_control_visibility(
+    *,
+    locked: bool,
+    show_title: bool,
+    show_reorder_buttons: bool,
+) -> tuple[bool, bool, bool]:
+    """Return title, arrow and drag visibility for the persistent overlay."""
+    interactive = not bool(locked)
+    return (
+        interactive and bool(show_title),
+        interactive and bool(show_reorder_buttons),
+        interactive,
+    )
+
+
 def _blend_hex(foreground: str, background: str, ratio: float) -> str:
     try:
         ratio = max(0.0, min(1.0, float(ratio)))
@@ -274,6 +289,8 @@ class OverlayUI:
         self.persistent_width = 300
         self.persistent_auto_width = True
         self.persistent_height = 0
+        self.persistent_show_title = True
+        self.persistent_show_reorder_buttons = True
         self.show_portraits = True
         self.show_badges = True
         self.attention_blink_enabled = True
@@ -590,6 +607,8 @@ class OverlayUI:
         width: int = 300,
         auto_width: bool = True,
         height: int = 0,
+        show_title: bool = True,
+        show_reorder_buttons: bool = True,
         show_portrait: bool = True,
         show_badge: bool = True,
     ) -> None:
@@ -605,6 +624,8 @@ class OverlayUI:
         self.persistent_auto_width = bool(auto_width)
         requested_height = int(height)
         self.persistent_height = 0 if requested_height <= 0 else max(80, min(1600, requested_height))
+        self.persistent_show_title = bool(show_title)
+        self.persistent_show_reorder_buttons = bool(show_reorder_buttons)
         self.show_portraits = bool(show_portrait)
         self.show_badges = bool(show_badge)
 
@@ -668,7 +689,12 @@ class OverlayUI:
 
         body = TkFrame(window, background=self.palette["bg"], padx=2, pady=2)
         body.pack(fill="both", expand=True, padx=1, pady=1)
-        if not self.persistent_locked:
+        show_title, show_reorder_buttons, drag_enabled = _overlay_control_visibility(
+            locked=self.persistent_locked,
+            show_title=self.persistent_show_title,
+            show_reorder_buttons=self.persistent_show_reorder_buttons,
+        )
+        if show_title:
             header = TkFrame(
                 body,
                 background=self.palette["bg3"],
@@ -706,6 +732,16 @@ class OverlayUI:
                 alert_button.pack(side="right")
                 self._register_scaled_text(alert_button, 8, bold=True)
                 alert_button.bind("<Button-1>", lambda _event: self.focus_next_attention())
+        elif drag_enabled:
+            drag_grip = TkFrame(
+                body,
+                background=self.palette["bg3"],
+                height=5,
+                cursor="fleur",
+            )
+            drag_grip.pack(fill="x")
+            drag_grip.pack_propagate(False)
+            self._bind_drag(drag_grip, None)
 
         if not self.entries:
             empty = TkLabel(
@@ -846,7 +882,7 @@ class OverlayUI:
                     secondary.pack(fill="x")
                     self._persistent_secondary_widgets[entry.hwnd] = secondary
                     self._register_scaled_text(secondary, 8)
-                if not self.persistent_locked:
+                if show_reorder_buttons:
                     controls = TkFrame(row, background=background)
                     controls.pack(side="right", padx=(4, 0))
                     up = TkLabel(
@@ -877,6 +913,7 @@ class OverlayUI:
                         "<Button-1>",
                         lambda _event, target=entry.hwnd: self.reorder_character(target, "down"),
                     )
+                if drag_enabled:
                     for widget in (
                         row,
                         attention_marker,
@@ -947,6 +984,7 @@ class OverlayUI:
             1 if self.persistent_orientation == "horizontal" and self.entries else len(self.entries),
             locked=self.persistent_locked,
             fixed_height=self.persistent_height > 0,
+            show_title=self.persistent_show_title,
         )
 
     def _register_scaled_text(self, widget, base_size: int, *, bold: bool = False) -> None:

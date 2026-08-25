@@ -40,7 +40,9 @@ def ensure_dirs() -> dict:
     root = app_data_dir()
     profiles = root / "profiles"
     logs = root / "logs"
+    backups = root / "backups"
     root.mkdir(parents=True, exist_ok=True)
     profiles.mkdir(parents=True, exist_ok=True)
     logs.mkdir(parents=True, exist_ok=True)
-    return {"root": root, "profiles": profiles, "logs": logs}
+    backups.mkdir(parents=True, exist_ok=True)
+    return {"root": root, "profiles": profiles, "logs": logs, "backups": backups}

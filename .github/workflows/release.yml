@@ -30,6 +30,7 @@ jobs:
       prerelease: ${{ steps.metadata.outputs.prerelease }}
       tag: ${{ steps.metadata.outputs.tag }}
       target_sha: ${{ steps.metadata.outputs.target_sha }}
+      version: ${{ steps.metadata.outputs.version }}
     steps:
       - name: Récupérer les sources
         uses: actions/checkout@v4
@@ -93,6 +94,7 @@ jobs:
           $prerelease = ($tag.Contains("-")).ToString().ToLowerInvariant()
 
           "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$tagVersion" >> $env:GITHUB_OUTPUT
           "prerelease=$prerelease" >> $env:GITHUB_OUTPUT
           "target_sha=$targetSha" >> $env:GITHUB_OUTPUT
 
@@ -119,10 +121,40 @@ jobs:
 
       - name: Compiler et valider le plugin
         working-directory: streamdeck-plugin
-        run: npm run build && npm run validate && npm run pack
+        run: npm run build:profiles && npm run build && npm run validate && npm run pack
 
       - name: Compiler l'exécutable Windows
         run: python build_exe.py
+
+      - name: Signer l'exécutable si un certificat est configuré
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_BASE64 }}
+          WINDOWS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
+          WINDOWS_SIGNING_TIMESTAMP_URL: ${{ vars.WINDOWS_SIGNING_TIMESTAMP_URL }}
+        run: ./installer/sign_windows.ps1 -FilePath "dist/DofusWindowManager.exe"
+
+      - name: Installer Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Préparer l'exécutable pour l'installateur
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "release-assets" | Out-Null
+          Copy-Item "dist/DofusWindowManager.exe" "release-assets/DofusWindowManager.exe"
+
+      - name: Compiler l'installateur Windows
+        shell: pwsh
+        run: ./installer/build_installer.ps1 -AppVersion "${{ steps.metadata.outputs.version }}"
+
+      - name: Signer l'installateur si un certificat est configuré
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_BASE64 }}
+          WINDOWS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
+          WINDOWS_SIGNING_TIMESTAMP_URL: ${{ vars.WINDOWS_SIGNING_TIMESTAMP_URL }}
+        run: ./installer/sign_windows.ps1 -FilePath "release-assets/DofusWindowManager-Setup.exe"
 
       - name: Préparer et vérifier les fichiers
         shell: pwsh
@@ -132,6 +164,7 @@ jobs:
           $exe = "dist/DofusWindowManager.exe"
           $pluginSource = "streamdeck-plugin/com.remyducros.dofuswindowmanager.streamDeckPlugin"
           $pluginTarget = "$output/DofusWindowManager-StreamDeck.streamDeckPlugin"
+          $installer = "$output/DofusWindowManager-Setup.exe"
 
           Copy-Item $exe "$output/DofusWindowManager.exe"
           Copy-Item $pluginSource $pluginTarget
@@ -143,11 +176,14 @@ jobs:
 
           $exeHash = (Get-FileHash "$output/DofusWindowManager.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
           $pluginHash = (Get-FileHash $pluginTarget -Algorithm SHA256).Hash.ToLowerInvariant()
+          $installerHash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLowerInvariant()
           "$exeHash  DofusWindowManager.exe" | Set-Content "$output/DofusWindowManager.exe.sha256" -Encoding ascii
           "$pluginHash  DofusWindowManager-StreamDeck.streamDeckPlugin" | Set-Content "$output/DofusWindowManager-StreamDeck.streamDeckPlugin.sha256" -Encoding ascii
+          "$installerHash  DofusWindowManager-Setup.exe" | Set-Content "$output/DofusWindowManager-Setup.exe.sha256" -Encoding ascii
           @(
             "$exeHash  DofusWindowManager.exe"
             "$pluginHash  DofusWindowManager-StreamDeck.streamDeckPlugin"
+            "$installerHash  DofusWindowManager-Setup.exe"
           ) | Set-Content "$output/SHA256SUMS.txt" -Encoding ascii
 
           Get-ChildItem $output | Format-Table Name, Length
@@ -183,8 +219,8 @@ jobs:
         run: |
           set -euo pipefail
           mapfile -t assets < <(find release-assets -maxdepth 1 -type f -print | sort)
-          if [[ "${#assets[@]}" -ne 5 ]]; then
-            echo "Cinq fichiers de publication étaient attendus, ${#assets[@]} ont été trouvés." >&2
+          if [[ "${#assets[@]}" -ne 7 ]]; then
+            echo "Sept fichiers de publication étaient attendus, ${#assets[@]} ont été trouvés." >&2
             exit 1
           fi
 

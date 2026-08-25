@@ -1,5 +1,27 @@
 # Historique
 
+## À venir
+
+## 2.20.0-beta.4 — préversion Windows
+
+- passage du plugin Stream Deck en version 0.8.0 avec cinq profils modifiables et installés automatiquement selon le type d’appareil : Standard 15 touches, Mini, XL, Plus et Neo ;
+- ajout dans l’application d’un aperçu interactif permettant de basculer entre les cinq dispositions Stream Deck fournies ;
+- ajout d’une reconnaissance sûre des profils : un profil n’est chargé automatiquement que si son mode Unity/Retro et la liste complète de ses personnages correspondent exactement ; une correspondance ambiguë reste manuelle ;
+- ajout d’un mode performance adaptatif qui espace les scans de contrôle lorsque le hook Windows fonctionne, revient automatiquement à l’intervalle normal en cas de panne et expose les durées de scan/focus dans le diagnostic ;
+- ajout d’un paquet de support ZIP généré localement avec diagnostic, réglages assainis et fin des journaux ; pseudos, alias, profils, identifiants de fenêtres, chemins connus, e-mails et portraits en sont retirés ou remplacés ;
+- ajout d’une simulation sûre de l’overlay et de la notification avec quatre personnages fictifs, sans fenêtre Dofus ni action de focus ;
+- ajout des préréglages d’affichage **Minimal**, **Équilibré** et **Complet**, applicables au formulaire sans modifier le thème, la position ou l’orientation ;
+- ajout d’un bouton de capture pour chaque raccourci global, d’une validation en direct des touches et doublons, et d’un message associant les refus Windows à l’action concernée ;
+- ajout d’un historique local limité à douze points de restauration complets, créés manuellement ou avant une restauration, une importation, une réinitialisation et le remplacement/suppression d’un profil ;
+- ajout d’options d’accessibilité globales : contraste renforcé, échelle d’interface de 80 à 160 % et réduction des mouvements désactivant aussi le clignotement dans l’application, l’overlay et le Stream Deck ;
+- ajout d’un contrôle de santé du plugin Stream Deck comparant la version installée au paquet embarqué, avec proposition sûre d’installation, mise à jour ou réparation ;
+- ajout d’un installateur Windows Inno Setup par utilisateur, de son empreinte SHA-256 et d’une signature Authenticode conditionnelle pour l’exécutable et l’installateur lorsque les secrets de certificat sont configurés ;
+- ajout d’un assistant de premier lancement en six étapes pour choisir la langue et le mode Unity/Retro, configurer la détection, tester réellement le focus, prévisualiser l’overlay et installer facultativement le plugin Stream Deck ;
+- ajout d’un bouton **Assistant de configuration…** permettant de relancer ce guide à tout moment, sans l’imposer aux installations déjà configurées ;
+- ajout du sélecteur de langue directement dans l’avertissement de sécurité afin que celui-ci soit lisible avant toute activation des raccourcis globaux ;
+- ajout de réglages indépendants pour masquer le titre et les flèches de réorganisation de l’overlay ; le glisser-déposer reste disponible lorsque les flèches sont masquées ;
+- conservation d’une fine poignée supérieure lorsque le titre est masqué afin de pouvoir encore déplacer l’overlay déverrouillé.
+
 ## 2.20.0-beta.3 — préversion Windows
 
 - correction du contraste du bouton **Prochaine alerte** dans tous les thèmes, y compris lorsqu’aucune alerte n’est en attente ;

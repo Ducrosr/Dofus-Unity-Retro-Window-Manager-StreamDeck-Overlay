@@ -15,6 +15,7 @@ from ..services.display_overlay import (
     normalize_overlay_layout,
 )
 from ..services.character_visuals import sanitize_character_visuals
+from ..services.accessibility import clamp_ui_scale_percent
 from ..services.themes import (
     UNITY_STANDARD_THEME,
     default_theme_for_mode,
@@ -23,7 +24,7 @@ from ..services.themes import (
 from .atomic import atomic_write_text
 
 
-SETTINGS_SCHEMA_VERSION = 18
+SETTINGS_SCHEMA_VERSION = 23
 MODERN_DARK_THEME = UNITY_STANDARD_THEME  # Backward-compatible public name.
 DEFAULT_WINDOW_COLUMN_ORDER = ("class", "name", "alias", "hwnd")
 
@@ -46,6 +47,8 @@ def _default_display_preferences() -> dict[str, object]:
         "rotation_overlay_auto_width": True,
         "rotation_overlay_height": 0,
         "rotation_overlay_orientation": "vertical",
+        "rotation_overlay_show_title": True,
+        "rotation_overlay_show_reorder_buttons": True,
         "attention_blink_enabled": True,
         "show_popup_portraits": True,
         "show_popup_badges": True,
@@ -112,6 +115,12 @@ def _normalized_display_preferences(
         "rotation_overlay_orientation": normalize_overlay_orientation(
             base.get("rotation_overlay_orientation")
         ),
+        "rotation_overlay_show_title": bool(
+            base.get("rotation_overlay_show_title", True)
+        ),
+        "rotation_overlay_show_reorder_buttons": bool(
+            base.get("rotation_overlay_show_reorder_buttons", True)
+        ),
         "attention_blink_enabled": bool(base.get("attention_blink_enabled", True)),
         "show_popup_portraits": bool(base.get("show_popup_portraits", True)),
         "show_popup_badges": bool(base.get("show_popup_badges", True)),
@@ -130,6 +139,7 @@ class Settings:
     display_by_game_mode: dict[str, dict[str, object]] | None = None
     language: str = "fr"
     security_notice_accepted: bool = False
+    onboarding_completed: bool = False
     window_column_order: list[str] | None = None
     minimize_to_tray: bool = True
     start_with_windows: bool = False
@@ -152,6 +162,8 @@ class Settings:
     rotation_overlay_auto_width: bool = True
     rotation_overlay_height: int = 0
     rotation_overlay_orientation: str = "vertical"
+    rotation_overlay_show_title: bool = True
+    rotation_overlay_show_reorder_buttons: bool = True
     attention_blink_enabled: bool = True
     show_popup_portraits: bool = True
     show_popup_badges: bool = True
@@ -160,10 +172,14 @@ class Settings:
     show_character_portraits: bool = True
     show_character_badges: bool = True
     character_visuals: dict[str, dict[str, str]] | None = None
+    accessibility_high_contrast: bool = False
+    accessibility_reduce_motion: bool = False
+    accessibility_ui_scale_percent: int = 100
 
     # Refresh
     auto_refresh: bool = True
     refresh_seconds: int = 10
+    adaptive_performance_enabled: bool = True
 
     # Keep the window list in sync via WinEventHook (no polling required).
     # (no polling scans required)
@@ -177,6 +193,7 @@ class Settings:
 
     # Profiles
     last_profile: str = ""
+    smart_profile_loading_enabled: bool = True
 
     # Game selection
     game_mode: str = "unity"  # "unity" | "retro"
@@ -221,6 +238,8 @@ class Settings:
                 "rotation_overlay_auto_width": self.rotation_overlay_auto_width,
                 "rotation_overlay_height": self.rotation_overlay_height,
                 "rotation_overlay_orientation": self.rotation_overlay_orientation,
+                "rotation_overlay_show_title": self.rotation_overlay_show_title,
+                "rotation_overlay_show_reorder_buttons": self.rotation_overlay_show_reorder_buttons,
                 "attention_blink_enabled": self.attention_blink_enabled,
                 "show_popup_portraits": self.show_popup_portraits,
                 "show_popup_badges": self.show_popup_badges,
@@ -318,6 +337,9 @@ class Settings:
             self.rotation_overlay_width = 300
             self.rotation_overlay_height = 0
         self.character_visuals = sanitize_character_visuals(self.character_visuals)
+        self.accessibility_ui_scale_percent = clamp_ui_scale_percent(
+            self.accessibility_ui_scale_percent
+        )
         try:
             self.rotation_overlay_x = int(self.rotation_overlay_x)
             self.rotation_overlay_y = int(self.rotation_overlay_y)
@@ -355,6 +377,7 @@ class Settings:
             "display_by_game_mode": display_modes,
             "language": self.language,
             "security_notice_accepted": bool(self.security_notice_accepted),
+            "onboarding_completed": bool(self.onboarding_completed),
             "window_column_order": list(self.window_column_order or DEFAULT_WINDOW_COLUMN_ORDER),
             "minimize_to_tray": bool(self.minimize_to_tray),
             "start_with_windows": bool(self.start_with_windows),
@@ -381,6 +404,10 @@ class Settings:
             "rotation_overlay_auto_width": bool(self.rotation_overlay_auto_width),
             "rotation_overlay_height": int(self.rotation_overlay_height),
             "rotation_overlay_orientation": self.rotation_overlay_orientation,
+            "rotation_overlay_show_title": bool(self.rotation_overlay_show_title),
+            "rotation_overlay_show_reorder_buttons": bool(
+                self.rotation_overlay_show_reorder_buttons
+            ),
             "attention_blink_enabled": bool(self.attention_blink_enabled),
             "show_popup_portraits": bool(self.show_popup_portraits),
             "show_popup_badges": bool(self.show_popup_badges),
@@ -389,12 +416,17 @@ class Settings:
             "show_character_portraits": bool(self.show_character_portraits),
             "show_character_badges": bool(self.show_character_badges),
             "character_visuals": sanitize_character_visuals(self.character_visuals),
+            "accessibility_high_contrast": bool(self.accessibility_high_contrast),
+            "accessibility_reduce_motion": bool(self.accessibility_reduce_motion),
+            "accessibility_ui_scale_percent": int(self.accessibility_ui_scale_percent),
             "auto_refresh": self.auto_refresh,
             "refresh_seconds": int(self.refresh_seconds),
+            "adaptive_performance_enabled": bool(self.adaptive_performance_enabled),
             "event_hook_enabled": bool(self.event_hook_enabled),
             "popup_watch_enabled": bool(getattr(self, "popup_watch_enabled", False)),
             "hotkeys": dict(self.hotkeys or {}),
             "last_profile": self.last_profile,
+            "smart_profile_loading_enabled": bool(self.smart_profile_loading_enabled),
             "game_mode": self.game_mode,
             "retro_title_keyword": self.retro_title_keyword,
             "retro_process_keyword": self.retro_process_keyword,
@@ -434,6 +466,9 @@ class Settings:
             display_by_game_mode=d.get("display_by_game_mode") or None,
             language=str(d.get("language") or "fr"),
             security_notice_accepted=bool(d.get("security_notice_accepted", False)),
+            onboarding_completed=bool(
+                d.get("onboarding_completed", schema < SETTINGS_SCHEMA_VERSION)
+            ),
             window_column_order=d.get("window_column_order") or None,
             minimize_to_tray=bool(d.get("minimize_to_tray", True)),
             start_with_windows=bool(d.get("start_with_windows", False)),
@@ -464,6 +499,12 @@ class Settings:
             rotation_overlay_orientation=str(
                 d.get("rotation_overlay_orientation") or "vertical"
             ),
+            rotation_overlay_show_title=bool(
+                d.get("rotation_overlay_show_title", True)
+            ),
+            rotation_overlay_show_reorder_buttons=bool(
+                d.get("rotation_overlay_show_reorder_buttons", True)
+            ),
             attention_blink_enabled=bool(d.get("attention_blink_enabled", True)),
             show_popup_portraits=bool(d.get("show_popup_portraits", legacy_portraits)),
             show_popup_badges=bool(d.get("show_popup_badges", legacy_badges)),
@@ -472,12 +513,27 @@ class Settings:
             show_character_portraits=legacy_portraits,
             show_character_badges=legacy_badges,
             character_visuals=d.get("character_visuals") or None,
+            accessibility_high_contrast=bool(
+                d.get("accessibility_high_contrast", False)
+            ),
+            accessibility_reduce_motion=bool(
+                d.get("accessibility_reduce_motion", False)
+            ),
+            accessibility_ui_scale_percent=int(
+                d.get("accessibility_ui_scale_percent", 100)
+            ),
             auto_refresh=bool(d.get("auto_refresh", True)),
             refresh_seconds=int(d.get("refresh_seconds", 10)),
+            adaptive_performance_enabled=bool(
+                d.get("adaptive_performance_enabled", True)
+            ),
             event_hook_enabled=bool(d.get("event_hook_enabled", True)),
             popup_watch_enabled=bool(d.get("popup_watch_enabled", False)),
             hotkeys=d.get("hotkeys") or None,
             last_profile=d.get("last_profile", ""),
+            smart_profile_loading_enabled=bool(
+                d.get("smart_profile_loading_enabled", True)
+            ),
             game_mode=stored_game_mode,
             retro_title_keyword=retro_title or "dofus retro v",
             retro_process_keyword=retro_proc,

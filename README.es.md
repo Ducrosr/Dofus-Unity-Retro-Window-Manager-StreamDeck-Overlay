@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.3"><strong>⬇ Descargar para Windows</strong></a>
+  <a href="https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.4"><strong>⬇ Descargar para Windows</strong></a>
   ·
   <a href="docs/INSTALLATION.md">Guía de instalación</a>
   ·
@@ -33,39 +33,52 @@ Gestor local de ventanas para Windows compatible con **Dofus Unity** y **Dofus R
 >
 > Consulta también la guía oficial de Ankama: **[Reconocer el phishing y protegerse](https://support.ankama.com/hc/fr/articles/201376953-Reconna%C3%AEtre-le-phishing-et-s-en-prot%C3%A9ger)**.
 
-La versión 2.20.0 es la beta pública actual. Reúne la interfaz multilingüe, los overlays, las solicitudes de atención, los retratos, los iconos oficiales y los temas Unity/Retro. El ejecutable de Windows correspondiente está disponible en la [Release oficial v2.20.0-beta.3](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.3).
+La versión 2.20.0 es la beta pública actual. Reúne la interfaz multilingüe, los overlays, las solicitudes de atención, los retratos, los iconos oficiales y los temas Unity/Retro. El ejecutable de Windows correspondiente está disponible en la [Release oficial v2.20.0-beta.4](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.4).
 
 ## Funciones principales
 
 - detección nativa de ventanas Dofus Unity y Retro;
 - atajos globales para el personaje siguiente y anterior, además de ocho atajos directos opcionales para las posiciones 1 a 8;
+- captura guiada de combinaciones, detección inmediata de duplicados y etiquetas explícitas para los atajos rechazados o ya utilizados por Windows;
 - orden por botones o arrastrar y soltar;
 - alias, retrato personalizado o de clase incluido, 39 iconos oficiales de características y 20 iconos oficiales de oficios por personaje;
 - las ventanas ignoradas conservan su tecla de Stream Deck, pero salen de la rotación automática;
 - perfiles JSON por servidor con orden, alias, retratos e iconos independientes, además de una copia completa de la configuración;
+- historial local de los doce últimos puntos de restauración completos, con creación manual y protección automática antes de operaciones de riesgo;
+- reconocimiento opcional del perfil del servidor mediante una coincidencia exacta de personajes y del modo Unity/Retro, sin elección automática cuando coinciden varios perfiles;
 - escritura atómica de ajustes y perfiles, con copia automática de los últimos ajustes válidos;
 - cambio instantáneo entre Unity y Retro con preferencias de visualización separadas para cada versión;
+- modo de rendimiento adaptativo que espacia los escaneos de recuperación mientras los eventos de Windows funcionan y restaura automáticamente el intervalo normal cuando es necesario;
 - modo compacto siempre visible;
 - recuperación automática del modo compacto y del overlay tras un cambio de monitores;
 - notificación de cambio personalizable con anchura automática según el contenido, posición, duración y opacidad;
 - overlay de rotación transparente vertical u horizontal, desplazable y redimensionable, con anchura automática opcional;
+- título y flechas de reordenación del overlay opcionales; arrastrar y soltar sigue disponible cuando se ocultan las flechas;
 - retratos e iconos visibles u ocultables de forma independiente en la notificación, el overlay y Stream Deck;
 - indicador naranja `!` de solicitud de atención, con parpadeo suave opcional, en la aplicación, el overlay y Stream Deck;
 - cola cronológica `!1`, `!2`… con acción **Siguiente alerta** en la aplicación, el overlay, el atajo F8 y Stream Deck;
+- perfiles editables incluidos para Stream Deck Standard de 15 teclas, Mini, XL, Plus y Neo, disponibles también en la vista previa integrada;
+- comprobación del estado del plugin instalado con reparación explícita mediante el paquete oficial incluido;
 - doce temas disponibles en ambos modos: Standard, Bonta, Brakmar, Tribute, Gold and Steel, Belladone, Unicorn, Emerald Mine, Sufokia, Pandala, Wabbit y Retro;
 - francés por defecto, además de inglés y español seleccionables mediante botones con banderas gráficas;
 - ajustes organizados en las pestañas General, Apariencia y Atajos;
+- opciones de accesibilidad para contraste alto, escala de interfaz del 80 al 160 % y reducción de movimiento/parpadeo;
 - aviso de seguridad obligatorio en el primer inicio, antes de activar los atajos globales;
+- configuración inicial guiada para idioma, modo Unity/Retro, detección, prueba de enfoque, overlay e instalación opcional de Stream Deck;
+- simulación del overlay y la notificación con personajes ficticios, sin Dofus abierto ni acción de enfoque;
+- preajustes Minimal, Equilibrado y Completo para cambiar rápidamente la densidad visual;
 - restablecimiento independiente de la visualización que conserva perfiles y personalizaciones de personajes;
-- comprobación opcional de Releases oficiales, sin descarga automática.
+- comprobación opcional de Releases oficiales, sin descarga automática;
+- métricas locales de duración de escaneos y latencia de enfoque en el diagnóstico;
+- paquete ZIP de soporte anonimizado opcional, sin retratos ni configuración restaurable.
 
 Standard es el tema predeterminado tanto para Unity como para Retro. Todos los temas pueden utilizarse en ambos modos y la aplicación recuerda un tema y un conjunto de preferencias de visualización distintos para cada versión del juego.
 
-## Stream Deck 0.7.0
+## Stream Deck 0.8.0
 
 El plugin incluye ocho teclas de personaje y acciones Anterior, Siguiente, Siguiente alerta, Subir, Bajar, Ignorar/restaurar, Actualizar y Abrir/mostrar. La tecla Siguiente alerta muestra el número pendiente y activa la solicitud más antigua. En cada tecla se puede colocar el número, nombre, clase y alias de forma independiente en cuatro líneas. Los retratos, iconos, orden de alertas, tema activo e idioma se sincronizan automáticamente.
 
-El perfil incluido está preparado para el Stream Deck estándar de 15 teclas. Una ventana excluida de la rotación sigue siendo accesible desde su tecla asignada.
+Stream Deck sigue siendo opcional. El paquete proporciona automáticamente un diseño editable para los modelos Standard de 15 teclas, Mini, XL, Plus y Neo. Los dispositivos compactos priorizan las teclas de personaje y Anterior/Siguiente, mientras que el diseño XL muestra los ocho personajes y todos los comandos en sus dos primeras filas. Una ventana excluida de la rotación sigue siendo accesible desde su tecla asignada.
 
 ## Instalación rápida
 
@@ -125,7 +138,7 @@ py -3.14 -m ruff check .
 py -3.14 build_exe.py
 ```
 
-PyInstaller crea `dist\DofusWindowManager.exe`. Las fuentes y los comandos del plugin se encuentran en [`streamdeck-plugin`](streamdeck-plugin/README.md).
+PyInstaller crea `dist\DofusWindowManager.exe`; el repositorio también contiene una definición de Inno Setup para `DofusWindowManager-Setup.exe`. Las fuentes y los comandos del plugin se encuentran en [`streamdeck-plugin`](streamdeck-plugin/README.md).
 
 ## Estado del proyecto
 

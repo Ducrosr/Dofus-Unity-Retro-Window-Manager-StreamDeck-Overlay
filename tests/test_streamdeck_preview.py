@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import unittest
 
-from dwm.services.streamdeck_preview import STREAMDECK_PROFILE_LAYOUT, format_character_key
+from dwm.services.streamdeck_preview import (
+    STREAMDECK_PROFILE_LABELS,
+    STREAMDECK_PROFILE_LAYOUT,
+    STREAMDECK_PROFILE_LAYOUTS,
+    format_character_key,
+)
 
 
 class StreamDeckPreviewTests(unittest.TestCase):
@@ -13,6 +18,15 @@ class StreamDeckPreviewTests(unittest.TestCase):
             [key for row in STREAMDECK_PROFILE_LAYOUT for key in row if isinstance(key, int)],
             list(range(1, 9)),
         )
+
+    def test_previews_cover_each_bundled_device_profile(self) -> None:
+        self.assertEqual(
+            set(STREAMDECK_PROFILE_LAYOUTS),
+            {"standard", "mini", "xl", "plus", "neo"},
+        )
+        self.assertEqual(set(STREAMDECK_PROFILE_LABELS), set(STREAMDECK_PROFILE_LAYOUTS))
+        self.assertEqual(tuple(map(len, STREAMDECK_PROFILE_LAYOUTS["mini"])), (3, 3))
+        self.assertEqual(tuple(map(len, STREAMDECK_PROFILE_LAYOUTS["xl"])), (8, 8, 8, 8))
 
     def test_character_key_uses_the_default_four_line_layout(self) -> None:
         self.assertEqual(

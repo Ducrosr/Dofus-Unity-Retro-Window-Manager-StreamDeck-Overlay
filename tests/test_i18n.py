@@ -39,12 +39,60 @@ class I18nTests(unittest.TestCase):
         self.assertEqual(tr("Avertissement de sécurité", language="en"), "Security warning")
         self.assertEqual(tr("Continuer", language="es"), "Continuar")
         self.assertEqual(
+            tr("Assistant de configuration…", language="en"),
+            "Setup assistant…",
+        )
+        self.assertEqual(
+            tr("Fenêtres détectées : {count}", language="es", count=8),
+            "Ventanas detectadas: 8",
+        )
+        self.assertEqual(
+            tr("Afficher le titre de l’overlay", language="en"),
+            "Show the overlay title",
+        )
+        self.assertEqual(
+            tr("Afficher les flèches de réorganisation", language="es"),
+            "Mostrar las flechas de reordenación",
+        )
+        self.assertEqual(
             tr("Adapter automatiquement la largeur de l’overlay au contenu", language="en"),
             "Automatically fit the overlay width to its content",
         )
         self.assertEqual(
             tr("Afficher les icônes dans la notification", language="es"),
             "Mostrar iconos en la notificación",
+        )
+        self.assertEqual(
+            tr("Aperçu Stream Deck multi-modèles", language="en"),
+            "Multi-device Stream Deck preview",
+        )
+        self.assertEqual(
+            tr("Modèle de Stream Deck", language="es"),
+            "Modelo de Stream Deck",
+        )
+        self.assertEqual(
+            tr("Charger automatiquement un profil reconnu exactement", language="en"),
+            "Automatically load an exact recognized profile",
+        )
+        self.assertEqual(
+            tr(
+                "Espacer les scans de contrôle lorsque la détection en temps réel est active",
+                language="es",
+            ),
+            "Espaciar los escaneos de control cuando la detección en tiempo real esté activa",
+        )
+        self.assertEqual(
+            tr("Créer un paquet de support…", language="en"),
+            "Create a support bundle…",
+        )
+        self.assertEqual(tr("Préréglages d’affichage", language="es"), "Preajustes de visualización")
+        self.assertEqual(tr("Équilibré", language="en"), "Balanced")
+        self.assertEqual(tr("Capturer un raccourci", language="en"), "Capture a shortcut")
+        self.assertEqual(tr("Points de restauration locaux", language="en"), "Local restore points")
+        self.assertEqual(tr("Contraste renforcé", language="es"), "Contraste alto")
+        self.assertEqual(
+            tr("Installer ou réparer le plugin Stream Deck", language="en"),
+            "Install or repair the Stream Deck plugin",
         )
 
     def test_translated_text_can_be_mapped_back_to_its_source(self) -> None:

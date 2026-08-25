@@ -164,6 +164,17 @@ class DisplayOverlayTests(unittest.TestCase):
             calculate_overlay_text_scale(240, 90, 8, locked=False, fixed_height=True),
             0.55,
         )
+        self.assertEqual(
+            calculate_overlay_text_scale(
+                300,
+                188,
+                4,
+                locked=False,
+                fixed_height=True,
+                show_title=False,
+            ),
+            1.0,
+        )
 
 
 if __name__ == "__main__":

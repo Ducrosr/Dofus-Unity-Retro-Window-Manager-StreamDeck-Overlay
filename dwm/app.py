@@ -18,6 +18,7 @@ from tkinter.ttk import (
     Label as TtkLabel,
     LabelFrame as TtkLabelFrame,
     Notebook,
+    Radiobutton as TtkRadiobutton,
     Scrollbar,
     Spinbox,
     Style,
@@ -48,18 +49,41 @@ from .services.themes import (
     theme_palette,
 )
 from .services.hotkeys_win import HotkeyManager, parse_hotkey
+from .services.hotkey_capture import (
+    captured_hotkey_spec,
+    describe_registration_errors,
+    find_hotkey_conflicts,
+)
 from .services.i18n import (
     LANGUAGE_FLAGS,
     LANGUAGES,
+    LANGUAGE_NAMES,
     install_messagebox_translation,
     set_language,
     tr,
     translation_notice,
     translation_source,
 )
+from .services.onboarding import (
+    OnboardingChoices,
+    apply_onboarding_choices,
+    onboarding_required,
+)
+from .services.profile_matching import rank_profile_matches, unique_exact_profile_match
+from .services.performance import RuntimeMetrics, adaptive_refresh_delay_seconds
+from .services.support_bundle import create_support_bundle
 from .services.streamdeck_bridge import StreamDeckBridge
 from .services.streamdeck_installer import open_streamdeck_plugin
-from .services.streamdeck_preview import STREAMDECK_ACTION_LABELS, STREAMDECK_PROFILE_LAYOUT, format_character_key
+from .services.streamdeck_health import (
+    StreamDeckPluginHealth,
+    evaluate_streamdeck_plugin_health,
+)
+from .services.streamdeck_preview import (
+    STREAMDECK_ACTION_LABELS,
+    STREAMDECK_PROFILE_LABELS,
+    STREAMDECK_PROFILE_LAYOUTS,
+    format_character_key,
+)
 from .services.streamdeck_state import build_streamdeck_windows, reconcile_streamdeck_order
 from .services.update_checker import (
     ReleaseInfo,
@@ -71,6 +95,12 @@ from .services.update_checker import (
 )
 from .services.ui_scroll import vertical_scroll_needed, wheel_scroll_units
 from .services.configuration_backup import build_configuration_backup, parse_configuration_backup
+from .services.backup_history import (
+    BackupSnapshot,
+    create_backup_snapshot,
+    list_backup_snapshots,
+    load_backup_snapshot,
+)
 from .services.diagnostics import (
     build_diagnostic_report,
     format_activity,
@@ -79,6 +109,7 @@ from .services.diagnostics import (
     read_packaged_plugin_version,
 )
 from .services.display_overlay import (
+    CharacterDisplay,
     DEFAULT_ROTATION_OVERLAY_LAYOUT,
     build_rotation_displays,
     build_single_display,
@@ -86,7 +117,17 @@ from .services.display_overlay import (
     clamp_overlay_opacity,
     normalize_overlay_orientation,
 )
+from .services.display_presets import (
+    DISPLAY_PRESET_IDS,
+    DISPLAY_PRESET_LABELS,
+    display_preset_values,
+)
 from .services.attention_state import WindowAttentionState
+from .services.accessibility import (
+    clamp_ui_scale_percent,
+    high_contrast_palette,
+    motion_allowed,
+)
 from .services.character_visuals import (
     BADGE_CATALOG,
     badge_from_label,
@@ -184,7 +225,10 @@ def app_theme_palette(theme_name: str) -> dict[str, str]:
 
 
 def resolved_theme_palette(root, theme_name: str) -> dict[str, str]:
-    return app_theme_palette(theme_name)
+    return high_contrast_palette(
+        app_theme_palette(theme_name),
+        enabled=getattr(root, "_dwm_high_contrast", False) is True,
+    )
 
 
 def blend_hex_colors(foreground: str, background: str, ratio: float) -> str:
@@ -215,7 +259,7 @@ def apply_dark_theme(root, theme_name: str = MODERN_DARK_THEME) -> None:
         style.theme_use(t)
     except Exception:
         style.theme_use("clam")
-    C = app_theme_palette(t)
+    C = resolved_theme_palette(root, t)
 
     try:
         root.configure(bg=C["bg"])
@@ -442,9 +486,12 @@ class WindowManagerApp:
         self._ignored: set[int] = set()
         self._streamdeck_order: list[int] = []  # stable slots, including ignored windows
         self._streamdeck_preview_entries: list[dict[str, object]] = []
+        self._streamdeck_preview_profile_key = "standard"
         self.streamdeck_preview_window: Toplevel | None = None
         self._streamdeck_preview_buttons: dict[int, TtkButton] = {}
         self._streamdeck_preview_poll_job: str | None = None
+        self.display_simulation_window: Toplevel | None = None
+        self._display_simulation_ui: OverlayUI | None = None
         self.rotation_index: int = 0
         self._active_game_hwnd: int | None = None
         self._pending_rotation_delta = 0
@@ -453,6 +500,8 @@ class WindowManagerApp:
         self._attention_blink_phase = True
         self.aliases: dict[str, str] = {}
         self._active_profile_name = ""
+        self._profile_match_signature: tuple[str, tuple[str, ...]] | None = None
+        self._profile_match_job: str | None = None
         self._legacy_character_visuals = sanitize_character_visuals(
             self.settings.character_visuals
         )
@@ -496,12 +545,28 @@ class WindowManagerApp:
         # Debounce scan requests (helps when the user clicks refresh multiple times).
         self._last_scan_monotonic: float = 0.0
         self._min_scan_interval_sec: float = 0.35
+        self._scan_started_monotonic: float | None = None
+        self._scheduled_refresh_delay_seconds = max(
+            2, int(self.settings.refresh_seconds)
+        )
+        self.runtime_metrics = RuntimeMetrics()
 
         # ---- Hotkeys ----
         self.hotkeys = HotkeyManager()
 
         # ---- UI ----
         self.root = Tk()
+        self._base_tk_scaling = float(self.root.tk.call("tk", "scaling"))
+        self.root._dwm_high_contrast = bool(  # type: ignore[attr-defined]
+            self.settings.accessibility_high_contrast
+        )
+        self.root.tk.call(
+            "tk",
+            "scaling",
+            self._base_tk_scaling
+            * clamp_ui_scale_percent(self.settings.accessibility_ui_scale_percent)
+            / 100.0,
+        )
         self.root.title(f"Dofus Window Manager {__version__} ({self.game_label})")
         self.root.geometry("1040x760")
         self.root.minsize(900, 620)
@@ -615,6 +680,9 @@ class WindowManagerApp:
         # Initial refresh
         self.refresh_windows()
 
+        if onboarding_required(self.settings):
+            self._show_first_run_assistant()
+
         # A delayed background check keeps startup responsive and never opens a
         # browser or downloads a file without an explicit user action.
         self.root.after(3000, self._check_updates_on_startup)
@@ -650,6 +718,45 @@ class WindowManagerApp:
 
         content = TtkFrame(dialog, padding=18)
         content.pack(fill="both", expand=True)
+        language_row = TtkFrame(content)
+        language_row.pack(fill="x", pady=(0, 10))
+        TtkLabel(language_row, text=tr("Langue")).pack(side="left")
+        language_buttons: dict[str, TtkButton] = {}
+        security_flag_images = self._load_language_flag_images()
+
+        def select_notice_language(language: str) -> None:
+            self.settings.language = set_language(language)
+            self._localize_widget_tree(dialog)
+            dialog.title(tr("Avertissement de sécurité"))
+            for code, button in language_buttons.items():
+                button.configure(
+                    style=(
+                        "LanguageActive.TButton"
+                        if code == self.settings.language
+                        else "Language.TButton"
+                    )
+                )
+
+        for language in LANGUAGES:
+            flag_image = security_flag_images.get(language)
+            button = TtkButton(
+                language_row,
+                text=(
+                    LANGUAGE_NAMES[language]
+                    if flag_image is not None
+                    else f"{LANGUAGE_FLAGS[language]} {LANGUAGE_NAMES[language]}"
+                ),
+                image=flag_image or "",
+                compound="left",
+                style=(
+                    "LanguageActive.TButton"
+                    if language == self.settings.language
+                    else "Language.TButton"
+                ),
+                command=lambda selected=language: select_notice_language(selected),
+            )
+            button.pack(side="right", padx=(4, 0))
+            language_buttons[language] = button
         TtkLabel(
             content,
             text=tr("Avant d’utiliser Dofus Window Manager"),
@@ -747,6 +854,415 @@ class WindowManagerApp:
             self.root.deiconify()
         return accepted
 
+    def _show_first_run_assistant(self, *, force: bool = False) -> bool:
+        if not force and not onboarding_required(self.settings):
+            return False
+
+        was_completed = bool(self.settings.onboarding_completed)
+        language_var = StringVar(value=self.settings.language)
+        game_mode_var = StringVar(value=self.game_mode)
+        event_hook_var = BooleanVar(value=bool(self.settings.event_hook_enabled))
+        auto_refresh_var = BooleanVar(value=bool(self.settings.auto_refresh))
+        overlay_enabled_var = BooleanVar(value=bool(self.settings.rotation_overlay_enabled))
+        overlay_orientation_var = StringVar(value=self.settings.rotation_overlay_orientation)
+        overlay_opacity_var = StringVar(value=str(self.settings.rotation_overlay_opacity))
+        overlay_title_var = BooleanVar(value=bool(self.settings.rotation_overlay_show_title))
+        overlay_arrows_var = BooleanVar(
+            value=bool(self.settings.rotation_overlay_show_reorder_buttons)
+        )
+        detection_status = StringVar()
+        focus_status = StringVar()
+        streamdeck_status = StringVar()
+        current_step = 0
+        completed = False
+
+        dialog = Toplevel(self.root)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+        try:
+            dialog.iconbitmap(resource_path("icons", "dofus.ico"))
+        except Exception:
+            pass
+
+        shell = TtkFrame(dialog, padding=18)
+        shell.pack(fill="both", expand=True)
+        title_var = StringVar()
+        progress_var = StringVar()
+        TtkLabel(shell, textvariable=title_var, style="Header.TLabel").pack(anchor="w")
+        TtkLabel(shell, textvariable=progress_var, style="Muted.TLabel").pack(
+            anchor="w", pady=(2, 12)
+        )
+        page = TtkFrame(shell, width=660, height=330)
+        page.pack(fill="both", expand=True)
+        page.pack_propagate(False)
+        footer = TtkFrame(shell)
+        footer.pack(fill="x", pady=(14, 0))
+
+        later_button = TtkButton(footer)
+        later_button.pack(side="left")
+        next_button = TtkButton(footer, style="Accent.TButton")
+        next_button.pack(side="right")
+        previous_button = TtkButton(footer)
+        previous_button.pack(side="right", padx=(0, 8))
+
+        def choices() -> OnboardingChoices:
+            try:
+                opacity = int(overlay_opacity_var.get())
+            except (TypeError, ValueError):
+                opacity = self.settings.rotation_overlay_opacity
+            return OnboardingChoices(
+                language=language_var.get(),
+                game_mode=game_mode_var.get(),
+                event_hook_enabled=bool(event_hook_var.get()),
+                auto_refresh=bool(auto_refresh_var.get()),
+                overlay_enabled=bool(overlay_enabled_var.get()),
+                overlay_orientation=overlay_orientation_var.get(),
+                overlay_opacity=opacity,
+                overlay_show_title=bool(overlay_title_var.get()),
+                overlay_show_reorder_buttons=bool(overlay_arrows_var.get()),
+            )
+
+        def apply_choices(*, mark_completed: bool, persist: bool = True) -> bool:
+            selected = choices()
+            if selected.game_mode != self.game_mode:
+                self.switch_game_mode(selected.game_mode)
+            apply_onboarding_choices(self.settings, selected)
+            self.settings.onboarding_completed = mark_completed or was_completed
+            self.settings.language = set_language(selected.language)
+            self.auto_refresh_enabled.set(self.settings.auto_refresh)
+            if self.settings.event_hook_enabled:
+                self._start_win_event_hook()
+            else:
+                self._stop_win_event_hook()
+            self._apply_display_preferences()
+            self._localize_ui()
+            if persist:
+                try:
+                    save_settings(self.settings_path, self.settings)
+                except OSError as exc:
+                    messagebox.showerror(
+                        tr("Enregistrement impossible"),
+                        str(exc),
+                        parent=dialog,
+                    )
+                    return False
+            return True
+
+        def preview_overlay(*_args) -> None:
+            try:
+                selected = choices()
+                self.settings.rotation_overlay_enabled = selected.overlay_enabled
+                self.settings.rotation_overlay_orientation = selected.overlay_orientation
+                self.settings.rotation_overlay_opacity = clamp_overlay_opacity(
+                    selected.overlay_opacity
+                )
+                self.settings.rotation_overlay_show_title = selected.overlay_show_title
+                self.settings.rotation_overlay_show_reorder_buttons = (
+                    selected.overlay_show_reorder_buttons
+                )
+                self.settings.remember_display_preferences(self.game_mode)
+                self._apply_display_preferences()
+            except Exception:
+                return
+
+        def select_language(language: str) -> None:
+            language_var.set(language)
+            self.settings.language = set_language(language)
+            self._localize_ui()
+            render_step()
+
+        def scan_now() -> None:
+            detection_status.set(tr("Analyse en cours…"))
+            self.refresh_windows(force=True)
+
+        def refresh_detection_status() -> None:
+            try:
+                if not dialog.winfo_exists():
+                    return
+            except Exception:
+                return
+            detection_status.set(
+                tr("Fenêtres détectées : {count}", count=len(self._managed_order))
+            )
+            dialog.after(400, refresh_detection_status)
+
+        def test_focus() -> None:
+            if not self._managed_order:
+                focus_status.set(
+                    tr("Aucune fenêtre à tester. Ouvrez Dofus puis relancez l’analyse.")
+                )
+                return
+            hwnd = self._managed_order[0]
+            window = self._all_windows.get(hwnd)
+            if window is None or not is_window(hwnd):
+                focus_status.set(tr("La première fenêtre n’est plus disponible."))
+                self.refresh_windows(force=True)
+                return
+            try:
+                self._focus_hwnd_measured(hwnd)
+            except FocusError as exc:
+                focus_status.set(tr("Échec du focus : {error}", error=exc))
+                return
+            self._record_character_focus(hwnd, notify=False)
+            focus_status.set(
+                tr("Focus réussi sur {name}.", name=window.pseudo)
+            )
+
+            def restore_wizard() -> None:
+                try:
+                    dialog.lift()
+                    dialog.focus_force()
+                except Exception:
+                    pass
+
+            dialog.after(1200, restore_wizard)
+
+        def install_streamdeck() -> None:
+            if self.install_streamdeck_plugin():
+                streamdeck_status.set(
+                    tr("Le paquet a été ouvert dans Stream Deck pour confirmation.")
+                )
+
+        step_titles = (
+            "Choisir la langue",
+            "Choisir la version de Dofus",
+            "Configurer la détection",
+            "Tester le focus",
+            "Configurer l’overlay",
+            "Stream Deck facultatif",
+        )
+
+        def add_text(text: str, *, muted: bool = False, pady=(0, 10)) -> None:
+            TtkLabel(
+                page,
+                text=tr(text),
+                style="Muted.TLabel" if muted else "TLabel",
+                justify="left",
+                wraplength=620,
+            ).pack(anchor="w", fill="x", pady=pady)
+
+        def render_step() -> None:
+            for child in page.winfo_children():
+                child.destroy()
+            dialog.title(tr("Assistant de configuration"))
+            title_var.set(tr(step_titles[current_step]))
+            progress_var.set(
+                tr("Étape {current} sur {total}", current=current_step + 1, total=len(step_titles))
+            )
+            later_button.configure(text=tr("Configurer plus tard"))
+            previous_button.configure(
+                text=tr("← Précédent"),
+                state="disabled" if current_step == 0 else "normal",
+            )
+            next_button.configure(
+                text=tr("Terminer") if current_step == len(step_titles) - 1 else tr("Suivant →")
+            )
+
+            if current_step == 0:
+                add_text(
+                    "Bienvenue dans Dofus Window Manager. Cet assistant configure les éléments essentiels sans modifier vos profils de personnages."
+                )
+                language_box = TtkLabelFrame(page, text=tr("Langue"), padding=10)
+                language_box.pack(fill="x", pady=(5, 0))
+                for language in LANGUAGES:
+                    flag_image = self._language_flag_images.get(language)
+                    button = TtkButton(
+                        language_box,
+                        text=(
+                            LANGUAGE_NAMES[language]
+                            if flag_image is not None
+                            else f"{LANGUAGE_FLAGS[language]} {LANGUAGE_NAMES[language]}"
+                        ),
+                        image=flag_image or "",
+                        compound="left",
+                        style=(
+                            "LanguageActive.TButton"
+                            if language == language_var.get()
+                            else "Language.TButton"
+                        ),
+                        command=lambda selected=language: select_language(selected),
+                    )
+                    button.pack(side="left", padx=(0, 8))
+                add_text(
+                    "Les traductions anglaise et espagnole ont été réalisées avec l’aide d’une IA et peuvent être corrigées depuis le dépôt officiel.",
+                    muted=True,
+                    pady=(12, 0),
+                )
+            elif current_step == 1:
+                add_text(
+                    "Sélectionnez la version utilisée maintenant. Vous pourrez changer de mode à tout moment sans redémarrer l’application."
+                )
+                TtkRadiobutton(
+                    page,
+                    text="Dofus Unity",
+                    value="unity",
+                    variable=game_mode_var,
+                ).pack(anchor="w", pady=6)
+                TtkRadiobutton(
+                    page,
+                    text="Dofus Retro",
+                    value="retro",
+                    variable=game_mode_var,
+                ).pack(anchor="w", pady=6)
+            elif current_step == 2:
+                add_text(
+                    "Ouvrez vos clients Dofus, puis lancez une analyse. La synchronisation en temps réel évite les scans complets inutiles."
+                )
+                TtkCheckbutton(
+                    page,
+                    text=tr("Synchronisation en temps réel et détection des demandes d’attention Windows"),
+                    variable=event_hook_var,
+                ).pack(anchor="w", pady=4)
+                TtkCheckbutton(
+                    page,
+                    text=tr("Actualisation automatique"),
+                    variable=auto_refresh_var,
+                ).pack(anchor="w", pady=4)
+                action_row = TtkFrame(page)
+                action_row.pack(fill="x", pady=(16, 8))
+                TtkButton(
+                    action_row,
+                    text=tr("Analyser maintenant"),
+                    command=scan_now,
+                    style="Accent.TButton",
+                ).pack(side="left")
+                TtkLabel(
+                    action_row,
+                    textvariable=detection_status,
+                    style="Muted.TLabel",
+                ).pack(side="left", padx=(12, 0))
+            elif current_step == 3:
+                add_text(
+                    "Ce test active brièvement la première fenêtre détectée, puis ramène cet assistant au premier plan."
+                )
+                TtkLabel(page, textvariable=detection_status, style="Muted.TLabel").pack(
+                    anchor="w", pady=(0, 12)
+                )
+                TtkButton(
+                    page,
+                    text=tr("Tester la première fenêtre"),
+                    command=test_focus,
+                    style="Accent.TButton",
+                ).pack(anchor="w")
+                TtkLabel(
+                    page,
+                    textvariable=focus_status,
+                    style="Muted.TLabel",
+                    wraplength=620,
+                ).pack(anchor="w", pady=(12, 0))
+            elif current_step == 4:
+                add_text(
+                    "L’aperçu est appliqué immédiatement. Les réglages resteront indépendants entre Unity et Retro."
+                )
+                TtkCheckbutton(
+                    page,
+                    text=tr("Afficher en permanence la rotation"),
+                    variable=overlay_enabled_var,
+                    command=preview_overlay,
+                ).pack(anchor="w", pady=4)
+                orientation = TtkFrame(page)
+                orientation.pack(fill="x", pady=4)
+                TtkLabel(orientation, text=tr("Orientation")).pack(side="left", padx=(0, 12))
+                TtkRadiobutton(
+                    orientation,
+                    text=tr("Vertical"),
+                    value="vertical",
+                    variable=overlay_orientation_var,
+                    command=preview_overlay,
+                ).pack(side="left")
+                TtkRadiobutton(
+                    orientation,
+                    text=tr("Horizontal"),
+                    value="horizontal",
+                    variable=overlay_orientation_var,
+                    command=preview_overlay,
+                ).pack(side="left", padx=(12, 0))
+                opacity = TtkFrame(page)
+                opacity.pack(fill="x", pady=4)
+                TtkLabel(opacity, text=tr("Opacité")).pack(side="left", padx=(0, 12))
+                opacity_input = Spinbox(
+                    opacity,
+                    from_=35,
+                    to=100,
+                    textvariable=overlay_opacity_var,
+                    width=6,
+                    command=preview_overlay,
+                )
+                opacity_input.pack(side="left")
+                opacity_input.bind("<KeyRelease>", preview_overlay)
+                opacity_input.bind("<FocusOut>", preview_overlay)
+                TtkLabel(opacity, text=" %", style="Muted.TLabel").pack(side="left")
+                TtkCheckbutton(
+                    page,
+                    text=tr("Afficher le titre de l’overlay"),
+                    variable=overlay_title_var,
+                    command=preview_overlay,
+                ).pack(anchor="w", pady=4)
+                TtkCheckbutton(
+                    page,
+                    text=tr("Afficher les flèches de réorganisation"),
+                    variable=overlay_arrows_var,
+                    command=preview_overlay,
+                ).pack(anchor="w", pady=4)
+            else:
+                add_text(
+                    "Le Stream Deck n’est pas nécessaire : les boutons de l’application, l’overlay et les raccourcis clavier fonctionnent seuls."
+                )
+                add_text(
+                    "Si vous possédez un Stream Deck, ouvrez maintenant le paquet officiel et confirmez son installation dans le logiciel Elgato.",
+                    muted=True,
+                )
+                TtkButton(
+                    page,
+                    text=tr("Installer le plugin Stream Deck"),
+                    command=install_streamdeck,
+                    style="Accent.TButton",
+                ).pack(anchor="w", pady=(6, 0))
+                TtkLabel(
+                    page,
+                    textvariable=streamdeck_status,
+                    style="Muted.TLabel",
+                    wraplength=620,
+                ).pack(anchor="w", pady=(12, 0))
+
+        def go_previous() -> None:
+            nonlocal current_step
+            if current_step <= 0:
+                return
+            if not apply_choices(mark_completed=False):
+                return
+            current_step -= 1
+            render_step()
+
+        def go_next() -> None:
+            nonlocal current_step, completed
+            if not apply_choices(mark_completed=current_step == len(step_titles) - 1):
+                return
+            if current_step < len(step_titles) - 1:
+                current_step += 1
+                render_step()
+                return
+            completed = True
+            dialog.destroy()
+
+        def configure_later() -> None:
+            if apply_choices(mark_completed=False):
+                dialog.destroy()
+
+        later_button.configure(command=configure_later)
+        previous_button.configure(command=go_previous)
+        next_button.configure(command=go_next)
+        dialog.protocol("WM_DELETE_WINDOW", configure_later)
+        render_step()
+        refresh_detection_status()
+        dialog.update_idletasks()
+        x = max(0, (dialog.winfo_screenwidth() - dialog.winfo_reqwidth()) // 2)
+        y = max(0, (dialog.winfo_screenheight() - dialog.winfo_reqheight()) // 2)
+        dialog.geometry(f"+{x}+{y}")
+        dialog.wait_window()
+        return completed
+
     def _localize_widget_tree(self, widget) -> None:
         try:
             current_title = widget.title()
@@ -825,9 +1341,16 @@ class WindowManagerApp:
 
     def _attention_color(self) -> str:
         palette = resolved_theme_palette(self.root, self.settings.theme)
-        if not self.settings.attention_blink_enabled or self._attention_blink_phase:
+        if not self._attention_blink_active() or self._attention_blink_phase:
             return palette["attention"]
         return blend_hex_colors(palette["attention"], palette["bg2"], 0.68)
+
+    def _attention_blink_active(self) -> bool:
+        return bool(getattr(self.settings, "attention_blink_enabled", True)) and motion_allowed(
+            reduce_motion=bool(
+                getattr(self.settings, "accessibility_reduce_motion", False)
+            )
+        )
 
     def _apply_attention_blink_visuals(self) -> None:
         color = self._attention_color()
@@ -837,18 +1360,18 @@ class WindowManagerApp:
         overlay_ui = getattr(self, "overlay_ui", None)
         if overlay_ui is not None:
             overlay_ui.set_attention_blink(
-                enabled=self.settings.attention_blink_enabled,
+                enabled=self._attention_blink_active(),
                 phase=self._attention_blink_phase,
             )
 
     def _attention_blink_tick(self) -> None:
         pending = bool(self.attention_state.snapshot())
-        if pending and self.settings.attention_blink_enabled:
+        if pending and self._attention_blink_active():
             self._attention_blink_phase = not self._attention_blink_phase
         else:
             self._attention_blink_phase = True
         self._apply_attention_blink_visuals()
-        if pending and self.settings.attention_blink_enabled:
+        if pending and self._attention_blink_active():
             self._publish_streamdeck_state()
         self.root.after(650, self._attention_blink_tick)
 
@@ -1086,6 +1609,11 @@ class WindowManagerApp:
         )
         self.game_mode_combo.pack(side="right")
         self.game_mode_combo.bind("<<ComboboxSelected>>", self._on_game_mode_selected)
+        TtkButton(
+            application,
+            text="Assistant de configuration…",
+            command=lambda: self._show_first_run_assistant(force=True),
+        ).pack(fill="x", pady=2)
         TtkButton(application, text="Paramètres…", command=self.open_settings_window).pack(fill="x", pady=2)
         TtkButton(
             application,
@@ -1103,6 +1631,11 @@ class WindowManagerApp:
             command=self.toggle_rotation_overlay,
         ).pack(side="left", fill="x", expand=True, padx=(3, 0))
         TtkButton(application, text="Aperçu Stream Deck…", command=self.open_streamdeck_preview).pack(fill="x", pady=2)
+        TtkButton(
+            application,
+            text=tr("Simuler l’affichage…"),
+            command=self.open_display_simulation,
+        ).pack(fill="x", pady=2)
         TtkButton(application, text="Diagnostic…", command=self.open_diagnostics_window).pack(fill="x", pady=2)
         TtkButton(
             application,
@@ -1111,8 +1644,8 @@ class WindowManagerApp:
         ).pack(fill="x", pady=2)
         TtkButton(
             application,
-            text="Installer le plugin Stream Deck",
-            command=self.install_streamdeck_plugin,
+            text=tr("Installer ou réparer le plugin Stream Deck"),
+            command=self.open_streamdeck_plugin_repair,
             style="Accent.TButton",
         ).pack(fill="x", pady=2)
         TtkButton(
@@ -1466,7 +1999,7 @@ class WindowManagerApp:
             return
         overlay_ui.set_palette(resolved_theme_palette(self.root, self.settings.theme))
         overlay_ui.set_attention_blink(
-            enabled=self.settings.attention_blink_enabled,
+            enabled=self._attention_blink_active(),
             phase=self._attention_blink_phase,
         )
         overlay_ui.configure_persistent(
@@ -1480,6 +2013,8 @@ class WindowManagerApp:
             width=self.settings.rotation_overlay_width,
             auto_width=self.settings.rotation_overlay_auto_width,
             height=self.settings.rotation_overlay_height,
+            show_title=self.settings.rotation_overlay_show_title,
+            show_reorder_buttons=self.settings.rotation_overlay_show_reorder_buttons,
             show_portrait=self.settings.show_overlay_portraits,
             show_badge=self.settings.show_overlay_badges,
         )
@@ -1487,6 +2022,25 @@ class WindowManagerApp:
             tr("Masquer l’overlay") if self.settings.rotation_overlay_enabled else tr("Afficher l’overlay")
         )
         self._refresh_auxiliary_displays()
+
+    def _apply_accessibility_preferences(self) -> None:
+        self.settings.accessibility_ui_scale_percent = clamp_ui_scale_percent(
+            self.settings.accessibility_ui_scale_percent
+        )
+        self.root._dwm_high_contrast = bool(  # type: ignore[attr-defined]
+            self.settings.accessibility_high_contrast
+        )
+        self.root.tk.call(
+            "tk",
+            "scaling",
+            self._base_tk_scaling
+            * self.settings.accessibility_ui_scale_percent
+            / 100.0,
+        )
+        self._apply_runtime_theme(self.settings.theme)
+        self._apply_display_preferences()
+        self._attention_blink_phase = True
+        self._apply_attention_blink_visuals()
 
     def _apply_runtime_theme(self, theme_name: str) -> None:
         theme = normalize_theme(theme_name, self.game_mode)
@@ -1519,6 +2073,149 @@ class WindowManagerApp:
         self._apply_display_preferences()
         state = "affiché" if self.settings.rotation_overlay_enabled else "masqué"
         self._log(f"Overlay de rotation {state}")
+
+    def open_display_simulation(self) -> None:
+        current = self.display_simulation_window
+        if current is not None:
+            try:
+                if current.winfo_exists():
+                    current.lift()
+                    current.focus_force()
+                    return
+            except Exception:
+                pass
+
+        win = Toplevel(self.root)
+        self.display_simulation_window = win
+        win.title(tr("Simulation de l’affichage"))
+        win.transient(self.root)
+        win.resizable(False, False)
+        content = TtkFrame(win, padding=14)
+        content.pack(fill="both", expand=True)
+        TtkLabel(content, text=tr("Aperçu sans fenêtre Dofus"), style="Header.TLabel").pack(
+            anchor="w"
+        )
+        TtkLabel(
+            content,
+            text=tr(
+                "Cet aperçu utilise les réglages enregistrés. Les clics et déplacements simulés n’activent aucune fenêtre et ne modifient pas l’ordre réel."
+            ),
+            style="Muted.TLabel",
+            wraplength=470,
+            justify="left",
+        ).pack(anchor="w", pady=(2, 12))
+
+        simulation_ui = OverlayUI(
+            self.root,
+            focus_character=lambda _hwnd: None,
+            save_overlay_position=lambda _x, _y: None,
+            save_compact_geometry=lambda _geometry: None,
+            save_overlay_size=lambda _width, _height, **_kwargs: None,
+            reorder_character=lambda _hwnd, _destination: None,
+            focus_next_attention=lambda: False,
+            palette=resolved_theme_palette(self.root, self.settings.theme),
+        )
+        self._display_simulation_ui = simulation_ui
+        active_index = 0
+        attention_index: int | None = 2
+        samples = (
+            ("Alyra", "Cra", "Air", "ankama_agilite"),
+            ("Borin", "Eniripsa", "Soin", "ankama_intelligence"),
+            ("Cyra", "Pandawa", "Placement", "ankama_chance"),
+            ("Daren", "Feca", "Protection", "ankama_force"),
+        )
+
+        def entries() -> list[CharacterDisplay]:
+            return [
+                CharacterDisplay(
+                    hwnd=-(index + 1),
+                    pseudo=pseudo,
+                    character_class=character_class,
+                    alias=alias,
+                    position=index + 1,
+                    total=len(samples),
+                    active=index == active_index,
+                    attention=index == attention_index,
+                    attention_order=(1 if index == attention_index else None),
+                    badge=badge,
+                )
+                for index, (pseudo, character_class, alias, badge) in enumerate(samples)
+            ]
+
+        def render() -> None:
+            current_entries = entries()
+            simulation_ui.set_attention_blink(
+                enabled=self._attention_blink_active(),
+                phase=True,
+            )
+            simulation_ui.update_characters(
+                current_entries,
+                attention_count=(1 if attention_index is not None else 0),
+            )
+            simulation_ui.configure_persistent(
+                enabled=True,
+                x=self.settings.rotation_overlay_x + 36,
+                y=self.settings.rotation_overlay_y + 36,
+                opacity=self.settings.rotation_overlay_opacity,
+                locked=False,
+                layout=self.settings.rotation_overlay_layout,
+                orientation=self.settings.rotation_overlay_orientation,
+                width=self.settings.rotation_overlay_width,
+                auto_width=self.settings.rotation_overlay_auto_width,
+                height=self.settings.rotation_overlay_height,
+                show_title=self.settings.rotation_overlay_show_title,
+                show_reorder_buttons=self.settings.rotation_overlay_show_reorder_buttons,
+                show_portrait=self.settings.show_overlay_portraits,
+                show_badge=self.settings.show_overlay_badges,
+            )
+
+        def next_character() -> None:
+            nonlocal active_index
+            active_index = (active_index + 1) % len(samples)
+            render()
+
+        def toggle_attention() -> None:
+            nonlocal attention_index
+            attention_index = None if attention_index is not None else (active_index + 1) % len(samples)
+            render()
+
+        def show_notification() -> None:
+            entry = entries()[active_index]
+            simulation_ui.show_swap_notification(
+                entry,
+                anchor=self.settings.swap_notification_anchor,
+                duration_ms=self.settings.swap_notification_duration_ms,
+                opacity=self.settings.swap_notification_opacity,
+                layout=self.settings.swap_notification_layout,
+                show_portrait=self.settings.show_popup_portraits,
+                show_badge=self.settings.show_popup_badges,
+            )
+
+        def close_simulation() -> None:
+            self.display_simulation_window = None
+            self._display_simulation_ui = None
+            simulation_ui.close_all()
+            try:
+                win.destroy()
+            except Exception:
+                pass
+
+        actions = TtkFrame(content)
+        actions.pack(fill="x")
+        TtkButton(actions, text=tr("Personnage suivant"), command=next_character).pack(
+            side="left"
+        )
+        TtkButton(actions, text=tr("Basculer l’alerte"), command=toggle_attention).pack(
+            side="left", padx=(6, 0)
+        )
+        TtkButton(actions, text=tr("Afficher la notification"), command=show_notification).pack(
+            side="left", padx=(6, 0)
+        )
+        TtkButton(content, text=tr("Fermer"), command=close_simulation).pack(
+            anchor="e", pady=(14, 0)
+        )
+        win.protocol("WM_DELETE_WINDOW", close_simulation)
+        render()
 
     def _save_overlay_position(self, x: int, y: int) -> None:
         if (x, y) == (self.settings.rotation_overlay_x, self.settings.rotation_overlay_y):
@@ -1604,6 +2301,20 @@ class WindowManagerApp:
             show_badge=self.settings.show_popup_badges,
         )
 
+    def _focus_hwnd_measured(self, hwnd: int) -> None:
+        started_at = time.monotonic()
+        succeeded = False
+        try:
+            focus_hwnd(hwnd)
+            succeeded = True
+        finally:
+            metrics = getattr(self, "runtime_metrics", None)
+            if metrics is not None:
+                metrics.record_focus(
+                    time.monotonic() - started_at,
+                    succeeded=succeeded,
+                )
+
     def _focus_from_auxiliary_display(self, hwnd: int) -> None:
         window = self._all_windows.get(hwnd)
         if window is None or not is_window(hwnd):
@@ -1611,7 +2322,7 @@ class WindowManagerApp:
             self.refresh_windows(quiet=True, force=True)
             return
         try:
-            focus_hwnd(hwnd)
+            self._focus_hwnd_measured(hwnd)
         except FocusError as exc:
             self._log(f"Focus échoué depuis le mode compact ou l’overlay : {exc}")
             return
@@ -1654,7 +2365,7 @@ class WindowManagerApp:
                 continue
 
             try:
-                focus_hwnd(hwnd)
+                self._focus_hwnd_measured(hwnd)
             except FocusError as exc:
                 self._log(f"{source}, prochaine alerte : focus échoué ({exc})")
                 return {"ok": False, "error": str(exc), "_status": 409}
@@ -1857,6 +2568,69 @@ class WindowManagerApp:
     def _refresh_profile_combo(self):
         self.profile_combo["values"] = self._get_profiles()
 
+    def _maybe_auto_load_profile(self) -> None:
+        if not bool(getattr(self.settings, "smart_profile_loading_enabled", False)):
+            return
+        if self._active_profile_name:
+            return
+
+        detected = [window.pseudo for window in self._all_windows.values() if window.pseudo]
+        signature = (
+            self.game_mode,
+            tuple(sorted({pseudo.strip().casefold() for pseudo in detected if pseudo.strip()})),
+        )
+        if not signature[1] or signature == self._profile_match_signature:
+            return
+        self._profile_match_signature = signature
+
+        profiles: list[Profile] = []
+        for name in self._get_profiles():
+            try:
+                profiles.append(load_profile(self.dirs["profiles"], name))
+            except Exception as exc:
+                self._log(f"Profil ignoré pendant la reconnaissance ({name}) : {exc}")
+
+        matches = rank_profile_matches(profiles, detected, self.game_mode)
+        exact_matches = [match for match in matches if match.exact]
+        name = unique_exact_profile_match(matches)
+        if name is None:
+            if len(exact_matches) > 1:
+                choices = ", ".join(match.name for match in exact_matches)
+                self._log(
+                    "Profils ambigus pour ces personnages : "
+                    f"{choices}. Sélection manuelle requise."
+                )
+            return
+
+        try:
+            profile = load_profile(self.dirs["profiles"], name)
+        except Exception as exc:
+            self._log(f"Chargement intelligent impossible ({name}) : {exc}")
+            return
+        self._apply_loaded_profile(profile, migrate_legacy=False)
+        self.selected_profile.set(name)
+        self.settings.last_profile = name
+        try:
+            save_settings(self.settings_path, self.settings)
+        except OSError:
+            pass
+        self._log(f"Profil reconnu et chargé automatiquement : '{name}'")
+
+    def _schedule_smart_profile_match(self) -> None:
+        if not bool(getattr(self.settings, "smart_profile_loading_enabled", False)):
+            return
+        if self._profile_match_job is not None:
+            try:
+                self.root.after_cancel(self._profile_match_job)
+            except Exception:
+                pass
+
+        def run_match() -> None:
+            self._profile_match_job = None
+            self._maybe_auto_load_profile()
+
+        self._profile_match_job = self.root.after(900, run_match)
+
     def _apply_loaded_profile(self, profile: Profile, *, migrate_legacy: bool = True) -> None:
         self._active_profile_name = profile.name
         self.aliases.clear()
@@ -1907,12 +2681,15 @@ class WindowManagerApp:
         if not name:
             return
         name = name.strip()
-        if name in self._get_profiles() and not messagebox.askyesno(
+        replacing_existing = name in self._get_profiles()
+        if replacing_existing and not messagebox.askyesno(
             "Mettre à jour le profil",
             f"Le profil « {name} » existe déjà. Remplacer son ordre, ses alias et ses apparences ?",
             parent=self.root,
         ):
             return
+        if replacing_existing:
+            self._create_configuration_snapshot("avant remplacement profil")
         order_pseudos = [self._all_windows[hwnd].pseudo for hwnd in self._managed_order if hwnd in self._all_windows]
         saved_aliases = {pseudo: alias.strip() for pseudo, alias in self.aliases.items() if alias.strip()}
         pr = Profile(
@@ -1958,6 +2735,7 @@ class WindowManagerApp:
         if not messagebox.askyesno("Confirmer", f"Supprimer le profil '{name}' ?"):
             return
         try:
+            self._create_configuration_snapshot("avant suppression profil")
             delete_profile(self.dirs["profiles"], name)
             self._log(f"Profil '{name}' supprimé")
             if name == self._active_profile_name:
@@ -2063,7 +2841,7 @@ class WindowManagerApp:
             row=5, column=0, columnspan=2, sticky="e", pady=(10, 0)
         )
 
-    def install_streamdeck_plugin(self) -> None:
+    def install_streamdeck_plugin(self) -> bool:
         try:
             open_streamdeck_plugin()
         except FileNotFoundError as exc:
@@ -2072,19 +2850,54 @@ class WindowManagerApp:
                 f"Le paquet d’installation n’est pas inclus dans cette copie de l’application.\n\n{exc}",
                 parent=self.root,
             )
-            return
+            return False
         except OSError as exc:
             messagebox.showerror("Installation impossible", str(exc), parent=self.root)
-            return
+            return False
         except Exception as exc:
             messagebox.showerror(
                 "Installation impossible",
                 f"Impossible d’ouvrir le paquet Stream Deck : {exc}",
                 parent=self.root,
             )
-            return
+            return False
 
         self._log("Installation ou mise à jour du plugin Stream Deck ouverte")
+        return True
+
+    def _streamdeck_plugin_health(self) -> StreamDeckPluginHealth:
+        installed_version = read_manifest_version(installed_plugin_manifest())
+        bundled_version = read_packaged_plugin_version(
+            Path(
+                resource_path(
+                    "streamdeck-plugin",
+                    "com.remyducros.dofuswindowmanager.streamDeckPlugin",
+                )
+            )
+        )
+        return evaluate_streamdeck_plugin_health(installed_version, bundled_version)
+
+    def open_streamdeck_plugin_repair(self) -> None:
+        health = self._streamdeck_plugin_health()
+        if health.status == "bundled_missing":
+            messagebox.showerror(
+                tr("État du plugin Stream Deck"),
+                health.message,
+                parent=self.root,
+            )
+            return
+        action = (
+            tr("Installer/réparer maintenant ?")
+            if health.repair_recommended
+            else tr("Réinstaller quand même le paquet fourni ?")
+        )
+        if not messagebox.askyesno(
+            tr("État du plugin Stream Deck"),
+            f"{health.message}\n\n{action}",
+            parent=self.root,
+        ):
+            return
+        self.install_streamdeck_plugin()
 
     def open_streamdeck_preview(self) -> None:
         existing = self.streamdeck_preview_window
@@ -2101,28 +2914,41 @@ class WindowManagerApp:
         win = Toplevel(self.root)
         self.streamdeck_preview_window = win
         self._streamdeck_preview_buttons = {}
-        win.title("Aperçu Stream Deck — profil 15 touches")
+        win.title("Aperçu Stream Deck multi-modèles")
         win.resizable(False, False)
         win.transient(self.root)
 
         content = TtkFrame(win, padding=14)
         content.pack(fill="both", expand=True)
-        TtkLabel(content, text="Aperçu interactif du profil par défaut", style="Header.TLabel").pack(anchor="w")
+        TtkLabel(content, text="Aperçu interactif des profils fournis", style="Header.TLabel").pack(anchor="w")
+        profile_row = TtkFrame(content)
+        profile_row.pack(fill="x", pady=(8, 4))
+        TtkLabel(profile_row, text="Modèle de Stream Deck").pack(side="left")
+        profile_var = StringVar(
+            value=STREAMDECK_PROFILE_LABELS.get(
+                self._streamdeck_preview_profile_key,
+                STREAMDECK_PROFILE_LABELS["standard"],
+            )
+        )
+        profile_selector = Combobox(
+            profile_row,
+            textvariable=profile_var,
+            values=tuple(STREAMDECK_PROFILE_LABELS.values()),
+            state="readonly",
+            width=31,
+        )
+        profile_selector.pack(side="right")
+        description_var = StringVar()
         TtkLabel(
             content,
-            text=(
-                "Les huit touches centrales reprennent l’ordre actuel. Cliquez sur une touche pour tester son action ; "
-                "les réglages visuels personnalisés restent gérés par Stream Deck."
-            ),
+            textvariable=description_var,
             style="Muted.TLabel",
-            wraplength=650,
+            wraplength=820,
             justify="left",
         ).pack(anchor="w", pady=(2, 12))
 
-        deck = TtkFrame(content)
-        deck.pack(fill="both", expand=True)
-        for column in range(5):
-            deck.columnconfigure(column, weight=1)
+        deck_container = TtkFrame(content)
+        deck_container.pack(fill="both", expand=True)
 
         action_commands = {
             "move-up": lambda: self._execute_preview_command("reorder", {"direction": "up"}),
@@ -2132,28 +2958,80 @@ class WindowManagerApp:
             "refresh": lambda: self._execute_preview_command("refresh", {}),
             "previous": lambda: self._execute_preview_command("rotate", {"direction": "backward"}),
             "next": lambda: self._execute_preview_command("rotate", {"direction": "forward"}),
+            "next-attention": lambda: self._execute_preview_command("next_attention", {}),
         }
 
-        for row_index, row in enumerate(STREAMDECK_PROFILE_LAYOUT):
-            for column_index, key in enumerate(row):
-                if isinstance(key, int):
-                    button = TtkButton(
-                        deck,
-                        text=f"Case {key}\nPersonnage\nindisponible",
-                        width=13,
-                        style="StreamDeck.TButton",
+        def render_profile() -> None:
+            selected_label = profile_var.get()
+            selected_key = next(
+                (
+                    key
+                    for key, label in STREAMDECK_PROFILE_LABELS.items()
+                    if label == selected_label
+                ),
+                "standard",
+            )
+            self._streamdeck_preview_profile_key = selected_key
+            layout = STREAMDECK_PROFILE_LAYOUTS[selected_key]
+            character_slots = [
+                key for row in layout for key in row if isinstance(key, int)
+            ]
+            description_var.set(
+                tr(
+                    "Ce profil propose {count} touches Personnage. Cliquez sur une touche pour tester son action ; les réglages visuels personnalisés restent gérés par Stream Deck.",
+                    count=len(character_slots),
+                )
+            )
+            for child in deck_container.winfo_children():
+                child.destroy()
+            self._streamdeck_preview_buttons = {}
+            deck = TtkFrame(deck_container)
+            deck.pack(fill="both", expand=True)
+            column_count = max((len(row) for row in layout), default=1)
+            for column in range(column_count):
+                deck.columnconfigure(column, weight=1)
+            button_width = 10 if column_count >= 8 else 13
+            for row_index, row in enumerate(layout):
+                for column_index, key in enumerate(row):
+                    if key is None:
+                        spacer = TtkFrame(deck, width=button_width * 7, height=58)
+                        spacer.grid(
+                            row=row_index,
+                            column=column_index,
+                            sticky="nsew",
+                            padx=4,
+                            pady=4,
+                        )
+                        continue
+                    if isinstance(key, int):
+                        button = TtkButton(
+                            deck,
+                            text=f"Case {key}\nPersonnage\nindisponible",
+                            width=button_width,
+                            style="StreamDeck.TButton",
+                        )
+                        button.state(["disabled"])
+                        self._streamdeck_preview_buttons[key] = button
+                    else:
+                        button = TtkButton(
+                            deck,
+                            text=STREAMDECK_ACTION_LABELS[key],
+                            command=action_commands[key],
+                            width=button_width,
+                            style="StreamDeck.TButton",
+                        )
+                    button.grid(
+                        row=row_index,
+                        column=column_index,
+                        sticky="nsew",
+                        padx=4,
+                        pady=4,
+                        ipady=7,
                     )
-                    button.state(["disabled"])
-                    self._streamdeck_preview_buttons[key] = button
-                else:
-                    button = TtkButton(
-                        deck,
-                        text=STREAMDECK_ACTION_LABELS[key],
-                        command=action_commands[key],
-                        width=13,
-                        style="StreamDeck.TButton",
-                    )
-                button.grid(row=row_index, column=column_index, sticky="nsew", padx=4, pady=4, ipady=7)
+            self._refresh_streamdeck_preview()
+
+        profile_selector.bind("<<ComboboxSelected>>", lambda _event: render_profile())
+        render_profile()
 
         TtkButton(content, text="Fermer", command=self._close_streamdeck_preview).pack(anchor="e", pady=(12, 0))
         win.protocol("WM_DELETE_WINDOW", self._close_streamdeck_preview)
@@ -2272,6 +3150,10 @@ class WindowManagerApp:
             )
         )
         bundled_version = read_packaged_plugin_version(bundled_package)
+        plugin_health = evaluate_streamdeck_plugin_health(
+            installed_version,
+            bundled_version,
+        )
         return [
             ("Version de l’application", __version__),
             ("Version de publication", __release_tag__),
@@ -2299,6 +3181,32 @@ class WindowManagerApp:
             ("Fenêtres ignorées", len(self._ignored)),
             ("Fenêtres en attente d’attention", len(self.attention_state.snapshot())),
             ("Révision du scan", self._scan_revision),
+            (
+                "Mode performance adaptatif",
+                (
+                    "activé"
+                    if getattr(self.settings, "adaptive_performance_enabled", True)
+                    else "désactivé"
+                ),
+            ),
+            (
+                "Intervalle actuel du scan de contrôle",
+                f"{self._scheduled_refresh_delay_seconds} s",
+            ),
+            ("Durée des scans", self.runtime_metrics.scan_summary().format()),
+            (
+                "Latence des changements de focus",
+                self.runtime_metrics.focus_summary().format(),
+            ),
+            ("Échecs de focus mesurés", self.runtime_metrics.focus_failures),
+            (
+                "Accessibilité",
+                (
+                    f"contraste {'renforcé' if self.settings.accessibility_high_contrast else 'standard'} · "
+                    f"mouvements {'réduits' if self.settings.accessibility_reduce_motion else 'normaux'} · "
+                    f"échelle {self.settings.accessibility_ui_scale_percent}%"
+                ),
+            ),
             ("API locale Stream Deck", f"active sur le port {bridge.port}" if bridge_running else "inactive"),
             (
                 "Dernière activité Stream Deck",
@@ -2306,6 +3214,7 @@ class WindowManagerApp:
             ),
             ("Plugin installé", installed_version or "non détecté"),
             ("Plugin fourni avec l’application", bundled_version or "indisponible"),
+            ("État du plugin Stream Deck", plugin_health.message),
             ("WinEventHook", "actif" if self.win_events and self.win_events.is_running() else "inactif"),
             (
                 "Détection du clignotement Windows",
@@ -2363,7 +3272,213 @@ class WindowManagerApp:
 
         TtkButton(buttons, text="Copier le rapport", command=copy_report).pack(side="left")
         TtkButton(buttons, text="Ouvrir les journaux", command=open_logs).pack(side="left", padx=(6, 0))
+        TtkButton(
+            buttons,
+            text=tr("Créer un paquet de support…"),
+            command=lambda: self.export_support_bundle(parent=win),
+        ).pack(side="left", padx=(6, 0))
+        TtkButton(
+            buttons,
+            text=tr("Réparer le plugin…"),
+            command=self.open_streamdeck_plugin_repair,
+        ).pack(side="left", padx=(6, 0))
         TtkButton(buttons, text="Fermer", command=win.destroy).pack(side="right")
+
+    def export_support_bundle(self, *, parent=None) -> None:
+        destination = filedialog.asksaveasfilename(
+            title=tr("Créer un paquet de support anonymisé"),
+            defaultextension=".zip",
+            filetypes=[("Archive ZIP", "*.zip")],
+            initialfile=f"DWM_support_{datetime.now():%Y-%m-%d_%H%M}.zip",
+            parent=parent or self.root,
+        )
+        if not destination:
+            return
+
+        sensitive_values: set[object] = set()
+        for window in self._all_windows.values():
+            sensitive_values.update((window.pseudo, window.title))
+        sensitive_values.update(self.aliases.keys())
+        sensitive_values.update(self.aliases.values())
+        for name in self._get_profiles():
+            sensitive_values.add(name)
+            try:
+                profile = load_profile(self.dirs["profiles"], name)
+            except Exception:
+                continue
+            sensitive_values.update(profile.order)
+            sensitive_values.update(profile.aliases.keys())
+            sensitive_values.update(profile.aliases.values())
+
+        private_paths = {
+            self.dirs["root"],
+            self.dirs["logs"],
+            Path.home(),
+            application_dir(),
+        }
+        try:
+            created = create_support_bundle(
+                destination,
+                diagnostic_report=build_diagnostic_report(self._diagnostic_rows()),
+                settings=self.settings.to_dict(),
+                log_paths=(self.logger.log_file, self.logger.actions_file),
+                sensitive_values=sensitive_values,
+                private_paths=private_paths,
+                window_ids=self._all_windows.keys(),
+                app_version=__version__,
+            )
+        except OSError as exc:
+            messagebox.showerror(
+                tr("Paquet de support"),
+                tr("Impossible de créer le paquet : {error}", error=exc),
+                parent=parent or self.root,
+            )
+            return
+
+        self._log(f"Paquet de support anonymisé créé : {created}")
+        messagebox.showinfo(
+            tr("Paquet de support"),
+            tr(
+                "Le paquet anonymisé a été créé. Relisez son contenu avant de le publier : une anonymisation automatique ne peut pas garantir qu’un texte libre ne contient aucune donnée personnelle."
+            ),
+            parent=parent or self.root,
+        )
+
+    def _build_current_configuration_backup(self) -> dict[str, object]:
+        profiles: list[Profile] = []
+        for name in self._get_profiles():
+            try:
+                profiles.append(load_profile(self.dirs["profiles"], name))
+            except Exception as exc:
+                self._log(f"Profil ignoré pendant la sauvegarde ({name}) : {exc}")
+
+        self.settings.auto_refresh = bool(self.auto_refresh_enabled.get())
+        self.settings.last_profile = self.selected_profile.get().strip()
+        current_order = [
+            self._all_windows[hwnd].pseudo
+            for hwnd in self._managed_order
+            if hwnd in self._all_windows
+        ]
+        return build_configuration_backup(
+            self.settings,
+            profiles,
+            active_profile=self.selected_profile.get(),
+            current_order=current_order,
+            current_aliases=self.aliases,
+            app_version=__version__,
+        )
+
+    def _create_configuration_snapshot(self, reason: str) -> BackupSnapshot | None:
+        try:
+            snapshot = create_backup_snapshot(
+                self.dirs["backups"],
+                self._build_current_configuration_backup(),
+                reason=reason,
+                app_version=__version__,
+            )
+        except (OSError, ValueError, TypeError) as exc:
+            self._log(f"Point de restauration non créé : {exc}")
+            return None
+        self._log(f"Point de restauration créé : {snapshot.label}")
+        return snapshot
+
+    def _apply_restored_configuration(
+        self,
+        restored_settings: Settings,
+        profiles: list[Profile],
+        session: dict[str, object],
+        *,
+        source: str,
+        parent,
+    ) -> None:
+        try:
+            set_startup_enabled(restored_settings.start_with_windows)
+        except OSError as exc:
+            restored_settings.start_with_windows = False
+            messagebox.showwarning(
+                "Démarrage Windows",
+                f"Le démarrage automatique n’a pas pu être restauré : {exc}",
+                parent=parent,
+            )
+
+        for profile in profiles:
+            save_profile(self.dirs["profiles"], profile)
+
+        restored_settings.game_mode = restored_settings.game_mode or self.game_mode
+        self.settings = restored_settings
+        self._legacy_character_visuals = sanitize_character_visuals(
+            self.settings.character_visuals
+        )
+        self.character_visuals = dict(self._legacy_character_visuals)
+        set_language(self.settings.language)
+        save_settings(self.settings_path, self.settings)
+        self.auto_refresh_enabled.set(self.settings.auto_refresh)
+        self._apply_window_column_order(
+            list(self.settings.window_column_order or ()), persist=False
+        )
+        try:
+            self._apply_runtime_theme(self.settings.theme)
+        except Exception:
+            self.settings.theme = MODERN_DARK_THEME
+            self._apply_runtime_theme(self.settings.theme)
+            save_settings(self.settings_path, self.settings)
+        self._apply_accessibility_preferences()
+        self._localize_ui()
+        self._refresh_profile_combo()
+
+        active_profile = str(session.get("active_profile") or "")
+        order = list(session.get("order") or [])
+        aliases = dict(session.get("aliases") or {})
+        self.selected_profile.set(active_profile)
+        self._active_profile_name = active_profile
+        if active_profile:
+            try:
+                active_profile_data = load_profile(self.dirs["profiles"], active_profile)
+                if active_profile_data.visuals is not None:
+                    self.character_visuals = sanitize_character_visuals(
+                        active_profile_data.visuals
+                    )
+            except Exception:
+                pass
+        self.aliases.clear()
+        self.aliases.update(aliases)
+        self.desired_order_pseudos = order
+        if order:
+            self.apply_order_by_pseudo(order)
+        self.update_listboxes()
+        self._register_hotkeys()
+        self._log(f"Configuration restaurée depuis {source}")
+        messagebox.showinfo(
+            "Configuration restaurée",
+            "La configuration est restaurée. Redémarrez l’application pour appliquer complètement les options de détection.",
+            parent=parent,
+        )
+
+    def _restore_configuration_data(self, data: object, *, source: str, parent) -> bool:
+        try:
+            restored_settings, profiles, session = parse_configuration_backup(data)
+        except (ValueError, TypeError) as exc:
+            messagebox.showerror("Sauvegarde invalide", str(exc), parent=parent)
+            return False
+        if not messagebox.askyesno(
+            "Restaurer la configuration",
+            (
+                f"Restaurer {len(profiles)} profil(s) et remplacer les réglages actuels ?\n\n"
+                "Un point de restauration de l’état actuel sera créé avant de continuer. "
+                "Les profils locaux portant un autre nom seront conservés."
+            ),
+            parent=parent,
+        ):
+            return False
+        self._create_configuration_snapshot("avant restauration")
+        self._apply_restored_configuration(
+            restored_settings,
+            profiles,
+            session,
+            source=source,
+            parent=parent,
+        )
+        return True
 
     def open_configuration_manager(self) -> None:
         win = Toplevel(self.root)
@@ -2391,32 +3506,71 @@ class WindowManagerApp:
         TtkButton(content, text="Importer une sauvegarde…", command=self.import_configuration).pack(
             fill="x", pady=3
         )
+        history = TtkLabelFrame(content, text=tr("Points de restauration locaux"), padding=8)
+        history.pack(fill="x", pady=(10, 3))
+        snapshot_var = StringVar(value="")
+        snapshot_combo = Combobox(history, textvariable=snapshot_var, state="readonly", width=58)
+        snapshot_combo.pack(fill="x", pady=(0, 6))
+        snapshots_by_label: dict[str, BackupSnapshot] = {}
+
+        def refresh_snapshots() -> None:
+            snapshots_by_label.clear()
+            for snapshot in list_backup_snapshots(self.dirs["backups"]):
+                label = snapshot.label
+                suffix = 2
+                while label in snapshots_by_label:
+                    label = f"{snapshot.label} ({suffix})"
+                    suffix += 1
+                snapshots_by_label[label] = snapshot
+            labels = tuple(snapshots_by_label)
+            snapshot_combo["values"] = labels
+            snapshot_var.set(labels[0] if labels else tr("Aucun point de restauration"))
+
+        def create_manual_snapshot() -> None:
+            self._create_configuration_snapshot("manuel")
+            refresh_snapshots()
+
+        def restore_selected_snapshot() -> None:
+            snapshot = snapshots_by_label.get(snapshot_var.get())
+            if snapshot is None:
+                messagebox.showwarning(
+                    tr("Points de restauration locaux"),
+                    tr("Aucun point de restauration valide n’est sélectionné."),
+                    parent=win,
+                )
+                return
+            try:
+                data = load_backup_snapshot(snapshot)
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                messagebox.showerror("Sauvegarde invalide", str(exc), parent=win)
+                return
+            if self._restore_configuration_data(
+                data,
+                source=snapshot.label,
+                parent=win,
+            ):
+                refresh_snapshots()
+
+        history_buttons = TtkFrame(history)
+        history_buttons.pack(fill="x")
+        TtkButton(
+            history_buttons,
+            text=tr("Créer un point maintenant"),
+            command=create_manual_snapshot,
+        ).pack(side="left")
+        TtkButton(
+            history_buttons,
+            text=tr("Restaurer le point sélectionné"),
+            command=restore_selected_snapshot,
+        ).pack(side="right")
+        refresh_snapshots()
         TtkButton(content, text="Réinitialiser les réglages…", command=self.reset_settings).pack(
             fill="x", pady=3
         )
         TtkButton(content, text="Fermer", command=win.destroy).pack(anchor="e", pady=(12, 0))
 
     def export_configuration(self) -> None:
-        profiles: list[Profile] = []
-        for name in self._get_profiles():
-            try:
-                profiles.append(load_profile(self.dirs["profiles"], name))
-            except Exception as exc:
-                self._log(f"Profil ignoré pendant la sauvegarde ({name}) : {exc}")
-
-        self.settings.auto_refresh = bool(self.auto_refresh_enabled.get())
-        self.settings.last_profile = self.selected_profile.get().strip()
-        current_order = [
-            self._all_windows[hwnd].pseudo for hwnd in self._managed_order if hwnd in self._all_windows
-        ]
-        backup = build_configuration_backup(
-            self.settings,
-            profiles,
-            active_profile=self.selected_profile.get(),
-            current_order=current_order,
-            current_aliases=self.aliases,
-            app_version=__version__,
-        )
+        backup = self._build_current_configuration_backup()
         path = filedialog.asksaveasfilename(
             title="Exporter la configuration",
             defaultextension=".json",
@@ -2436,81 +3590,11 @@ class WindowManagerApp:
         if not path:
             return
         try:
-            restored_settings, profiles, session = parse_configuration_backup(json_load(Path(path)))
+            data = json_load(Path(path))
         except (OSError, ValueError, json.JSONDecodeError) as exc:
             messagebox.showerror("Sauvegarde invalide", str(exc), parent=self.root)
             return
-
-        if not messagebox.askyesno(
-            "Restaurer la configuration",
-            (
-                f"Importer {len(profiles)} profil(s) et remplacer les réglages actuels ?\n\n"
-                "Les profils portant le même nom seront mis à jour. Les autres profils locaux seront conservés."
-            ),
-            parent=self.root,
-        ):
-            return
-
-        try:
-            set_startup_enabled(restored_settings.start_with_windows)
-        except OSError as exc:
-            restored_settings.start_with_windows = False
-            messagebox.showwarning(
-                "Démarrage Windows",
-                f"Le démarrage automatique n’a pas pu être restauré : {exc}",
-                parent=self.root,
-            )
-
-        for profile in profiles:
-            save_profile(self.dirs["profiles"], profile)
-
-        restored_settings.game_mode = restored_settings.game_mode or self.game_mode
-        self.settings = restored_settings
-        self._legacy_character_visuals = sanitize_character_visuals(
-            self.settings.character_visuals
-        )
-        self.character_visuals = dict(self._legacy_character_visuals)
-        set_language(self.settings.language)
-        save_settings(self.settings_path, self.settings)
-        self.auto_refresh_enabled.set(self.settings.auto_refresh)
-        self._apply_window_column_order(list(self.settings.window_column_order or ()), persist=False)
-        try:
-            self._apply_runtime_theme(self.settings.theme)
-        except Exception:
-            self.settings.theme = MODERN_DARK_THEME
-            self._apply_runtime_theme(self.settings.theme)
-            save_settings(self.settings_path, self.settings)
-        self._apply_display_preferences()
-        self._localize_ui()
-        self._refresh_profile_combo()
-
-        active_profile = str(session.get("active_profile") or "")
-        order = list(session.get("order") or [])
-        aliases = dict(session.get("aliases") or {})
-        self.selected_profile.set(active_profile)
-        self._active_profile_name = active_profile
-        if active_profile:
-            try:
-                active_profile_data = load_profile(self.dirs["profiles"], active_profile)
-                if active_profile_data.visuals is not None:
-                    self.character_visuals = sanitize_character_visuals(
-                        active_profile_data.visuals
-                    )
-            except Exception:
-                pass
-        self.aliases.clear()
-        self.aliases.update(aliases)
-        self.desired_order_pseudos = order
-        if order:
-            self.apply_order_by_pseudo(order)
-        self.update_listboxes()
-        self._register_hotkeys()
-        self._log(f"Configuration restaurée depuis {path}")
-        messagebox.showinfo(
-            "Configuration restaurée",
-            "La configuration est restaurée. Redémarrez l’application pour appliquer complètement les options de détection.",
-            parent=self.root,
-        )
+        self._restore_configuration_data(data, source=path, parent=self.root)
 
     def reset_display_settings(self, *, parent=None) -> bool:
         dialog_parent = parent or self.root
@@ -2553,6 +3637,7 @@ class WindowManagerApp:
             parent=self.root,
         ):
             return
+        self._create_configuration_snapshot("avant réinitialisation réglages")
         try:
             set_startup_enabled(False)
         except OSError:
@@ -2562,10 +3647,7 @@ class WindowManagerApp:
         save_settings(self.settings_path, self.settings)
         self.auto_refresh_enabled.set(self.settings.auto_refresh)
         self._apply_window_column_order(list(self.settings.window_column_order or ()), persist=False)
-        self._apply_runtime_theme(self.settings.theme)
-        self._apply_display_preferences()
-        self._attention_blink_phase = True
-        self._apply_attention_blink_visuals()
+        self._apply_accessibility_preferences()
         self._localize_ui()
         self._refresh_character_preview()
         self.update_listboxes()
@@ -2617,15 +3699,27 @@ class WindowManagerApp:
         )
         self.root.title(f"Dofus Window Manager {__version__} ({self.game_label})")
 
-        # Window handles, ignored state and Stream Deck slots belong to the
-        # previous client generation. Profile aliases/order remain available
-        # and will be reapplied to the newly detected characters.
+        # Window handles and profile customizations belong to the previous
+        # client generation. A same-mode profile may be recognized after the
+        # next scan, but Unity and Retro data are never mixed automatically.
         self._all_windows.clear()
         self._managed_order.clear()
         self._ignored.clear()
         self._streamdeck_order.clear()
         self.rotation_index = 0
         self._active_game_hwnd = None
+        self._active_profile_name = ""
+        self._profile_match_signature = None
+        if self._profile_match_job is not None:
+            try:
+                self.root.after_cancel(self._profile_match_job)
+            except Exception:
+                pass
+        self._profile_match_job = None
+        self.aliases.clear()
+        self.character_visuals = {}
+        self.desired_order_pseudos = []
+        self.selected_profile.set("")
         self.attention_state.reset()
         self._windows_sig = tuple()
         self.update_listboxes()
@@ -2703,6 +3797,7 @@ class WindowManagerApp:
 
         self._last_scan_monotonic = now
         self._refresh_inflight = True
+        self._scan_started_monotonic = now
         mode_revision = self._game_mode_revision
         scan_mode = self.game_mode
         game_label = self.game_label
@@ -2740,6 +3835,11 @@ class WindowManagerApp:
 
     def _finish_refresh(self) -> None:
         """Publish scan completion and run one explicitly queued refresh."""
+        if self._scan_started_monotonic is not None:
+            self.runtime_metrics.record_scan(
+                time.monotonic() - self._scan_started_monotonic
+            )
+        self._scan_started_monotonic = None
         self._refresh_inflight = False
         self._scan_revision += 1
         self._publish_streamdeck_state()
@@ -2787,6 +3887,8 @@ class WindowManagerApp:
             if hwnd not in self._ignored and hwnd not in self._managed_order:
                 self._managed_order.append(hwnd)
 
+        self._schedule_smart_profile_match()
+
         # Apply current profile order (if loaded)
         if self.desired_order_pseudos:
             self.apply_order_by_pseudo(self.desired_order_pseudos)
@@ -2813,7 +3915,19 @@ class WindowManagerApp:
             return
         if self.auto_refresh_enabled.get():
             self.refresh_windows(quiet=True)
-        self.root.after(max(2, int(self.settings.refresh_seconds)) * 1000, self._schedule_refresh)
+        hook = getattr(self, "win_events", None)
+        try:
+            hook_healthy = bool(hook and hook.is_running())
+        except Exception:
+            hook_healthy = False
+        delay_seconds = adaptive_refresh_delay_seconds(
+            self.settings.refresh_seconds,
+            enabled=bool(getattr(self.settings, "adaptive_performance_enabled", True)),
+            event_hook_healthy=hook_healthy,
+            has_windows=bool(self._all_windows),
+        )
+        self._scheduled_refresh_delay_seconds = delay_seconds
+        self.root.after(delay_seconds * 1000, self._schedule_refresh)
 
     def _on_toggle_autorefresh(self):
         self.settings.auto_refresh = bool(self.auto_refresh_enabled.get())
@@ -2961,7 +4075,7 @@ class WindowManagerApp:
                 return {"ok": False, "error": "La fenêtre n'existe plus.", "_status": 410}
 
             try:
-                focus_hwnd(hwnd)
+                self._focus_hwnd_measured(hwnd)
             except FocusError as exc:
                 self._log(f"Stream Deck, focus échoué : {exc}")
                 return {"ok": False, "error": str(exc), "_status": 409}
@@ -3091,7 +4205,7 @@ class WindowManagerApp:
                     "scan_revision": self._scan_revision,
                     "show_character_portraits": bool(self.settings.show_character_portraits),
                     "show_character_badges": bool(self.settings.show_character_badges),
-                    "attention_blink_enabled": bool(self.settings.attention_blink_enabled),
+                    "attention_blink_enabled": self._attention_blink_active(),
                     "attention_blink_phase": bool(self._attention_blink_phase),
                     "attention_count": len(self.attention_state.queue()),
                     "next_attention_hwnd": self.attention_state.next(),
@@ -3491,7 +4605,7 @@ class WindowManagerApp:
                 continue
 
             try:
-                focus_hwnd(hwnd)
+                self._focus_hwnd_measured(hwnd)
                 self._record_character_focus(hwnd, notify=True)
                 self._log(f"Focus → {window.title}")
                 focused = True
@@ -3896,6 +5010,12 @@ class WindowManagerApp:
         localized_position_labels = {anchor: tr(label) for anchor, label in SWAP_POSITION_LABELS.items()}
         selected_theme_label = theme_label(self.settings.theme, self.game_mode)
         theme_var = StringVar(value=selected_theme_label)
+        localized_preset_labels = {
+            preset_id: tr(DISPLAY_PRESET_LABELS[preset_id])
+            for preset_id in DISPLAY_PRESET_IDS
+        }
+        display_preset_var = StringVar(value=localized_preset_labels["balanced"])
+        display_preset_status = StringVar(value="")
         refresh_var = StringVar(value=str(self.settings.refresh_seconds))
         hk_fwd = StringVar(value=self.settings.hotkeys.get("forward", "F5"))
         hk_bwd = StringVar(value=self.settings.hotkeys.get("backward", "F6"))
@@ -3906,12 +5026,28 @@ class WindowManagerApp:
             StringVar(value=self.settings.hotkeys.get(f"window_{position}", ""))
             for position in range(1, 9)
         ]
+        hotkey_validation_status = StringVar(value="")
         evt_hook = BooleanVar(value=bool(getattr(self.settings, "event_hook_enabled", True)))
+        adaptive_performance = BooleanVar(
+            value=bool(getattr(self.settings, "adaptive_performance_enabled", True))
+        )
+        accessibility_high_contrast = BooleanVar(
+            value=bool(self.settings.accessibility_high_contrast)
+        )
+        accessibility_reduce_motion = BooleanVar(
+            value=bool(self.settings.accessibility_reduce_motion)
+        )
+        accessibility_scale = StringVar(
+            value=str(self.settings.accessibility_ui_scale_percent)
+        )
         popup_watch = BooleanVar(value=bool(getattr(self.settings, "popup_watch_enabled", False)))
         minimize_to_tray = BooleanVar(value=bool(self.settings.minimize_to_tray))
         start_with_windows = BooleanVar(value=bool(self.settings.start_with_windows))
         check_updates = BooleanVar(value=bool(self.settings.check_updates_automatically))
         include_prereleases = BooleanVar(value=bool(self.settings.include_prereleases))
+        smart_profile_loading = BooleanVar(
+            value=bool(getattr(self.settings, "smart_profile_loading_enabled", True))
+        )
         swap_notification = BooleanVar(value=bool(self.settings.swap_notification_enabled))
         swap_position = StringVar(
             value=localized_position_labels.get(self.settings.swap_notification_anchor, tr("En haut au centre"))
@@ -3938,6 +5074,12 @@ class WindowManagerApp:
         overlay_x = StringVar(value=str(self.settings.rotation_overlay_x))
         overlay_y = StringVar(value=str(self.settings.rotation_overlay_y))
         overlay_locked = BooleanVar(value=bool(self.settings.rotation_overlay_locked))
+        overlay_show_title = BooleanVar(
+            value=bool(self.settings.rotation_overlay_show_title)
+        )
+        overlay_show_reorder_buttons = BooleanVar(
+            value=bool(self.settings.rotation_overlay_show_reorder_buttons)
+        )
         overlay_width = StringVar(value=str(self.settings.rotation_overlay_width))
         overlay_auto_width = BooleanVar(value=bool(self.settings.rotation_overlay_auto_width))
         overlay_height = StringVar(value=str(self.settings.rotation_overlay_height))
@@ -4063,6 +5205,127 @@ class WindowManagerApp:
             text="Vérification quotidienne au maximum ; aucun téléchargement automatique.",
             style="Muted.TLabel",
         ).grid(row=5, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=(0, 4))
+
+        profile_detection = TtkLabelFrame(general_content, text=tr("Profils"), padding=10)
+        profile_detection.pack(fill="x", pady=(0, 8))
+        TtkCheckbutton(
+            profile_detection,
+            text=tr("Charger automatiquement un profil reconnu exactement"),
+            variable=smart_profile_loading,
+        ).pack(anchor="w")
+        TtkLabel(
+            profile_detection,
+            text=tr(
+                "La reconnaissance compare les personnages et le mode Unity/Retro. En cas d’ambiguïté, aucun profil n’est chargé."
+            ),
+            style="Muted.TLabel",
+            wraplength=560,
+        ).pack(anchor="w", padx=(22, 0), pady=(3, 0))
+
+        accessibility = TtkLabelFrame(
+            general_content,
+            text=tr("Accessibilité"),
+            padding=10,
+        )
+        accessibility.pack(fill="x", pady=(0, 8))
+        TtkCheckbutton(
+            accessibility,
+            text=tr("Contraste renforcé"),
+            variable=accessibility_high_contrast,
+        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=2)
+        TtkCheckbutton(
+            accessibility,
+            text=tr("Réduire les animations et désactiver le clignotement"),
+            variable=accessibility_reduce_motion,
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=2)
+        TtkLabel(accessibility, text=tr("Échelle du texte et de l’interface")).grid(
+            row=2, column=0, sticky="w", pady=(6, 2), padx=(0, 12)
+        )
+        scale_row = TtkFrame(accessibility)
+        scale_row.grid(row=2, column=1, sticky="w", pady=(6, 2))
+        Spinbox(
+            scale_row,
+            from_=80,
+            to=160,
+            increment=5,
+            textvariable=accessibility_scale,
+            width=6,
+        ).pack(side="left")
+        TtkLabel(scale_row, text=" %", style="Muted.TLabel").pack(side="left")
+
+        def load_display_preset_into_form() -> None:
+            selected_label = display_preset_var.get().strip()
+            preset_id = next(
+                (
+                    candidate
+                    for candidate, label in localized_preset_labels.items()
+                    if label == selected_label
+                ),
+                "balanced",
+            )
+            values = display_preset_values(preset_id)
+            overlay_auto_width.set(bool(values["rotation_overlay_auto_width"]))
+            overlay_show_title.set(bool(values["rotation_overlay_show_title"]))
+            overlay_show_reorder_buttons.set(
+                bool(values["rotation_overlay_show_reorder_buttons"])
+            )
+            show_popup_portraits.set(bool(values["show_popup_portraits"]))
+            show_popup_badges.set(bool(values["show_popup_badges"]))
+            show_overlay_portraits.set(bool(values["show_overlay_portraits"]))
+            show_overlay_badges.set(bool(values["show_overlay_badges"]))
+            notification_preset_layout = values["swap_notification_layout"]
+            notification_left.set(localized_overlay_labels[notification_preset_layout["left"]])
+            notification_line1.set(localized_overlay_labels[notification_preset_layout["line1"]])
+            notification_line2_left.set(
+                localized_overlay_labels[notification_preset_layout["line2_left"]]
+            )
+            notification_line2_right.set(
+                localized_overlay_labels[notification_preset_layout["line2_right"]]
+            )
+            overlay_preset_layout = values["rotation_overlay_layout"]
+            overlay_left.set(localized_overlay_labels[overlay_preset_layout["left"]])
+            overlay_line1.set(localized_overlay_labels[overlay_preset_layout["line1"]])
+            overlay_line2_left.set(
+                localized_overlay_labels[overlay_preset_layout["line2_left"]]
+            )
+            overlay_line2_right.set(
+                localized_overlay_labels[overlay_preset_layout["line2_right"]]
+            )
+            display_preset_status.set(
+                tr("Préréglage chargé dans le formulaire ; sélectionnez Appliquer pour l’enregistrer.")
+            )
+
+        presets_section = TtkLabelFrame(
+            appearance_content,
+            text=tr("Préréglages d’affichage"),
+            padding=10,
+        )
+        presets_section.pack(fill="x", pady=(0, 8))
+        presets_row = TtkFrame(presets_section)
+        presets_row.pack(fill="x")
+        Combobox(
+            presets_row,
+            values=tuple(localized_preset_labels.values()),
+            state="readonly",
+            textvariable=display_preset_var,
+            width=18,
+        ).pack(side="left")
+        TtkButton(
+            presets_row,
+            text=tr("Charger dans le formulaire"),
+            command=load_display_preset_into_form,
+        ).pack(side="left", padx=(6, 0))
+        TtkButton(
+            presets_row,
+            text=tr("Simuler les réglages enregistrés…"),
+            command=self.open_display_simulation,
+        ).pack(side="right")
+        TtkLabel(
+            presets_section,
+            textvariable=display_preset_status,
+            style="Muted.TLabel",
+            wraplength=560,
+        ).pack(anchor="w", pady=(5, 0))
 
         theme_section = TtkLabelFrame(
             appearance_content,
@@ -4282,6 +5545,16 @@ class WindowManagerApp:
             text="Par défaut : numéro à gauche, nom ligne 1, puis classe · alias ligne 2.",
             style="Muted.TLabel",
         ).grid(row=2, column=0, columnspan=4, sticky="w", pady=(5, 0))
+        TtkCheckbutton(
+            overlay_content,
+            text="Afficher le titre de l’overlay",
+            variable=overlay_show_title,
+        ).grid(row=3, column=0, columnspan=4, sticky="w", pady=(8, 2))
+        TtkCheckbutton(
+            overlay_content,
+            text="Afficher les flèches de réorganisation",
+            variable=overlay_show_reorder_buttons,
+        ).grid(row=4, column=0, columnspan=4, sticky="w", pady=2)
 
         TtkCheckbutton(
             in_game_display,
@@ -4291,8 +5564,8 @@ class WindowManagerApp:
         TtkLabel(
             in_game_display,
             text=(
-                "Déverrouillé : glissez l’en-tête pour déplacer l’overlay, une ligne pour la "
-                "réordonner, ou la poignée ◢ pour le redimensionner."
+                "Déverrouillé : glissez le titre ou la fine poignée supérieure pour déplacer "
+                "l’overlay, une ligne pour la réordonner, ou la poignée ◢ pour le redimensionner."
             ),
             style="Muted.TLabel",
             wraplength=560,
@@ -4338,24 +5611,111 @@ class WindowManagerApp:
             ("Prochaine fenêtre en attente", hk_attention),
             ("Actualiser la liste", hk_ref),
         )
+
+        def current_hotkey_assignments() -> list[tuple[str, str]]:
+            assignments = [
+                ("Personnage suivant", hk_fwd.get().strip() or "F5"),
+                ("Personnage précédent", hk_bwd.get().strip() or "F6"),
+                ("Ignorer la fenêtre", hk_ign.get().strip() or "F7"),
+                (
+                    "Prochaine fenêtre en attente",
+                    hk_attention.get().strip() or "F8",
+                ),
+                ("Actualiser la liste", hk_ref.get().strip() or "Ctrl+Alt+R"),
+            ]
+            assignments.extend(
+                (f"Fenêtre {position}", variable.get().strip())
+                for position, variable in enumerate(direct_hotkeys, start=1)
+                if variable.get().strip()
+            )
+            return assignments
+
+        def validate_hotkey_form(*_args) -> bool:
+            assignments = current_hotkey_assignments()
+            try:
+                for label, spec in assignments:
+                    try:
+                        parse_hotkey(spec)
+                    except ValueError as exc:
+                        raise ValueError(f"{label} : {exc}") from exc
+                conflicts = find_hotkey_conflicts(assignments, parse_hotkey)
+            except ValueError as exc:
+                hotkey_validation_status.set(tr("Erreur : {error}", error=exc))
+                return False
+            if conflicts:
+                conflict = conflicts[0]
+                hotkey_validation_status.set(
+                    tr(
+                        "Conflit : {spec} est utilisé par {labels}.",
+                        spec=conflict.spec,
+                        labels=" / ".join(conflict.labels),
+                    )
+                )
+                return False
+            hotkey_validation_status.set(tr("Toutes les combinaisons sont valides dans l’application."))
+            return True
+
+        def capture_hotkey(label: str, variable: StringVar) -> None:
+            dialog = Toplevel(win)
+            dialog.title(tr("Capturer un raccourci"))
+            dialog.transient(win)
+            dialog.grab_set()
+            dialog.resizable(False, False)
+            body = TtkFrame(dialog, padding=16)
+            body.pack(fill="both", expand=True)
+            TtkLabel(body, text=label, style="Header.TLabel").pack(anchor="w")
+            capture_status = StringVar(
+                value=tr("Appuyez maintenant sur la combinaison souhaitée.")
+            )
+            TtkLabel(
+                body,
+                textvariable=capture_status,
+                style="Muted.TLabel",
+                wraplength=360,
+            ).pack(anchor="w", pady=(4, 12))
+
+            def on_key(event) -> str:
+                spec = captured_hotkey_spec(event.keysym, event.state)
+                if spec is None:
+                    capture_status.set(
+                        tr("Touche non prise en charge ; essayez une lettre, un chiffre, F1 à F24 ou une touche de navigation.")
+                    )
+                    return "break"
+                variable.set(spec)
+                validate_hotkey_form()
+                dialog.destroy()
+                return "break"
+
+            dialog.bind("<KeyPress>", on_key)
+            TtkButton(body, text=tr("Annuler"), command=dialog.destroy).pack(anchor="e")
+            dialog.after(50, dialog.focus_force)
+
         for row_index, (label, variable) in enumerate(hotkey_rows):
             TtkLabel(hotkeys, text=label).grid(row=row_index, column=0, sticky="w", padx=(0, 12), pady=3)
             TtkEntry(hotkeys, textvariable=variable, width=22).grid(
                 row=row_index, column=1, sticky="ew", pady=3
             )
+            TtkButton(
+                hotkeys,
+                text=tr("Capturer"),
+                command=lambda target_label=label, target_variable=variable: capture_hotkey(
+                    target_label, target_variable
+                ),
+            ).grid(row=row_index, column=2, padx=(6, 0), pady=3)
         TtkLabel(
             hotkeys,
             text="Exemples : F5, Ctrl+Alt+R, Shift+F6 ou Win+F7",
             style="Muted.TLabel",
-        ).grid(row=len(hotkey_rows), column=0, columnspan=2, sticky="w", pady=(6, 0))
+        ).grid(row=len(hotkey_rows), column=0, columnspan=3, sticky="w", pady=(6, 0))
         direct_start_row = len(hotkey_rows) + 1
         TtkLabel(
             hotkeys,
             text=tr("Accès direct par position (facultatif)"),
             style="Header.TLabel",
-        ).grid(row=direct_start_row, column=0, columnspan=2, sticky="w", pady=(12, 4))
+        ).grid(row=direct_start_row, column=0, columnspan=3, sticky="w", pady=(12, 4))
         for offset, variable in enumerate(direct_hotkeys, start=1):
-            TtkLabel(hotkeys, text=tr("Fenêtre {position}", position=offset)).grid(
+            direct_label = tr("Fenêtre {position}", position=offset)
+            TtkLabel(hotkeys, text=direct_label).grid(
                 row=direct_start_row + offset,
                 column=0,
                 sticky="w",
@@ -4368,6 +5728,13 @@ class WindowManagerApp:
                 sticky="ew",
                 pady=3,
             )
+            TtkButton(
+                hotkeys,
+                text=tr("Capturer"),
+                command=lambda target_label=direct_label, target_variable=variable: capture_hotkey(
+                    target_label, target_variable
+                ),
+            ).grid(row=direct_start_row + offset, column=2, padx=(6, 0), pady=3)
         TtkLabel(
             hotkeys,
             text=tr("Raccourcis globaux. Laissez vide pour désactiver. Exemple : 1 → première fenêtre."),
@@ -4375,10 +5742,25 @@ class WindowManagerApp:
         ).grid(
             row=direct_start_row + len(direct_hotkeys) + 1,
             column=0,
-            columnspan=2,
+            columnspan=3,
             sticky="w",
             pady=(5, 0),
         )
+        TtkLabel(
+            hotkeys,
+            textvariable=hotkey_validation_status,
+            style="Muted.TLabel",
+            wraplength=560,
+        ).grid(
+            row=direct_start_row + len(direct_hotkeys) + 2,
+            column=0,
+            columnspan=3,
+            sticky="w",
+            pady=(5, 0),
+        )
+        for variable in (hk_fwd, hk_bwd, hk_ign, hk_attention, hk_ref, *direct_hotkeys):
+            variable.trace_add("write", validate_hotkey_form)
+        validate_hotkey_form()
 
         detection = TtkLabelFrame(general_content, text="Détection des fenêtres", padding=10)
         detection.pack(fill="x")
@@ -4387,6 +5769,19 @@ class WindowManagerApp:
             text="Synchronisation en temps réel et détection des demandes d’attention Windows",
             variable=evt_hook,
         ).pack(anchor="w")
+        TtkCheckbutton(
+            detection,
+            text=tr("Espacer les scans de contrôle lorsque la détection en temps réel est active"),
+            variable=adaptive_performance,
+        ).pack(anchor="w", pady=(4, 0))
+        TtkLabel(
+            detection,
+            text=tr(
+                "Le rythme normal reprend automatiquement si la détection par événements est indisponible."
+            ),
+            style="Muted.TLabel",
+            wraplength=560,
+        ).pack(anchor="w", padx=(22, 0), pady=(2, 0))
 
         # This Retro-only option is intentionally absent in Unity mode.
         if self.game_mode == "retro":
@@ -4431,6 +5826,9 @@ class WindowManagerApp:
                 self.settings.refresh_seconds = max(2, min(300, sec))
             except Exception:
                 self.settings.refresh_seconds = 10
+            self.settings.accessibility_ui_scale_percent = clamp_ui_scale_percent(
+                accessibility_scale.get()
+            )
 
             # Validate hotkeys early (gives immediate feedback)
             fwd = hk_fwd.get().strip() or "F5"
@@ -4439,30 +5837,12 @@ class WindowManagerApp:
             next_attention = hk_attention.get().strip() or "F8"
             ref = hk_ref.get().strip() or "Ctrl+Alt+R"
             direct_specs = [variable.get().strip() for variable in direct_hotkeys]
-            try:
-                parsed_hotkeys: dict[tuple[int, int], str] = {}
-                named_specs = [
-                    ("Personnage suivant", fwd),
-                    ("Personnage précédent", bwd),
-                    ("Ignorer la fenêtre", ign),
-                    ("Prochaine fenêtre en attente", next_attention),
-                    ("Actualiser la liste", ref),
-                    *(
-                        (f"Fenêtre {position}", spec)
-                        for position, spec in enumerate(direct_specs, start=1)
-                        if spec
-                    ),
-                ]
-                for label, spec in named_specs:
-                    parsed = parse_hotkey(spec)
-                    duplicate = parsed_hotkeys.get(parsed)
-                    if duplicate is not None:
-                        raise ValueError(
-                            f"Le raccourci {spec} est utilisé à la fois pour « {duplicate} » et « {label} »."
-                        )
-                    parsed_hotkeys[parsed] = label
-            except ValueError as e:
-                messagebox.showerror("Hotkeys", str(e))
+            if not validate_hotkey_form():
+                messagebox.showerror(
+                    "Hotkeys",
+                    hotkey_validation_status.get(),
+                    parent=win,
+                )
                 return
 
             self.settings.hotkeys["forward"] = fwd
@@ -4474,6 +5854,15 @@ class WindowManagerApp:
                 self.settings.hotkeys[f"window_{position}"] = spec
 
             self.settings.event_hook_enabled = bool(evt_hook.get())
+            self.settings.adaptive_performance_enabled = bool(
+                adaptive_performance.get()
+            )
+            self.settings.accessibility_high_contrast = bool(
+                accessibility_high_contrast.get()
+            )
+            self.settings.accessibility_reduce_motion = bool(
+                accessibility_reduce_motion.get()
+            )
             requested_startup = bool(start_with_windows.get())
             if requested_startup != self.settings.start_with_windows:
                 try:
@@ -4486,6 +5875,9 @@ class WindowManagerApp:
             updates_were_disabled = not self.settings.check_updates_automatically
             self.settings.check_updates_automatically = bool(check_updates.get())
             self.settings.include_prereleases = bool(include_prereleases.get())
+            self.settings.smart_profile_loading_enabled = bool(
+                smart_profile_loading.get()
+            )
             self.settings.swap_notification_enabled = bool(swap_notification.get())
             selected_position = swap_position.get().strip()
             self.settings.swap_notification_anchor = next(
@@ -4516,6 +5908,10 @@ class WindowManagerApp:
             self.settings.rotation_overlay_height = overlay_height_value
             self.settings.rotation_overlay_orientation = normalize_overlay_orientation(
                 overlay_orientation.get()
+            )
+            self.settings.rotation_overlay_show_title = bool(overlay_show_title.get())
+            self.settings.rotation_overlay_show_reorder_buttons = bool(
+                overlay_show_reorder_buttons.get()
             )
             self.settings.rotation_overlay_locked = bool(overlay_locked.get())
             self.settings.rotation_overlay_layout = {
@@ -4552,9 +5948,7 @@ class WindowManagerApp:
                 return
 
             save_settings(self.settings_path, self.settings)
-            self._apply_display_preferences()
-            self._attention_blink_phase = True
-            self._apply_attention_blink_visuals()
+            self._apply_accessibility_preferences()
             self._publish_streamdeck_state()
             self._log("Paramètres appliqués")
             win.destroy()
@@ -4577,9 +5971,30 @@ class WindowManagerApp:
 
     def _report_hotkey_error_popup(self):
         try:
-            err = self.hotkeys.consume_last_error()
-            if err:
-                messagebox.showwarning("Hotkeys", err)
+            consume_many = getattr(self.hotkeys, "consume_registration_errors", None)
+            errors = consume_many() if callable(consume_many) else []
+            if not errors:
+                error = self.hotkeys.consume_last_error()
+                errors = [error] if error else []
+            if errors:
+                labels_by_id = {
+                    1: tr("Personnage suivant"),
+                    2: tr("Personnage précédent"),
+                    3: tr("Ignorer la fenêtre"),
+                    4: tr("Actualiser la liste"),
+                    5: tr("Prochaine fenêtre en attente"),
+                    **{
+                        100 + position: tr("Fenêtre {position}", position=position)
+                        for position in range(1, 9)
+                    },
+                }
+                messagebox.showwarning(
+                    "Hotkeys",
+                    tr(
+                        "Windows n’a pas pu enregistrer certaines combinaisons :\n\n{details}\n\nChoisissez une autre combinaison puis réessayez.",
+                        details=describe_registration_errors(errors, labels_by_id),
+                    ),
+                )
         except Exception:
             pass
 
@@ -4729,7 +6144,7 @@ class WindowManagerApp:
 
         try:
             self.rotation_index = self._managed_order.index(hwnd)
-            focus_hwnd(hwnd)
+            self._focus_hwnd_measured(hwnd)
             self._record_character_focus(hwnd, notify=True)
             self._popup_global_cooldown_until = now + self._popup_global_cooldown_sec
             self._log(f"Popup détecté → focus {evt.title}")
@@ -4819,6 +6234,12 @@ class WindowManagerApp:
 
         self._stop_win_event_hook()
         self._shutdown_popup_watcher()
+        simulation_ui = getattr(self, "_display_simulation_ui", None)
+        if simulation_ui is not None:
+            try:
+                simulation_ui.close_all()
+            except Exception:
+                pass
         try:
             self.overlay_ui.close_all()
         except Exception:
@@ -4846,9 +6267,10 @@ def json_load(path: Path) -> dict:
 
 def run(game_mode: str = "unity", *, start_minimized: bool = False) -> None:
     app = WindowManagerApp(game_mode=game_mode, start_minimized=start_minimized)
-    # Auto-load last profile if available
+    # The smart matcher waits for the first scan and only loads a unique exact
+    # same-mode profile. Disabling it restores the historical last-profile load.
     last = app.selected_profile.get().strip()
-    if last:
+    if last and not app.settings.smart_profile_loading_enabled:
         try:
             pr = load_profile(app.dirs["profiles"], last)
             app._apply_loaded_profile(pr)

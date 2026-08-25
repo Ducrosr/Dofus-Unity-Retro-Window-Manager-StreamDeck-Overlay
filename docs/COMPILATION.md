@@ -35,6 +35,33 @@ Résultat :
 dist\DofusWindowManager.exe
 ~~~
 
+### Installateur Windows
+
+L’installateur est construit avec [Inno Setup](https://jrsoftware.org/isinfo.php). Installez Inno Setup 6 depuis sa source officielle, copiez d’abord l’exécutable compilé dans `release-assets`, puis lancez :
+
+~~~powershell
+New-Item -ItemType Directory -Force release-assets | Out-Null
+Copy-Item dist\DofusWindowManager.exe release-assets\DofusWindowManager.exe
+.\installer\build_installer.ps1 -AppVersion "2.20.0"
+~~~
+
+Le résultat `release-assets\DofusWindowManager-Setup.exe` installe l’application pour l’utilisateur courant dans `%LOCALAPPDATA%\Programs\DofusWindowManager`, sans demander les droits administrateur. Une icône Bureau reste facultative.
+
+### Signature Authenticode facultative
+
+Le script `installer\sign_windows.ps1` ne signe rien sans certificat. Pour une signature locale ou dans GitHub Actions, fournissez uniquement par variables protégées :
+
+- `WINDOWS_SIGNING_CERTIFICATE_BASE64` : contenu base64 du fichier PFX ;
+- `WINDOWS_SIGNING_CERTIFICATE_PASSWORD` : mot de passe du PFX ;
+- `WINDOWS_SIGNING_TIMESTAMP_URL` : serveur d’horodatage facultatif.
+
+~~~powershell
+.\installer\sign_windows.ps1 -FilePath dist\DofusWindowManager.exe
+.\installer\sign_windows.ps1 -FilePath release-assets\DofusWindowManager-Setup.exe
+~~~
+
+Le certificat temporaire est créé dans le dossier temporaire du runner puis supprimé dans un bloc `finally`. N’ajoutez jamais un PFX, son mot de passe ou sa version base64 au dépôt. En l’absence de certificat, les builds restent volontairement non signés et les empreintes SHA-256 demeurent obligatoires.
+
 ### Build avec détection visuelle Retro
 
 ~~~powershell
@@ -61,6 +88,7 @@ cd streamdeck-plugin
 npm ci
 npm test
 npm run typecheck
+npm run build:profiles
 npm run build
 npm run validate
 npm run pack
@@ -68,6 +96,7 @@ npm run pack
 
 - **npm test** exécute les tests Node ;
 - **npm run typecheck** contrôle TypeScript ;
+- **npm run build:profiles** régénère les profils Standard, Mini, XL, Plus et Neo ;
 - **npm run build** génère le bundle du plugin ;
 - **npm run validate** utilise le CLI Elgato ;
 - **npm run pack** produit le paquet .streamDeckPlugin.
@@ -108,16 +137,18 @@ Une publication normale se déclenche lorsque `__release_tag__` dans `dwm/__init
 Il reste également possible de déclencher la compilation en poussant manuellement un tag dont la version de base correspond à `pyproject.toml` :
 
 ~~~powershell
-git tag v2.20.0-beta.3
-git push origin v2.20.0-beta.3
+git tag v2.20.0-beta.4
+git push origin v2.20.0-beta.4
 ~~~
 
 Le workflow crée ou complète ensuite la Release avec :
 
 - `DofusWindowManager.exe` ;
 - `DofusWindowManager.exe.sha256` ;
+- `DofusWindowManager-Setup.exe` ;
+- `DofusWindowManager-Setup.exe.sha256` ;
 - `DofusWindowManager-StreamDeck.streamDeckPlugin` ;
 - l’empreinte SHA-256 du plugin ;
-- `SHA256SUMS.txt` pour vérifier les deux fichiers.
+- `SHA256SUMS.txt` pour vérifier les trois fichiers.
 
 Un tag contenant un suffixe comme `-beta.2` est automatiquement publié comme préversion. Le workflow peut aussi être relancé manuellement depuis l’onglet **Actions**, en sélectionnant un tag qui existe déjà. Aucun exécutable ni jeton personnel ne doit être ajouté au dépôt : la publication utilise le `GITHUB_TOKEN` temporaire limité au projet.

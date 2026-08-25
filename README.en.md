@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.3"><strong>⬇ Download for Windows</strong></a>
+  <a href="https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.4"><strong>⬇ Download for Windows</strong></a>
   ·
   <a href="docs/INSTALLATION.md">Installation guide</a>
   ·
@@ -33,39 +33,52 @@ A local Windows window manager for **Dofus Unity** and **Dofus Retro**, designed
 >
 > Also read Ankama’s official guidance: **[Recognizing and protecting yourself from phishing](https://support.ankama.com/hc/en-us/articles/201376953-Recognizing-and-Protecting-Yourself-from-Phishing)**.
 
-Version 2.20.0 is the current public beta. It brings together the multilingual interface, overlays, attention requests, portraits, official icons and Unity/Retro themes. The matching Windows executable is available from the [official v2.20.0-beta.3 Release](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.3).
+Version 2.20.0 is the current public beta. It brings together the multilingual interface, overlays, attention requests, portraits, official icons and Unity/Retro themes. The matching Windows executable is available from the [official v2.20.0-beta.4 Release](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.4).
 
 ## Main features
 
 - native Dofus Unity and Retro window detection;
 - next/previous character global shortcuts plus eight optional direct shortcuts for positions 1 to 8;
+- guided key-combination capture, immediate duplicate detection and explicit labels for shortcuts rejected or already used by Windows;
 - ordering by buttons or drag and drop;
 - per-character alias, custom or bundled class portrait, 39 official stat icons and 20 official profession icons;
 - ignored windows remain bound to their Stream Deck keys but leave automatic rotation;
 - per-server JSON profiles containing independent order, aliases, portraits and icons, plus complete configuration backups;
+- local history of the twelve latest full restore points, with manual creation and automatic protection before risky operations;
+- optional server-profile recognition using an exact character and Unity/Retro mode match, with no automatic choice when several profiles match;
 - atomic settings and profile writes, with an automatic backup of the last valid settings;
 - instant Unity/Retro switching with separate display preferences for each version;
+- adaptive performance mode that spaces out recovery scans while Windows events are healthy and automatically restores the normal interval if needed;
 - compact always-on-top mode;
 - automatic compact-window and overlay recovery after a monitor-layout change;
 - customizable switch notification with content-based automatic width, position, duration and opacity;
 - transparent, movable and resizable vertical or horizontal rotation overlay with optional automatic width;
+- optional overlay title and reorder arrows; drag and drop remains available when arrows are hidden;
 - portraits and icons can be shown or hidden independently in the notification, overlay and Stream Deck;
 - orange `!` attention request indicator with optional subtle blinking in the app, overlay and Stream Deck;
 - chronological `!1`, `!2`… queue with a **Next alert** action in the app, overlay, F8 shortcut and Stream Deck;
+- editable bundled profiles for the 15-key Standard, Mini, XL, Plus and Neo Stream Deck models, each available in the integrated preview;
+- installed-plugin health check with explicit repair through the official bundled package;
 - twelve themes available in both game modes: Standard, Bonta, Brakmar, Tribute, Gold and Steel, Belladone, Unicorn, Emerald Mine, Sufokia, Pandala, Wabbit and Retro;
 - French by default, plus English and Spanish selected with graphical flag buttons;
 - settings organized into General, Appearance and Shortcuts tabs;
+- accessibility options for high contrast, 80–160% interface scaling and reduced motion/blinking;
 - a mandatory first-launch security warning shown before global shortcuts are enabled;
+- a guided first-run setup for language, Unity/Retro mode, detection, focus testing, overlay and optional Stream Deck installation;
+- overlay and notification simulation with fictional characters, no open Dofus client and no focus action;
+- Minimal, Balanced and Complete presets for quick visual-density changes;
 - separate display reset that preserves profiles and character customization;
-- optional official-release update check with no automatic download.
+- optional official-release update check with no automatic download;
+- local scan-duration and focus-latency metrics in diagnostics;
+- optional anonymized ZIP support bundle with no portraits or restorable configuration.
 
 Standard is the default theme for both Unity and Retro. Every theme can be selected in either mode, and the application remembers one theme and a separate set of display preferences for each game version.
 
-## Stream Deck 0.7.0
+## Stream Deck 0.8.0
 
 The bundled plugin provides eight character keys and actions for Previous, Next, Next alert, Move up, Move down, Ignore/restore, Refresh and Launch/show. The Next alert key displays the pending count and focuses the oldest request. Character keys can place the number, name, class and alias independently on four lines. Portraits, badges, attention order, current application theme and language are synchronized automatically.
 
-The bundled profile targets the standard 15-key Stream Deck. A window excluded from rotation remains directly accessible through its assigned character key.
+Stream Deck remains optional. The package automatically provides an editable layout for the 15-key Standard, Mini, XL, Plus and Neo models. Compact devices prioritize character and Previous/Next keys, while the XL layout exposes all eight characters and every command on its first two rows. A window excluded from rotation remains directly accessible through its assigned character key.
 
 ## Quick installation
 
@@ -125,7 +138,7 @@ py -3.14 -m ruff check .
 py -3.14 build_exe.py
 ```
 
-The PyInstaller output is `dist\DofusWindowManager.exe`. Stream Deck sources and build commands are under [`streamdeck-plugin`](streamdeck-plugin/README.md).
+The PyInstaller output is `dist\DofusWindowManager.exe`; the repository also contains an Inno Setup definition for `DofusWindowManager-Setup.exe`. Stream Deck sources and build commands are under [`streamdeck-plugin`](streamdeck-plugin/README.md).
 
 ## Project status
 

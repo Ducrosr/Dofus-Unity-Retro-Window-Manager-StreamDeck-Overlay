@@ -12,6 +12,13 @@ from zipfile import ZipFile
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_ROOT = PROJECT_ROOT / "streamdeck-plugin" / "com.remyducros.dofuswindowmanager.sdPlugin"
 PROFILE_PATH = PLUGIN_ROOT / "profiles" / "DofusWindowManager.streamDeckProfile"
+EXPECTED_PROFILES = {
+    "profiles/DofusWindowManager": (0, 5, 3, set(range(1, 9))),
+    "profiles/DofusWindowManagerMini": (1, 3, 2, set(range(1, 5))),
+    "profiles/DofusWindowManagerXL": (2, 8, 4, set(range(1, 9))),
+    "profiles/DofusWindowManagerPlus": (7, 4, 2, set(range(1, 7))),
+    "profiles/DofusWindowManagerNeo": (9, 4, 2, set(range(1, 7))),
+}
 
 
 class StreamDeckProfileTests(unittest.TestCase):
@@ -51,21 +58,56 @@ class StreamDeckProfileTests(unittest.TestCase):
         encoded = base64.b32hexencode(uuid.UUID(page_id).bytes).decode("ascii").rstrip("=")
         return encoded.translate(str.maketrans({"U": "V", "V": "W"})) + "Z"
 
-    def test_plugin_declares_an_editable_auto_installed_standard_profile(self) -> None:
+    def test_plugin_declares_editable_auto_installed_profiles_for_each_device(self) -> None:
         plugin_manifest = json.loads((PLUGIN_ROOT / "manifest.json").read_text(encoding="utf-8"))
 
-        self.assertIn(
+        self.assertEqual(
             {
-                "Name": "profiles/DofusWindowManager",
-                "DeviceType": 0,
-                "Readonly": False,
-                "DontAutoSwitchWhenInstalled": False,
-                "AutoInstall": True,
+                profile["Name"]: profile["DeviceType"]
+                for profile in plugin_manifest["Profiles"]
             },
-            plugin_manifest["Profiles"],
+            {
+                name: expected[0]
+                for name, expected in EXPECTED_PROFILES.items()
+            },
         )
-        self.assertEqual(self.profile_manifest["Name"], "Dofus Window Manager")
+        for profile in plugin_manifest["Profiles"]:
+            self.assertFalse(profile["Readonly"])
+            self.assertFalse(profile["DontAutoSwitchWhenInstalled"])
+            self.assertTrue(profile["AutoInstall"])
+        self.assertEqual(self.profile_manifest["Name"], "Dofus Window Manager — 15 touches")
         self.assertEqual(self.profile_manifest["Device"]["Model"], "20GAA9901")
+
+    def test_each_declared_profile_exists_and_fits_its_device_grid(self) -> None:
+        for profile_name, (_device_type, columns, rows, expected_slots) in EXPECTED_PROFILES.items():
+            profile_path = PLUGIN_ROOT / f"{profile_name}.streamDeckProfile"
+            self.assertTrue(profile_path.is_file(), profile_path)
+            with ZipFile(profile_path) as archive:
+                manifests = [
+                    json.loads(archive.read(name))
+                    for name in archive.namelist()
+                    if name.endswith("manifest.json")
+                ]
+            root_manifest = next(manifest for manifest in manifests if manifest.get("Version") == "2.0")
+            action_manifest = next(
+                manifest
+                for manifest in manifests
+                if any(controller.get("Actions") for controller in manifest.get("Controllers", []))
+            )
+            actions = action_manifest["Controllers"][0]["Actions"]
+            slots = {
+                int(action["Settings"]["slot"])
+                for action in actions.values()
+                if action["UUID"] == "com.remyducros.dofuswindowmanager.character"
+            }
+            self.assertEqual(slots, expected_slots)
+            self.assertTrue(root_manifest["Device"]["Model"])
+            for coordinate in actions:
+                column, row = (int(value) for value in coordinate.split(","))
+                self.assertGreaterEqual(column, 0)
+                self.assertLess(column, columns)
+                self.assertGreaterEqual(row, 0)
+                self.assertLess(row, rows)
 
     def test_profile_matches_the_requested_three_by_five_layout(self) -> None:
         expected = {

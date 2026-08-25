@@ -1,6 +1,6 @@
 {
     "Name": "Dofus Window Manager",
-    "Version": "0.7.0.0",
+    "Version": "0.8.0.0",
     "Author": "Rémy Ducros",
     "Actions": [
         {
@@ -181,6 +181,34 @@
         {
             "Name": "profiles/DofusWindowManager",
             "DeviceType": 0,
+            "Readonly": false,
+            "DontAutoSwitchWhenInstalled": false,
+            "AutoInstall": true
+        },
+        {
+            "Name": "profiles/DofusWindowManagerMini",
+            "DeviceType": 1,
+            "Readonly": false,
+            "DontAutoSwitchWhenInstalled": false,
+            "AutoInstall": true
+        },
+        {
+            "Name": "profiles/DofusWindowManagerXL",
+            "DeviceType": 2,
+            "Readonly": false,
+            "DontAutoSwitchWhenInstalled": false,
+            "AutoInstall": true
+        },
+        {
+            "Name": "profiles/DofusWindowManagerPlus",
+            "DeviceType": 7,
+            "Readonly": false,
+            "DontAutoSwitchWhenInstalled": false,
+            "AutoInstall": true
+        },
+        {
+            "Name": "profiles/DofusWindowManagerNeo",
+            "DeviceType": 9,
             "Readonly": false,
             "DontAutoSwitchWhenInstalled": false,
             "AutoInstall": true

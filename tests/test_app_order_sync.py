@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 import types
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from dwm.models import GameWindow
 from dwm.services.attention_state import WindowAttentionState
-from dwm.storage.profiles import Profile
+from dwm.storage.profiles import Profile, save_profile
 
 if os.name != "nt":
     hotkeys_stub = types.ModuleType("dwm.services.hotkeys_win")
@@ -159,6 +161,71 @@ class AppOrderSyncTests(unittest.TestCase):
         app._apply_loaded_profile(second, migrate_legacy=False)
         self.assertEqual(app.aliases["Nealla"], "Eau")
         self.assertEqual(app.character_visuals["Nealla"]["badge"], "ankama_chance")
+
+    def test_smart_loading_applies_one_exact_same_mode_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp)
+            save_profile(
+                profiles_dir,
+                Profile(
+                    "Jiva",
+                    ["Eramis", "Nealla", "Nat"],
+                    {"Nealla": "Terre"},
+                    "",
+                    "",
+                    visuals={},
+                    game_mode="unity",
+                ),
+            )
+            app = self.make_app()
+            app.settings.smart_profile_loading_enabled = True
+            app.settings.last_profile = ""
+            app._active_profile_name = ""
+            app._profile_match_signature = None
+            app._legacy_character_visuals = {}
+            app.character_visuals = {}
+            app.desired_order_pseudos = []
+            app.dirs = {"profiles": profiles_dir}
+            app.settings_path = profiles_dir / "settings.json"
+            app.selected_profile = Mock()
+            app._log = Mock()
+
+            with patch("dwm.app.save_settings"):
+                app._maybe_auto_load_profile()
+
+        self.assertEqual(app._active_profile_name, "Jiva")
+        self.assertEqual(app.aliases, {"Nealla": "Terre"})
+        app.selected_profile.set.assert_called_once_with("Jiva")
+
+    def test_smart_loading_refuses_ambiguous_exact_profiles(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp)
+            for name in ("Serveur A", "Serveur B"):
+                save_profile(
+                    profiles_dir,
+                    Profile(
+                        name,
+                        ["Nealla", "Nat", "Eramis"],
+                        {},
+                        "",
+                        "",
+                        visuals={},
+                        game_mode="unity",
+                    ),
+                )
+            app = self.make_app()
+            app.settings.smart_profile_loading_enabled = True
+            app._active_profile_name = ""
+            app._profile_match_signature = None
+            app.dirs = {"profiles": profiles_dir}
+            app.selected_profile = Mock()
+            app._log = Mock()
+
+            app._maybe_auto_load_profile()
+
+        self.assertEqual(app._active_profile_name, "")
+        app.selected_profile.set.assert_not_called()
+        self.assertIn("Sélection manuelle requise", app._log.call_args.args[0])
 
 
 if __name__ == "__main__":

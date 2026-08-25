@@ -15,6 +15,7 @@ from dwm.ui_overlays import (
     OverlayUI,
     SWAP_NOTIFICATION_DEBOUNCE_MS,
     _adaptive_display_width,
+    _overlay_control_visibility,
 )
 
 if os.name != "nt":
@@ -181,6 +182,24 @@ class FocusResponsivenessTests(unittest.TestCase):
 
 
 class OverlayResponsivenessTests(unittest.TestCase):
+    def test_hidden_overlay_controls_keep_drag_and_drop_available(self) -> None:
+        self.assertEqual(
+            _overlay_control_visibility(
+                locked=False,
+                show_title=False,
+                show_reorder_buttons=False,
+            ),
+            (False, False, True),
+        )
+        self.assertEqual(
+            _overlay_control_visibility(
+                locked=True,
+                show_title=True,
+                show_reorder_buttons=True,
+            ),
+            (False, False, False),
+        )
+
     def test_adaptive_width_uses_natural_content_size_with_safe_bounds(self) -> None:
         self.assertEqual(_adaptive_display_width(104), 104)
         self.assertEqual(_adaptive_display_width(20), DISPLAY_MIN_WIDTH)

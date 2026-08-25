@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.3"><strong>⬇ Télécharger pour Windows</strong></a>
+  <a href="https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.4"><strong>⬇ Télécharger pour Windows</strong></a>
   ·
   <a href="docs/INSTALLATION.md">Guide d’installation</a>
   ·
@@ -23,7 +23,7 @@
 > [!NOTE]
 > Les versions anglaise et espagnole ont été traduites avec l’aide d’une IA et peuvent contenir des erreurs. Les corrections sont bienvenues dans les Issues ou Pull Requests du dépôt officiel.
 
-[![Version](https://img.shields.io/badge/version-2.20.0--beta.2-22b8f0)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.20.0--beta.4-22b8f0)](CHANGELOG.md)
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows)](docs/INSTALLATION.md)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Tests](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/actions/workflows/tests.yml/badge.svg)](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/actions/workflows/tests.yml)
@@ -45,22 +45,32 @@ Le code source 2.20.0 est proposé en **bêta publique**. Il réunit l’interfa
 
 - détection native des fenêtres Dofus Unity et Dofus Retro ;
 - passage au personnage suivant ou précédent avec des raccourcis globaux, plus huit raccourcis directs facultatifs pour les positions 1 à 8 ;
+- capture guidée des combinaisons, détection immédiate des doublons et indication précise des raccourcis refusés ou déjà utilisés par Windows ;
 - ordre personnalisable par boutons ou glisser-déposer ;
 - alias par personnage, utiles pour indiquer un élément ou un métier ;
 - exclusion temporaire d’une fenêtre de la rotation sans supprimer son association Stream Deck ;
 - profils de serveur enregistrés en JSON avec ordre, alias, portraits et icônes indépendants ;
+- reconnaissance facultative du profil de serveur par correspondance exacte des personnages et du mode Unity/Retro, sans choix automatique en cas d’ambiguïté ;
 - tableau réorganisable : classe, nom, alias et identifiant de fenêtre ;
 - bascule Unity/Retro sans redémarrer l’application, avec paramètres d’affichage indépendants pour chaque version ;
 - actualisation automatique par événements Windows et scan manuel ;
+- mode performance adaptatif : scans de récupération espacés lorsque les événements Windows sont sains, avec retour automatique au rythme normal si nécessaire ;
 - fonctionnement dans la zone de notification et démarrage Windows facultatif ;
 - sauvegarde/restauration des réglages, profils, alias et ordre courant ;
+- historique local des douze derniers points de restauration complets, avec création manuelle et protection automatique avant les opérations risquées ;
 - enregistrement atomique des réglages et profils, avec copie de secours automatique des derniers réglages valides ;
 - rapport de diagnostic copiable pour les bêta-testeurs ;
+- métriques locales de durée des scans et de latence des changements de focus ;
+- export facultatif d’un paquet de support ZIP anonymisé, sans portraits ni configuration restaurable ;
 - vérification facultative des nouvelles Releases officielles, sans téléchargement automatique ;
 - douze thèmes disponibles dans les deux modes : Standard, Bonta, Brakmar, Tribute, Gold and Steel, Belladone, Unicorn, Emerald Mine, Sufokia, Pandala, Wabbit et Retro ;
 - interface en français par défaut, anglais ou espagnol, sélectionnable en un clic avec trois drapeaux graphiques ;
 - paramètres répartis en onglets Général, Apparence et Raccourcis pour retrouver rapidement chaque option ;
+- accessibilité : contraste renforcé, échelle d’interface de 80 à 160 % et réduction des animations/clignotements ;
 - avertissement de sécurité obligatoire au premier lancement, avant l’activation des raccourcis globaux ;
+- assistant guidé de première configuration : langue, mode Unity/Retro, détection, test du focus, overlay et installation facultative de Stream Deck ;
+- simulation de l’overlay et de la notification avec des personnages fictifs, sans Dofus ouvert ni changement de focus ;
+- préréglages Minimal, Équilibré et Complet pour ajuster rapidement la densité visuelle ;
 - réinitialisation séparée de l’affichage, sans supprimer les profils ni les personnalisations des personnages ;
 - mode compact toujours visible avec uniquement la rotation active et un bouton de retour explicite ;
 - remise à l’écran automatique du mode compact et de l’overlay après un changement de moniteur ;
@@ -70,13 +80,15 @@ Le code source 2.20.0 est proposé en **bêta publique**. Il réunit l’interfa
 - signalement orange avec `!` et léger clignotement facultatif des fenêtres demandant l’attention ;
 - file d’attente chronologique `!1`, `!2`… et action **Prochaine alerte** dans l’application, l’overlay, le raccourci F8 et le Stream Deck ;
 - portrait local, 38 portraits de classes, 39 icônes officielles de caractéristiques et 20 icônes officielles de métiers personnalisables par personnage ;
-- ordre modifiable depuis l’overlay par flèches ou glisser-déposer, avec taille ajustable directement à la souris ;
+- ordre modifiable depuis l’overlay par flèches ou glisser-déposer, avec titre et flèches masquables indépendamment et taille ajustable directement à la souris ;
+- profils Stream Deck modifiables fournis pour les modèles Standard 15 touches, Mini, XL, Plus et Neo, avec aperçu intégré pour chaque disposition ;
+- contrôle de la version du plugin installé et réparation par réouverture explicite du paquet officiel embarqué ;
 - thème sombre moderne et interface à défilement vertical ;
 - détection visuelle facultative des invitations sur Retro.
 
 ## Intégration Stream Deck
 
-Le plugin 0.7.0 fourni avec le projet comprend :
+Le plugin 0.8.0 fourni avec le projet comprend :
 
 - huit touches Personnage avec numéro, nom, classe et alias ;
 - choix individuel des lignes de texte et de leur visibilité ;
@@ -86,11 +98,13 @@ Le plugin 0.7.0 fourni avec le projet comprend :
 - portrait et icône du personnage en arrière-plan, selon les préférences définies dans l’application ;
 - actions Précédent, Suivant, Prochaine alerte, Monter, Descendre, Ignorer/réintégrer et Actualiser ;
 - touche Lancer/afficher Dofus Window Manager ;
-- profil prêt à l’emploi pour le Stream Deck standard à 15 touches ;
-- aperçu interactif de la disposition directement dans l’application.
+- profils prêts à l’emploi pour les modèles Standard 15 touches, Mini, XL, Plus et Neo ;
+- aperçu interactif permettant de comparer chaque disposition directement dans l’application ;
 - reprise automatique du thème et de la langue de l’application sur les touches dynamiques.
 
 Les préférences visuelles suivent le personnage lorsqu’il change de position. Une fenêtre ignorée reste associée à sa touche et directement activable ; elle est seulement retirée de la rotation automatique.
+
+Stream Deck reste facultatif. Les appareils compacts privilégient les touches Personnage et la navigation Précédent/Suivant ; le XL affiche les huit personnages et toutes les commandes sur ses deux premières lignes.
 
 ## Installation rapide
 
@@ -98,12 +112,12 @@ Les préférences visuelles suivent le personnage lorsqu’il change de position
 
 Pour utiliser l'application sans installer Python ni compiler le projet :
 
-1. ouvrez la **[préversion officielle v2.20.0-beta.3](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.3)** puis téléchargez `DofusWindowManager.exe` ;
-2. vérifiez si possible son empreinte SHA-256 à l'aide du fichier [`DofusWindowManager.exe.sha256`](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/download/v2.20.0-beta.3/DofusWindowManager.exe.sha256) ;
+1. ouvrez la **[préversion officielle v2.20.0-beta.4](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.4)** puis téléchargez `DofusWindowManager.exe` ;
+2. vérifiez si possible son empreinte SHA-256 à l'aide du fichier [`DofusWindowManager.exe.sha256`](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/download/v2.20.0-beta.4/DofusWindowManager.exe.sha256) ;
 3. placez l'exécutable dans un dossier permanent puis lancez-le.
 
 > [!IMPORTANT]
-> L’exécutable `v2.20.0-beta.3` contient les nouveautés de la bêta 2.20. Il s’agit de la variante standard, sans détection visuelle expérimentale des invitations Retro.
+> L’exécutable `v2.20.0-beta.4` contient les nouveautés de la bêta 2.20. Il s’agit de la variante standard, sans détection visuelle expérimentale des invitations Retro.
 
 Cette bêta n'est pas encore signée numériquement. Windows SmartScreen peut donc afficher un avertissement, même pour le fichier officiel. Ne contournez jamais cet avertissement pour une copie obtenue ailleurs que sur ce dépôt.
 
@@ -195,11 +209,11 @@ py -3.14 -m ruff check .
 py -3.14 build_exe.py
 ~~~
 
-Le résultat PyInstaller est créé dans **dist\DofusWindowManager.exe**. La compilation avec la détection visuelle Retro et celle du plugin sont détaillées dans le **[guide de compilation](docs/COMPILATION.md)**.
+Le résultat PyInstaller est créé dans **dist\DofusWindowManager.exe**. Le dépôt fournit aussi une définition Inno Setup pour générer **DofusWindowManager-Setup.exe**. La compilation, la signature facultative, la détection visuelle Retro et le plugin sont détaillés dans le **[guide de compilation](docs/COMPILATION.md)**.
 
 ## Participer à la bêta
 
-Pour la bêta 2.20.0, utilisez l’**[exécutable officiel v2.20.0-beta.3](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.3)** ou installez les sources, puis suivez le **[guide de test bêta](docs/BETA_TESTING.md)**. Vous pouvez transmettre un **[retour de session](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/issues/new?template=beta_feedback.yml)** même si tout a fonctionné.
+Pour la bêta 2.20.0, utilisez l’**[exécutable officiel v2.20.0-beta.4](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.4)** ou installez les sources, puis suivez le **[guide de test bêta](docs/BETA_TESTING.md)**. Vous pouvez transmettre un **[retour de session](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/issues/new?template=beta_feedback.yml)** même si tout a fonctionné.
 
 Avant de signaler un problème :
 
@@ -216,7 +230,7 @@ Voir **[CONTRIBUTING.md](CONTRIBUTING.md)** pour tester, proposer une améliorat
 ## Limites et statut du projet
 
 - Windows uniquement ;
-- profil fourni pour le Stream Deck standard à 15 touches ;
+- profils fournis pour les Stream Deck Standard 15 touches, Mini, XL, Plus et Neo ;
 - la détection des invitations Retro est expérimentale et facultative ;
 - Windows peut refuser ponctuellement le premier plan selon les privilèges et l’application actuellement active ; plusieurs mécanismes de secours sont inclus ;
 - cette bêta peut encore contenir des défauts : sauvegardez vos profils avant une mise à jour importante.

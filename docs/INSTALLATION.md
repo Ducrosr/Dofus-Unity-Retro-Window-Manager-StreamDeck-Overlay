@@ -11,7 +11,7 @@ Ce guide installe le code source ou l’exécutable public 2.20.0 depuis le dép
 
 Cette méthode ne nécessite ni Python, ni Git, ni compilation.
 
-1. Ouvrez la [préversion officielle v2.20.0-beta.3](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.3) puis téléchargez `DofusWindowManager.exe`.
+1. Ouvrez la [préversion officielle v2.20.0-beta.4](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.4) puis téléchargez `DofusWindowManager.exe`.
 2. Vérifiez si possible son empreinte avec la commande PowerShell suivante :
 
 ~~~powershell
@@ -26,6 +26,8 @@ Comparez la valeur obtenue avec le fichier `DofusWindowManager.exe.sha256` fourn
 Le binaire n'est pas encore signé numériquement. SmartScreen peut donc demander une confirmation au premier lancement. Cela ne constitue pas une garantie de sécurité : vérifiez toujours l'adresse du dépôt et l'empreinte du fichier.
 
 Cet exécutable est la version standard. La gestion des fenêtres Dofus Retro est incluse, mais pas la détection visuelle expérimentale des invitations Retro. Pour utiliser cette fonction facultative, installez l'application depuis les sources puis suivez la section correspondante de ce guide.
+
+Lorsque `DofusWindowManager-Setup.exe` est présent dans la Release, il constitue la méthode recommandée : il installe l’application uniquement pour l’utilisateur courant, crée les raccourcis choisis et fournit une désinstallation propre. Vérifiez son fichier `DofusWindowManager-Setup.exe.sha256` comme pour l’exécutable portable. Le fichier portable reste disponible et ne nécessite aucune installation.
 
 L’exécutable publié correspond à la bêta 2.20.0 et contient l’interface multilingue, les overlays, les thèmes et les visuels présentés dans ce dépôt.
 
@@ -74,12 +76,13 @@ py -3.14 -m venv .venv
 
 ## Premier lancement
 
-1. Choisissez **Dofus Unity** ou **Dofus Retro** et laissez l’option de mémorisation activée si ce choix doit être repris au prochain lancement.
-2. Lisez l’avertissement de sécurité affiché avant l’interface principale.
-3. Vérifiez que votre copie provient bien des Releases du dépôt GitHub officiel, cochez la confirmation de lecture puis sélectionnez **Continuer**. Sans cette confirmation, l’application se ferme et aucun raccourci global n’est activé.
-4. Ouvrez vos fenêtres Dofus, cliquez sur **Rafraîchir** puis vérifiez que chaque personnage apparaît avec son nom et sa classe.
+1. Choisissez votre langue directement en haut de l’avertissement de sécurité.
+2. Vérifiez que votre copie provient bien des Releases du dépôt GitHub officiel, cochez la confirmation de lecture puis sélectionnez **Continuer**. Sans cette confirmation, l’application se ferme et aucun raccourci global n’est activé.
+3. Suivez l’assistant en six étapes : langue, mode **Dofus Unity** ou **Dofus Retro**, détection, test du focus, configuration de l’overlay et installation facultative de Stream Deck.
+4. À l’étape de détection, ouvrez vos fenêtres Dofus puis sélectionnez **Analyser maintenant**. Chaque personnage détecté doit apparaître avec son nom et sa classe.
+5. Sélectionnez **Terminer** pour mémoriser la configuration. **Configurer plus tard** conserve les choix déjà effectués et repropose l’assistant au prochain lancement.
 
-Le mode peut ensuite être changé directement dans la section **Application**, sans redémarrer le gestionnaire.
+Le mode peut ensuite être changé directement dans la section **Application**, sans redémarrer le gestionnaire. Le bouton **Assistant de configuration…** permet de relancer le guide à tout moment.
 
 ### Si le fichier est non officiel ou suspect
 
@@ -93,8 +96,10 @@ Le mode peut ensuite être changé directement dans la section **Application**, 
 1. Lancez Dofus Window Manager au moins une fois.
 2. Ouvrez **Application → Installer le plugin Stream Deck**.
 3. Confirmez l’installation dans Stream Deck.
-4. Acceptez le profil **Dofus Window Manager** proposé lors de la première installation.
-5. Revenez dans le gestionnaire et ouvrez **Aperçu Stream Deck…** pour comparer la disposition.
+4. Acceptez le profil **Dofus Window Manager** correspondant à votre modèle, proposé lors de la première installation.
+5. Revenez dans le gestionnaire et ouvrez **Aperçu Stream Deck…** pour sélectionner et comparer les dispositions Standard, Mini, XL, Plus et Neo.
+
+Le bouton **Installer ou réparer le plugin Stream Deck** compare la version détectée à celle embarquée. Il ne supprime aucun fichier directement : après confirmation, il ouvre le paquet officiel dans Stream Deck afin que le logiciel Elgato effectue lui-même l’installation ou la réparation.
 
 Le paquet officiel est également présent dans :
 
