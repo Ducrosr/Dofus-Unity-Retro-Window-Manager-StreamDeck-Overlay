@@ -68,3 +68,67 @@ jobs:
 
       - name: Empaqueter le plugin
         run: npm run pack
+
+  test-build:
+    name: Compiler le lot pour essais manuels
+    needs: [python, streamdeck]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: streamdeck-plugin/package-lock.json
+      - name: Installer les dépendances Python
+        run: python -m pip install -r requirements.txt -r requirements-dev.txt
+      - name: Préparer le plugin embarqué
+        working-directory: streamdeck-plugin
+        run: npm ci && npm run build:profiles && npm run build && npm run validate && npm run pack
+      - name: Compiler l’EXE de test
+        run: python build_exe.py
+      - name: Installer Inno Setup
+        run: choco install innosetup --no-progress -y
+      - name: Compiler l’installateur de test
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release-assets | Out-Null
+          Copy-Item dist/DofusWindowManager.exe release-assets/DofusWindowManager.exe
+          $version = python -c "import dwm; print(dwm.__version__)"
+          ./installer/build_installer.ps1 -AppVersion $version
+      - name: Identifier et vérifier les fichiers de test
+        shell: pwsh
+        run: |
+          Copy-Item streamdeck-plugin/com.remyducros.dofuswindowmanager.streamDeckPlugin release-assets/DofusWindowManager-StreamDeck.streamDeckPlugin
+          Copy-Item docs/VALIDATION_PR5.md release-assets/VALIDATION.md
+          @(
+            "TEST BUILD - NOT A PUBLIC RELEASE"
+            "Commit: $env:GITHUB_SHA"
+            "Branch: $env:GITHUB_REF_NAME"
+            "Run: https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+            "Version labels are unchanged. Identify this build by its commit and SHA-256."
+          ) | Set-Content release-assets/BUILD_INFO.txt -Encoding utf8
+          $hashes = @()
+          foreach ($name in @("DofusWindowManager.exe", "DofusWindowManager-Setup.exe", "DofusWindowManager-StreamDeck.streamDeckPlugin")) {
+            $path = "release-assets/$name"
+            if ($name.EndsWith(".exe")) {
+              $bytes = [IO.File]::ReadAllBytes($path)
+              if ($bytes.Length -lt 64 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw "Invalid executable: $name" }
+              $pe = [BitConverter]::ToInt32($bytes, 60)
+              if ($pe -lt 64 -or $pe -gt $bytes.Length - 4 -or [BitConverter]::ToUInt32($bytes, $pe) -ne 0x4550) { throw "Invalid PE header: $name" }
+            }
+            $hashes += "$((Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant())  $name"
+          }
+          $hashes | Set-Content release-assets/SHA256SUMS.txt -Encoding ascii
+      - name: Conserver le paquet de test
+        uses: actions/upload-artifact@v4
+        with:
+          name: dwm-test-${{ github.sha }}
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 14

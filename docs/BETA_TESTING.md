@@ -2,6 +2,8 @@
 
 Merci de participer à la bêta de Dofus Window Manager. Un retour indiquant que tout fonctionne est aussi utile qu'un rapport de bug : il permet d'identifier les configurations réellement couvertes.
 
+Pour valider les changements de la PR #5, utilisez le [parcours court](VALIDATION_PR5.md) et le paquet de test du workflow **Tests** sur la branche de développement. L’EXE de la release bêta 4 ne contient pas ce lot. Les artefacts de test sont conservés 14 jours.
+
 ## Avant de commencer
 
 1. Clonez ou téléchargez le ZIP uniquement depuis le [dépôt officiel](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay).
