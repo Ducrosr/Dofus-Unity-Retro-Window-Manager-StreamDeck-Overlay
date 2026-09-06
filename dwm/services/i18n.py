@@ -27,6 +27,9 @@ def get_language() -> str:
 
 
 _EN: dict[str, str] = {
+    "Mémoriser l’overlay dans le profil": "Save overlay layout in profile",
+    "Cette option prend effet avec Enregistrer. Décochée, le profil conserve l’affichage courant au chargement.": "Applied when saving. If unchecked, loading this profile keeps the current display.",
+    "Le profil « {name} » existe déjà. Remplacer son ordre, ses alias, ses apparences et sa disposition d’overlay ?": "Profile “{name}” already exists. Replace its order, aliases, appearances and overlay layout?",
     'Suspendre les raccourcis': 'Pause shortcuts',
     'Reprendre les raccourcis': 'Resume shortcuts',
     'Raccourcis suspendus': 'Shortcuts paused',
@@ -352,6 +355,9 @@ _EN: dict[str, str] = {
 }
 
 _ES: dict[str, str] = {
+    "Mémoriser l’overlay dans le profil": "Guardar la disposición del overlay en el perfil",
+    "Cette option prend effet avec Enregistrer. Décochée, le profil conserve l’affichage courant au chargement.": "Se aplica al guardar. Si se desmarca, cargar este perfil mantiene la visualización actual.",
+    "Le profil « {name} » existe déjà. Remplacer son ordre, ses alias, ses apparences et sa disposition d’overlay ?": "El perfil «{name}» ya existe. ¿Reemplazar su orden, alias, apariencias y disposición del overlay?",
     'Suspendre les raccourcis': 'Pausar atajos',
     'Reprendre les raccourcis': 'Reanudar atajos',
     'Raccourcis suspendus': 'Atajos pausados',

@@ -82,3 +82,10 @@ Les tests automatisés couvrent les transitions de contexte via des API Windows 
 4. Déplacer un personnage depuis l’application, l’overlay et le Stream Deck ; vérifier l’ordre après rafraîchissement, puis annuler avant et après reconnexion. Changer de profil et confirmer la remise à zéro de l’historique.
 5. Exporter/restaurer une configuration avec un membre absent, des cases réattribuées et un personnage ignoré ; vérifier leur conservation. Tester également un profil JSON v2.
 6. Vérifier les nouveaux contrôles en FR/EN/ES, à 100 % et 150 %, et tester la reprise après veille.
+
+### Dispositions d’overlay par profil
+
+- Enregistrer deux équipes avec des orientations et positions différentes ; les charger manuellement puis via la reconnaissance automatique.
+- Vérifier le titre, les flèches, la taille automatique et les portraits après chaque chargement.
+- Charger un ancien profil : conserver l’affichage courant. Décocher la mémorisation et enregistrer : obtenir le même comportement.
+- Vérifier que charger une disposition Unity ne modifie pas la disposition Retro enregistrée ; tester également une position provenant d’un écran débranché.

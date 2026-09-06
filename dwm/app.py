@@ -1607,6 +1607,17 @@ class WindowManagerApp:
         TtkButton(profiles, text="Gérer les profils…", command=self.open_profile_manager).grid(
             row=2, column=0, columnspan=2, sticky="ew", pady=2
         )
+        self.profile_overlay_var = BooleanVar(value=True)
+        TtkCheckbutton(
+            profiles,
+            text=tr("Mémoriser l’overlay dans le profil"),
+            variable=self.profile_overlay_var,
+        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        TtkLabel(
+            profiles,
+            text=tr("Cette option prend effet avec Enregistrer. Décochée, le profil conserve l’affichage courant au chargement."),
+            wraplength=235,
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(2, 0))
 
         application = TtkLabelFrame(right, text="Application", padding=8)
         application.pack(fill="x")
@@ -2656,6 +2667,12 @@ class WindowManagerApp:
         self._profile_match_job = self.root.after(900, run_match)
 
     def _apply_loaded_profile(self, profile: Profile, *, migrate_legacy: bool = True) -> None:
+        overlay = (profile.overlay_by_game_mode or {}).get(self.game_mode)
+        overlay_var = getattr(self, "profile_overlay_var", None)
+        if overlay_var is not None:
+            overlay_var.set(bool(overlay))
+        if overlay and self.settings.apply_profile_overlay(profile.overlay_by_game_mode, self.game_mode):
+            self._apply_display_preferences()
         self._active_profile_name = profile.name
         self.aliases.clear()
         self.aliases.update(
@@ -2853,12 +2870,24 @@ class WindowManagerApp:
         replacing_existing = name in self._get_profiles()
         if replacing_existing and not messagebox.askyesno(
             "Mettre à jour le profil",
-            f"Le profil « {name} » existe déjà. Remplacer son ordre, ses alias et ses apparences ?",
+            tr("Le profil « {name} » existe déjà. Remplacer son ordre, ses alias, ses apparences et sa disposition d’overlay ?", name=name),
             parent=self.root,
         ):
             return
         if replacing_existing:
             self._create_configuration_snapshot("avant remplacement profil")
+        overlays = {}
+        if replacing_existing:
+            try:
+                overlays = dict(load_profile(self.dirs["profiles"], name).overlay_by_game_mode or {})
+            except Exception as exc:
+                messagebox.showerror(tr("Erreur"), str(exc), parent=self.root)
+                return
+        overlay_var = getattr(self, "profile_overlay_var", None)
+        if overlay_var is None or overlay_var.get():
+            overlays[self.game_mode] = self.settings.overlay_preferences_snapshot()
+        else:
+            overlays.pop(self.game_mode, None)
         roster = self._ensure_character_roster()
         order_pseudos = list(roster.order)
         saved_aliases = {pseudo: alias.strip() for pseudo, alias in self.aliases.items() if alias.strip()}
@@ -2872,6 +2901,7 @@ class WindowManagerApp:
             game_mode=self.game_mode,
             character_slots=list(roster.slots),
             ignored_characters=[name for name in roster.order if character_key(name) in roster.ignored],
+            overlay_by_game_mode=overlays,
         )
         self.desired_order_pseudos = list(order_pseudos)
         self._saved_profile_order = list(order_pseudos)

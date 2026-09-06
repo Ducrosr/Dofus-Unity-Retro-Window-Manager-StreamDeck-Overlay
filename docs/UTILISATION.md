@@ -226,3 +226,9 @@ Le mode performance adaptatif est actif par défaut. Lorsque la synchronisation 
 **Créer un paquet de support…** enregistre, à l’emplacement choisi, une archive ZIP contenant le diagnostic, une vue non restaurable des réglages et les 256 Ko les plus récents de chaque journal. Les portraits ne sont jamais inclus ; les pseudos, alias, noms de profils, identifiants de fenêtres, chemins utilisateurs connus et adresses e-mail sont remplacés. Relisez tout de même le contenu avant de le joindre à une Issue : un texte libre écrit dans un journal peut échapper à une anonymisation automatique.
 
 Le journal principal est masqué par défaut. Activez **Afficher le journal** pour suivre les scans, changements de focus et erreurs. Avant de publier un rapport, retirez les noms ou chemins personnels si nécessaire et ne publiez jamais de donnée de connexion.
+
+### Disposition d’overlay par profil
+
+Dans **Profils**, cochez **Mémoriser l’overlay dans le profil**, puis utilisez **Enregistrer…**. Le profil conserve la position, la taille, l’orientation, l’opacité, le verrouillage, l’activation, le contenu des lignes, les portraits, les icônes, le titre et les flèches. Au chargement manuel ou automatique, cette disposition remplace les réglages courants de l’overlay pour le mode actif. Le thème, la popup et les raccourcis restent indépendants.
+
+Les dispositions Unity et Retro sont stockées séparément. Un profil ancien ou sans disposition pour le mode courant laisse l’affichage courant intact. Pour retirer une disposition, décochez l’option et enregistrez le profil. Pour actualiser la disposition après un déplacement ou une modification des paramètres, enregistrez à nouveau le profil. Modifier seulement un alias ou un portrait ne remplace pas la disposition sauvegardée.

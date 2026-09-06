@@ -73,7 +73,7 @@ def _normalized_display_preferences(
     def safe_int(key: str, default: int) -> int:
         try:
             return int(base.get(key, default))
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             return default
 
     requested_height = safe_int("rotation_overlay_height", 0)
@@ -129,6 +129,26 @@ def _normalized_display_preferences(
         "show_character_portraits": bool(base.get("show_character_portraits", True)),
         "show_character_badges": bool(base.get("show_character_badges", True)),
     }
+
+
+def normalize_profile_overlays(value: object) -> dict[str, dict[str, object]]:
+    """Keep only overlay preferences, separately for each supported game mode."""
+    if not isinstance(value, Mapping):
+        return {}
+    allowed = {
+        key for key in _default_display_preferences()
+        if key.startswith("rotation_overlay_") or key.startswith("show_overlay_")
+    }
+    result = {}
+    for mode in ("unity", "retro"):
+        raw = value.get(mode)
+        if not isinstance(raw, Mapping):
+            continue
+        filtered = {key: raw[key] for key in allowed if key in raw}
+        if filtered:
+            normalized = _normalized_display_preferences(filtered)
+            result[mode] = {key: normalized[key] for key in filtered}
+    return result
 
 
 @dataclass
@@ -259,6 +279,18 @@ class Settings:
         remembered = dict(self.display_by_game_mode or {})
         remembered[mode] = self._display_preferences_snapshot()
         self.display_by_game_mode = remembered
+
+    def overlay_preferences_snapshot(self) -> dict[str, object]:
+        return normalize_profile_overlays({"unity": self._display_preferences_snapshot()})["unity"]
+
+    def apply_profile_overlay(self, preferences: object, game_mode: str) -> bool:
+        overlay = normalize_profile_overlays(preferences).get(game_mode)
+        if not overlay:
+            return False
+        for key, value in overlay.items():
+            setattr(self, key, value)
+        self.remember_display_preferences(game_mode)
+        return True
 
     def activate_display_preferences(self, game_mode: str | None = None) -> None:
         mode = (game_mode or self.game_mode or "unity").strip().lower()

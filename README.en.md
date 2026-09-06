@@ -1,5 +1,7 @@
 <h1 align="center">Dofus Window Manager</h1>
 
+**Profile overlay layouts (in development).** In Profiles, enable **Save overlay layout in profile**, then save the profile. Loading it restores the layout for the current Unity/Retro mode. Uncheck and save to detach it; loading then keeps the current display. Save the profile again after changing its layout. Existing profiles remain unchanged.
+
 <p align="center"><strong>Dofus Unity &amp; Retro multi-account window manager — with or without Stream Deck</strong></p>
 
 <p align="center">
