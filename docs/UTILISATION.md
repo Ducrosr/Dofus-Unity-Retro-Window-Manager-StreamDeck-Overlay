@@ -252,3 +252,11 @@ Une sauvegarde contenant plusieurs profils qui écraseraient le même fichier Wi
 Dans **Paramètres**, saisissez un ou plusieurs mots dans le champ de recherche, ou utilisez **Ctrl+F** pour y accéder. La recherche porte sur les libellés et le nom des sections des trois onglets. Elle ignore les accents et les majuscules : `opacite overlay` retrouve les réglages d’opacité de l’overlay. Tous les mots doivent correspondre au même résultat ; les correspondances directes dans le libellé sont présentées en premier.
 
 Cliquez sur un résultat pour ouvrir son onglet et faire défiler jusqu’au réglage. **Entrée** depuis le champ ouvre le premier résultat. **Échap** dans le champ ou **Effacer** retire la recherche. Les champs et leurs valeurs restent présents pendant la recherche ; seules les commandes habituelles Appliquer ou Annuler valident ou abandonnent vos modifications.
+
+### Écran et ancrage de l’overlay
+
+Dans **Paramètres → Apparence → Écran et ancrage de l’overlay**, choisissez un écran détecté ou **Automatique · position courante**. Les dimensions indiquées sont celles de la zone utilisable, hors barre des tâches. La liste est actualisée à chaque ouverture des paramètres. Choisissez ensuite une position en haut ou en bas, à gauche, au centre ou à droite. L’ancrage conserve une marge de 16 pixels et suit les changements de taille de l’overlay.
+
+**Position libre** conserve le déplacement à la souris. Avec un ancrage, le déplacement de l’ensemble est désactivé ; le glisser-déposer des personnages reste disponible. L’overlay est limité aux dimensions utilisables de l’écran, sans écraser ses dimensions préférées enregistrées.
+
+Tant que l’overlay est activé, un contrôle des écrans toutes les deux secondes détecte les changements de configuration. L’overlay n’est reconstruit que si la disposition des écrans change. Si l’écran choisi manque, l’écran principal le remplace ; le choix reste mémorisé, et l’ancrage est réappliqué sur l’écran choisi lorsqu’il revient. Les coordonnées négatives des écrans à gauche ou au-dessus sont prises en charge. Ces réglages sont indépendants entre Unity et Retro et inclus lorsque vous enregistrez la disposition d’un profil.

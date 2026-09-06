@@ -30,6 +30,7 @@ from .services.display_overlay import (
 )
 from .services.character_visuals import build_avatar_image, build_badge_tile_image
 from .services.i18n import tr
+from .services.monitor_layout import list_monitors, choose_monitor, overlay_position
 
 
 DEFAULT_PALETTE = {
@@ -286,6 +287,10 @@ class OverlayUI:
         self.persistent_locked = False
         self.persistent_layout = dict(DEFAULT_ROTATION_OVERLAY_LAYOUT)
         self.persistent_orientation = "vertical"
+        self.persistent_monitor = ""
+        self.persistent_anchor = "free"
+        self._monitor_job = None
+        self._monitor_signature = ()
         self.persistent_width = 300
         self.persistent_auto_width = True
         self.persistent_height = 0
@@ -604,6 +609,8 @@ class OverlayUI:
         locked: bool,
         layout: Mapping[str, str] | None = None,
         orientation: str = "vertical",
+        monitor: str = "",
+        anchor: str = "free",
         width: int = 300,
         auto_width: bool = True,
         height: int = 0,
@@ -619,6 +626,8 @@ class OverlayUI:
         self.persistent_opacity = clamp_overlay_opacity(opacity)
         self.persistent_locked = bool(locked)
         self.persistent_layout = normalize_overlay_layout(layout)
+        self.persistent_monitor = monitor
+        self.persistent_anchor = anchor
         self.persistent_orientation = normalize_overlay_orientation(orientation)
         self.persistent_width = max(DISPLAY_MIN_WIDTH, min(DISPLAY_MAX_WIDTH, int(width)))
         self.persistent_auto_width = bool(auto_width)
@@ -636,6 +645,17 @@ class OverlayUI:
             self._destroy_persistent()
         self._ensure_persistent()
         self._render_persistent()
+        if self._monitor_job is None:
+            self._monitor_job = self.root.after(2000, self._check_monitors)
+
+    def _check_monitors(self):
+        self._monitor_job = None
+        if not self.persistent_enabled or self.persistent_window is None:
+            return
+        monitors = list_monitors(self.root)
+        if monitors != self._monitor_signature:
+            self._render_persistent()
+        self._monitor_job = self.root.after(2000, self._check_monitors)
 
     def _ensure_persistent(self) -> None:
         if self.persistent_window is not None and self.persistent_window.winfo_exists():
@@ -660,6 +680,9 @@ class OverlayUI:
         _apply_non_activating_style(window, click_through=self.persistent_locked)
 
     def _destroy_persistent(self) -> None:
+        if self._monitor_job is not None:
+            self.root.after_cancel(self._monitor_job)
+            self._monitor_job = None
         window = self.persistent_window
         self.persistent_window = None
         self._persistent_rows.clear()
@@ -928,11 +951,10 @@ class OverlayUI:
                         self._bind_drag(widget, entry.hwnd)
 
         window.update_idletasks()
-        display_rects = _get_display_rects(self.root)
-        available_width = max(
-            (right - left for left, _top, right, _bottom in display_rects),
-            default=DISPLAY_MAX_WIDTH,
-        )
+        monitors = list_monitors(self.root)
+        self._monitor_signature = monitors
+        selected_monitor = choose_monitor(monitors, self.persistent_monitor, (self.persistent_x, self.persistent_y))
+        available_width = selected_monitor.area[2] - selected_monitor.area[0] if selected_monitor else DISPLAY_MAX_WIDTH
         width = (
             _adaptive_display_width(body.winfo_reqwidth() + 2, available_width)
             if self.persistent_auto_width
@@ -943,12 +965,12 @@ class OverlayUI:
             if self.persistent_height > 0
             else max(46, body.winfo_reqheight() + 2)
         )
-        recovered_x, recovered_y = recover_window_position(
-            width,
-            height,
-            self.persistent_x,
-            self.persistent_y,
-            display_rects,
+        if selected_monitor is not None:
+            width = min(width, selected_monitor.area[2] - selected_monitor.area[0])
+            height = min(height, selected_monitor.area[3] - selected_monitor.area[1])
+        recovered_x, recovered_y = overlay_position(
+            monitors, self.persistent_monitor, self.persistent_anchor,
+            (width, height), (self.persistent_x, self.persistent_y),
         )
         position_changed = (recovered_x, recovered_y) != (
             self.persistent_x,
@@ -1005,6 +1027,8 @@ class OverlayUI:
         widget.bind("<ButtonRelease-1>", self._drag_release)
 
     def _drag_start(self, event, hwnd: int | None) -> None:
+        if hwnd is None and self.persistent_anchor != "free":
+            return
         window = self.persistent_window
         if window is None:
             return

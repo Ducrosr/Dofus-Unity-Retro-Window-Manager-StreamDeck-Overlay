@@ -1,5 +1,7 @@
 <h1 align="center">Dofus Window Manager</h1>
 
+**Pantallas y anclaje (en desarrollo).** En Ajustes → Apariencia, elige la pantalla del overlay y una posición de borde. El anclaje tiene en cuenta el tamaño del overlay y la barra de tareas. Una pantalla desconectada se sustituye temporalmente por la principal. Posición libre permite arrastrar con el ratón. Estos ajustes se guardan por modo y en las disposiciones de los perfiles.
+
 **Búsqueda de ajustes (en desarrollo).** Usa el campo superior de Ajustes o **Ctrl+F**. La búsqueda incluye etiquetas y secciones de las tres pestañas e ignora mayúsculas y acentos. Haz clic en un resultado o pulsa Intro para ir al primero. Borrar la búsqueda conserva los cambios pendientes.
 
 **Vista previa de importación (en desarrollo).** La importación de perfiles y copias de seguridad y la restauración local muestran las diferencias antes/después. Selecciona una fila para leer los valores completos. Cancelar no modifica nada; Aplicar crea primero un punto de restauración. Los perfiles locales que no se reemplazan se conservan.

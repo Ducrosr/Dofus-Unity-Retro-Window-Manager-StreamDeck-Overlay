@@ -99,6 +99,7 @@ from .services.configuration_backup import build_configuration_backup, parse_con
 from .services.configuration_diff import compare_configuration, compare_profiles
 from .ui_configuration_preview import confirm_configuration_changes
 from .ui_settings_search import SettingsSearch
+from .services.monitor_layout import list_monitors
 from .services.backup_history import (
     BackupSnapshot,
     create_backup_snapshot,
@@ -2041,6 +2042,8 @@ class WindowManagerApp:
             locked=self.settings.rotation_overlay_locked,
             layout=self.settings.rotation_overlay_layout,
             orientation=self.settings.rotation_overlay_orientation,
+            monitor=self.settings.rotation_overlay_monitor,
+            anchor=self.settings.rotation_overlay_anchor,
             width=self.settings.rotation_overlay_width,
             auto_width=self.settings.rotation_overlay_auto_width,
             height=self.settings.rotation_overlay_height,
@@ -5396,6 +5399,15 @@ class WindowManagerApp:
         )
         rotation_overlay = BooleanVar(value=bool(self.settings.rotation_overlay_enabled))
         overlay_opacity = StringVar(value=str(self.settings.rotation_overlay_opacity))
+        monitor_labels = {"": tr("Automatique · position courante")}
+        for number, monitor in enumerate(list_monitors(self.root), start=1):
+            left, top, right, bottom = monitor.area
+            monitor_labels[monitor.identity] = tr("Écran {number} · {width} × {height}", number=number, width=right-left, height=bottom-top)
+        if self.settings.rotation_overlay_monitor not in monitor_labels:
+            monitor_labels[self.settings.rotation_overlay_monitor] = tr("Écran enregistré indisponible")
+        overlay_monitor = StringVar(value=monitor_labels[self.settings.rotation_overlay_monitor])
+        anchor_labels = {"free": tr("Position libre"), **{key: tr(value) for key, value in SWAP_POSITION_LABELS.items()}}
+        overlay_anchor = StringVar(value=anchor_labels.get(self.settings.rotation_overlay_anchor, anchor_labels["free"]))
         overlay_x = StringVar(value=str(self.settings.rotation_overlay_x))
         overlay_y = StringVar(value=str(self.settings.rotation_overlay_y))
         overlay_locked = BooleanVar(value=bool(self.settings.rotation_overlay_locked))
@@ -5793,6 +5805,15 @@ class WindowManagerApp:
             textvariable=overlay_orientation,
             width=11,
         ).pack(side="left")
+        monitor_section = TtkLabelFrame(appearance_content, text=tr("Écran et ancrage de l’overlay"), padding=10)
+        monitor_section.pack(fill="x", pady=(0, 8))
+        monitor_section.columnconfigure(1, weight=1)
+        TtkLabel(monitor_section, text=tr("Écran de l’overlay")).grid(row=0, column=0, sticky="w", padx=(0, 12), pady=3)
+        Combobox(monitor_section, textvariable=overlay_monitor, values=tuple(monitor_labels.values()), state="readonly", width=32).grid(row=0, column=1, sticky="ew", pady=3)
+        TtkLabel(monitor_section, text=tr("Ancrage de l’overlay")).grid(row=1, column=0, sticky="w", padx=(0, 12), pady=3)
+        Combobox(monitor_section, textvariable=overlay_anchor, values=tuple(anchor_labels.values()), state="readonly", width=32).grid(row=1, column=1, sticky="ew", pady=3)
+        TtkLabel(monitor_section, text=tr("Choisissez Position libre pour déplacer l’overlay à la souris. Un écran absent est remplacé temporairement par l’écran principal."), wraplength=530).grid(row=2, column=0, columnspan=2, sticky="w", pady=(5, 0))
+
         TtkLabel(in_game_display, text="Position X / Y").grid(
             row=6, column=0, sticky="w", padx=(22, 12), pady=3
         )
@@ -6234,6 +6255,8 @@ class WindowManagerApp:
             }
             self.settings.rotation_overlay_enabled = bool(rotation_overlay.get())
             self.settings.rotation_overlay_opacity = clamp_overlay_opacity(overlay_opacity.get())
+            self.settings.rotation_overlay_monitor = next((key for key, label in monitor_labels.items() if label == overlay_monitor.get()), "")
+            self.settings.rotation_overlay_anchor = next((key for key, label in anchor_labels.items() if label == overlay_anchor.get()), "free")
             self.settings.rotation_overlay_x = overlay_x_value
             self.settings.rotation_overlay_y = overlay_y_value
             self.settings.rotation_overlay_width = overlay_width_value

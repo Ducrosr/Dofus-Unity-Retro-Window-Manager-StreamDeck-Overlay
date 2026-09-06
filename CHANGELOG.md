@@ -2,6 +2,8 @@
 
 ## À venir
 
+- choix de l’écran et ancrage de l’overlay sur six positions, dans la zone de travail hors barre des tâches ; récupération après débranchement et retour à l’écran choisi lorsqu’il redevient disponible ; paramètres v25 et mémorisation par profil et mode ;
+
 - recherche dans les trois onglets des paramètres : accents et majuscules ignorés, résultats contextualisés, navigation et défilement vers l’option, Ctrl+F et effacement sans perdre les réglages en cours de saisie ;
 
 - aperçu avant importation de profil, importation de sauvegarde et restauration locale : tableau avant/après, détails sélectionnables, profils conservés et annulation sans modification ; détection des noms de fichiers en conflit ; point de restauration requis avant application ;
@@ -16,7 +18,7 @@
 - restauration de l’ordre et de l’état ignoré après reconnexion, indépendamment des identifiants Windows ; conservation des membres absents lors de l’enregistrement d’un profil ;
 - panneau Équipe et emplacements pour vérifier les associations, les réattribuer explicitement ou retirer des personnages absents ;
 - annulation des vingt derniers changements d’ordre et retour à l’ordre enregistré du profil, avec indication des modifications non enregistrées ;
-- profils JSON v4 et paramètres v24 compatibles avec les anciennes configurations ; sauvegardes complètes étendues aux emplacements et personnages ignorés de la session ;
+- profils JSON v4 et paramètres v25 compatibles avec les anciennes configurations ; sauvegardes complètes étendues aux emplacements et personnages ignorés de la session ;
 - plugin Stream Deck 0.8.1 : touches absentes atténuées, refus d’activation des emplacements indisponibles et vérification de l’identité lors du focus ;
 - traduction du menu de notification et des nouvelles commandes en français, anglais et espagnol.
 

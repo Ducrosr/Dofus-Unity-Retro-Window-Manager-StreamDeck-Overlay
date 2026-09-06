@@ -1,5 +1,7 @@
 <h1 align="center">Dofus Window Manager</h1>
 
+**Displays and anchoring (in development).** In Settings → Appearance, select the overlay display and an edge position. Anchoring accounts for overlay size and the taskbar. A disconnected display temporarily falls back to the primary display. Free position allows mouse dragging. These preferences are stored per game mode and in profile layouts.
+
 **Settings search (in development).** Use the field at the top of Settings or **Ctrl+F**. Search covers labels and sections across all three tabs, ignoring case and accents. Click a result or press Enter to reach the first match. Clearing the search keeps your pending edits.
 
 **Import preview (in development).** Profile imports, backup imports and local restores show before/after differences. Select a row to read the complete values. Cancel leaves everything unchanged; Apply creates a restore point first. Local profiles that are not replaced are kept.

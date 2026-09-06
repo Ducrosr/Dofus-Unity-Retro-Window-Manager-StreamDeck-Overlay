@@ -27,6 +27,14 @@ def get_language() -> str:
 
 
 _EN: dict[str, str] = {
+    "Automatique · position courante": "Automatic · current position",
+    "Écran {number} · {width} × {height}": "Display {number} · {width} × {height}",
+    "Écran enregistré indisponible": "Saved display unavailable",
+    "Position libre": "Free position",
+    "Écran et ancrage de l’overlay": "Overlay display and anchoring",
+    "Écran de l’overlay": "Overlay display",
+    "Ancrage de l’overlay": "Overlay anchor",
+    "Choisissez Position libre pour déplacer l’overlay à la souris. Un écran absent est remplacé temporairement par l’écran principal.": "Choose Free position to move the overlay with the mouse. An unavailable display temporarily falls back to the primary display.",
     "Rechercher un paramètre": "Search settings",
     "Effacer": "Clear",
     "Paramètre": "Setting",
@@ -421,6 +429,14 @@ _EN: dict[str, str] = {
 }
 
 _ES: dict[str, str] = {
+    "Automatique · position courante": "Automático · posición actual",
+    "Écran {number} · {width} × {height}": "Pantalla {number} · {width} × {height}",
+    "Écran enregistré indisponible": "Pantalla guardada no disponible",
+    "Position libre": "Posición libre",
+    "Écran et ancrage de l’overlay": "Pantalla y anclaje del overlay",
+    "Écran de l’overlay": "Pantalla del overlay",
+    "Ancrage de l’overlay": "Anclaje del overlay",
+    "Choisissez Position libre pour déplacer l’overlay à la souris. Un écran absent est remplacé temporairement par l’écran principal.": "Elige Posición libre para mover el overlay con el ratón. Una pantalla no disponible se sustituye temporalmente por la principal.",
     "Rechercher un paramètre": "Buscar un ajuste",
     "Effacer": "Borrar",
     "Paramètre": "Ajuste",

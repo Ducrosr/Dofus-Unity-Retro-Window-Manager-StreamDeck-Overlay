@@ -9,6 +9,7 @@ from .services.i18n import tr
 
 
 FIELD_LABELS = {
+    "rotation_overlay_monitor": "Écran de l’overlay", "rotation_overlay_anchor": "Ancrage de l’overlay",
     "theme": "Thème", "language": "Langue", "game_mode": "Version de Dofus",
     "order": "Ordre", "aliases": "Alias", "visuals": "Apparences", "name": "Nom",
     "character_slots": "Emplacements", "ignored_characters": "Personnages ignorés",

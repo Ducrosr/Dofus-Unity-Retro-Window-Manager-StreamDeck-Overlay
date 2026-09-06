@@ -21,10 +21,11 @@ from ..services.themes import (
     default_theme_for_mode,
     normalize_theme,
 )
+from ..services.monitor_layout import normalize_monitor_anchor
 from .atomic import atomic_write_text
 
 
-SETTINGS_SCHEMA_VERSION = 24
+SETTINGS_SCHEMA_VERSION = 25
 MODERN_DARK_THEME = UNITY_STANDARD_THEME  # Backward-compatible public name.
 DEFAULT_WINDOW_COLUMN_ORDER = ("class", "name", "alias", "hwnd")
 
@@ -47,6 +48,8 @@ def _default_display_preferences() -> dict[str, object]:
         "rotation_overlay_auto_width": True,
         "rotation_overlay_height": 0,
         "rotation_overlay_orientation": "vertical",
+        "rotation_overlay_monitor": "",
+        "rotation_overlay_anchor": "free",
         "rotation_overlay_show_title": True,
         "rotation_overlay_show_reorder_buttons": True,
         "attention_blink_enabled": True,
@@ -112,6 +115,8 @@ def _normalized_display_preferences(
         "rotation_overlay_height": (
             0 if requested_height <= 0 else max(80, min(1600, requested_height))
         ),
+        "rotation_overlay_monitor": str(base.get("rotation_overlay_monitor") or "")[:128],
+        "rotation_overlay_anchor": normalize_monitor_anchor(base.get("rotation_overlay_anchor")),
         "rotation_overlay_orientation": normalize_overlay_orientation(
             base.get("rotation_overlay_orientation")
         ),
@@ -181,6 +186,8 @@ class Settings:
     rotation_overlay_width: int = 300
     rotation_overlay_auto_width: bool = True
     rotation_overlay_height: int = 0
+    rotation_overlay_monitor: str = ""
+    rotation_overlay_anchor: str = "free"
     rotation_overlay_orientation: str = "vertical"
     rotation_overlay_show_title: bool = True
     rotation_overlay_show_reorder_buttons: bool = True
@@ -260,6 +267,8 @@ class Settings:
                 "rotation_overlay_auto_width": self.rotation_overlay_auto_width,
                 "rotation_overlay_height": self.rotation_overlay_height,
                 "rotation_overlay_orientation": self.rotation_overlay_orientation,
+                "rotation_overlay_monitor": self.rotation_overlay_monitor,
+                "rotation_overlay_anchor": self.rotation_overlay_anchor,
                 "rotation_overlay_show_title": self.rotation_overlay_show_title,
                 "rotation_overlay_show_reorder_buttons": self.rotation_overlay_show_reorder_buttons,
                 "attention_blink_enabled": self.attention_blink_enabled,
@@ -364,6 +373,8 @@ class Settings:
         self.rotation_overlay_orientation = normalize_overlay_orientation(
             self.rotation_overlay_orientation
         )
+        self.rotation_overlay_monitor = str(self.rotation_overlay_monitor or "")[:128]
+        self.rotation_overlay_anchor = normalize_monitor_anchor(self.rotation_overlay_anchor)
         try:
             self.rotation_overlay_width = max(80, min(1800, int(self.rotation_overlay_width)))
             requested_height = int(self.rotation_overlay_height)
@@ -439,6 +450,8 @@ class Settings:
             "rotation_overlay_auto_width": bool(self.rotation_overlay_auto_width),
             "rotation_overlay_height": int(self.rotation_overlay_height),
             "rotation_overlay_orientation": self.rotation_overlay_orientation,
+            "rotation_overlay_monitor": self.rotation_overlay_monitor,
+            "rotation_overlay_anchor": self.rotation_overlay_anchor,
             "rotation_overlay_show_title": bool(self.rotation_overlay_show_title),
             "rotation_overlay_show_reorder_buttons": bool(
                 self.rotation_overlay_show_reorder_buttons
@@ -533,6 +546,8 @@ class Settings:
                 d.get("rotation_overlay_auto_width", auto_width_default)
             ),
             rotation_overlay_height=int(d.get("rotation_overlay_height", 0)),
+            rotation_overlay_monitor=str(d.get("rotation_overlay_monitor") or "")[:128],
+            rotation_overlay_anchor=normalize_monitor_anchor(d.get("rotation_overlay_anchor")),
             rotation_overlay_orientation=str(
                 d.get("rotation_overlay_orientation") or "vertical"
             ),

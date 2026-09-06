@@ -1,5 +1,7 @@
 <h1 align="center">Dofus Window Manager</h1>
 
+**Écrans et ancrage (en développement).** Dans Paramètres → Apparence, choisissez l’écran de l’overlay et une position de bord. L’ancrage tient compte de la taille de l’overlay et de la barre des tâches. Un écran débranché est remplacé temporairement par l’écran principal. Position libre permet le déplacement à la souris. Ces réglages sont conservés par mode et dans les dispositions des profils.
+
 **Recherche des paramètres (en développement).** Utilisez le champ en haut des paramètres ou **Ctrl+F**. La recherche porte sur les libellés et les sections des trois onglets, sans distinction de casse ni d’accents. Cliquez sur un résultat ou appuyez sur Entrée pour atteindre le premier. Effacer la recherche conserve vos modifications en cours.
 
 **Aperçu avant importation (en développement).** L’importation d’un profil ou d’une sauvegarde et la restauration locale présentent les différences avant/après. Sélectionnez une ligne pour lire les valeurs complètes. Annuler ne modifie rien ; Appliquer crée d’abord un point de restauration. Les profils locaux non remplacés sont conservés.

@@ -109,3 +109,10 @@ Les tests automatisés couvrent les transitions de contexte via des API Windows 
 - Rechercher `opacite overlay`, `fenetre` et une option de Général ; vérifier l’ouverture du bon onglet et le défilement.
 - Modifier une option sans appliquer, rechercher une autre option, puis effacer : vérifier que la modification initiale est conservée.
 - Tester Ctrl+F, Entrée, Échap, un terme absent, les trois langues et la fermeture immédiate après saisie.
+
+### Écrans et ancrage
+
+- Choisir chaque écran, notamment un écran à gauche ou au-dessus, puis tester les six ancrages avec les deux orientations de l’overlay.
+- Vérifier que la barre des tâches reste dégagée ; modifier la taille de l’overlay et contrôler que le bord choisi reste respecté.
+- Débrancher puis rebrancher l’écran choisi : contrôler le repli sur le principal puis le retour après environ deux secondes.
+- Tester différentes mises à l’échelle Windows, la position libre, le réordonnancement des personnages avec ancrage et la restauration d’un profil sur un autre écran.
