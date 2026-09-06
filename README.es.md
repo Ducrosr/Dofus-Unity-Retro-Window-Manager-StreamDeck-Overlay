@@ -1,5 +1,7 @@
 <h1 align="center">Dofus Window Manager</h1>
 
+**Vista previa de importación (en desarrollo).** La importación de perfiles y copias de seguridad y la restauración local muestran las diferencias antes/después. Selecciona una fila para leer los valores completos. Cancelar no modifica nada; Aplicar crea primero un punto de restauración. Los perfiles locales que no se reemplazan se conservan.
+
 **Menú rápido (en desarrollo).** Haz clic derecho en el icono junto al reloj para cargar un perfil, elegir Unity/Retro, mostrar u ocultar el overlay y pausar los atajos. Las marcas indican el perfil y el modo activos. Cargar un perfil cambia a su modo guardado si es necesario. Los cambios se desactivan mientras hay un diálogo abierto.
 
 **Disposiciones por perfil (en desarrollo).** En Perfiles, activa **Guardar la disposición del overlay en el perfil** y guarda el perfil. Al cargarlo se restaura la disposición del modo Unity/Retro actual. Desmarca y guarda para desvincularla; al cargar se mantendrá la visualización actual. Guarda de nuevo el perfil después de modificar la disposición. Los perfiles antiguos no cambian.

@@ -96,3 +96,10 @@ Les tests automatisés couvrent les transitions de contexte via des API Windows 
 - Contrôler les coches du profil, du mode et de l’overlay après une action dans l’application, puis via le menu. Vérifier également la pause/reprise et les trois langues.
 - Ouvrir les paramètres : les changements par le menu doivent être grisés. Fermer les paramètres et vérifier leur réactivation.
 - Supprimer un profil externe puis utiliser Actualiser les fenêtres : vérifier son retrait du menu. Quitter depuis le menu et vérifier la disparition de l’icône.
+
+### Aperçu des importations et restaurations
+
+- Importer un profil existant avec un ordre ou des alias différents : vérifier les valeurs avant/après, annuler, puis vérifier que le profil et les paramètres sont inchangés.
+- Importer une sauvegarde modifiant le mode, l’overlay et les raccourcis : vérifier le tableau, appliquer puis vérifier le point de restauration créé.
+- Restaurer depuis le gestionnaire déjà ouvert ; annuler avec Échap et vérifier que le gestionnaire reste utilisable.
+- Tester les textes longs, les portraits incorporés, les trois langues, les thèmes et le redimensionnement de la fenêtre d’aperçu.

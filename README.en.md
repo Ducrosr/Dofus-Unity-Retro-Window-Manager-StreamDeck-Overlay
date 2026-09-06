@@ -1,5 +1,7 @@
 <h1 align="center">Dofus Window Manager</h1>
 
+**Import preview (in development).** Profile imports, backup imports and local restores show before/after differences. Select a row to read the complete values. Cancel leaves everything unchanged; Apply creates a restore point first. Local profiles that are not replaced are kept.
+
 **Quick tray menu (in development).** Right-click the icon near the clock to load a profile, choose Unity/Retro, toggle the overlay or pause shortcuts. Checkmarks identify the active profile and mode. Loading a profile switches to its saved game mode when needed. Changes are disabled while a dialog is open.
 
 **Profile overlay layouts (in development).** In Profiles, enable **Save overlay layout in profile**, then save the profile. Loading it restores the layout for the current Unity/Retro mode. Uncheck and save to detach it; loading then keeps the current display. Save the profile again after changing its layout. Existing profiles remain unchanged.

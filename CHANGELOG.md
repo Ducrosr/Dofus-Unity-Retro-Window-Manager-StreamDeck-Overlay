@@ -2,6 +2,8 @@
 
 ## À venir
 
+- aperçu avant importation de profil, importation de sauvegarde et restauration locale : tableau avant/après, détails sélectionnables, profils conservés et annulation sans modification ; détection des noms de fichiers en conflit ; point de restauration requis avant application ;
+
 - menu de la zone de notification enrichi : profils avec indication du profil actif, bascule Unity/Retro, affichage de l’overlay et état des raccourcis ; chargement d’un profil dans son mode enregistré et suspension des changements pendant une boîte de dialogue ;
 
 - dispositions d’overlay enregistrables par profil et par mode Unity/Retro : position, taille, orientation, opacité, verrouillage, contenu et éléments visibles ; option de mémorisation dans le panneau Profils ; anciens profils inchangés ;

@@ -238,3 +238,11 @@ Les dispositions Unity et Retro sont stockées séparément. Un profil ancien ou
 Faites un clic droit sur l’icône Dofus Window Manager dans la zone de notification Windows. Le sous-menu **Profils** indique le profil réellement chargé et permet d’en charger un autre. Si le profil appartient à Unity ou Retro, l’application bascule vers ce mode avant de le charger ; un ancien profil sans mode utilise le mode courant. Sa disposition d’overlay est appliquée si elle est enregistrée.
 
 Le sous-menu **Version de Dofus** indique le mode actif. **Afficher l’overlay** est coché quand l’overlay est activé et permet de le masquer ou de le réafficher. Le libellé de pause des raccourcis suit leur état réel. Les commandes de modification sont désactivées tant qu’une boîte de dialogue est ouverte. **Actualiser les fenêtres** relit aussi la liste des profils, notamment après une modification de fichiers externe. Ces commandes fonctionnent lorsque la fenêtre principale est réduite.
+
+### Vérifier les changements avant importation ou restauration
+
+Un aperçu est affiché avant l’importation d’un profil JSON, d’une sauvegarde complète ou la restauration d’un point local. Le tableau compare les paramètres, les profils et, pour une sauvegarde complète, la session actuelle. Les dates internes des profils ne sont pas considérées comme des modifications. Les profils locaux absents du fichier importé sont conservés.
+
+Sélectionnez une ligne pour lire les valeurs complètes dans la zone inférieure, qui dispose de son propre défilement. Les images incorporées sont signalées comme images personnalisées ; leur contenu encodé n’est pas affiché. **Annuler**, la fermeture de la fenêtre ou Échap abandonnent l’opération. **Appliquer les modifications** crée un point de restauration puis applique le contenu présenté. Si le point ne peut pas être créé, l’opération est interrompue. En l’absence de différences, le bouton Appliquer est désactivé.
+
+Une sauvegarde contenant plusieurs profils qui écraseraient le même fichier Windows est refusée, notamment lorsque leurs noms ne diffèrent que par la casse ou deviennent identiques après remplacement des caractères interdits.

@@ -96,6 +96,8 @@ from .services.update_checker import (
 )
 from .services.ui_scroll import vertical_scroll_needed, wheel_scroll_units
 from .services.configuration_backup import build_configuration_backup, parse_configuration_backup
+from .services.configuration_diff import compare_configuration, compare_profiles
+from .ui_configuration_preview import confirm_configuration_changes
 from .services.backup_history import (
     BackupSnapshot,
     create_backup_snapshot,
@@ -2984,6 +2986,13 @@ class WindowManagerApp:
             pr = Profile.from_dict(data)
             if not pr.name:
                 pr.name = Path(path).stem
+            current = [load_profile(self.dirs["profiles"], name) for name in list_profiles(self.dirs["profiles"])]
+            changes, retained = compare_profiles(current, [pr])
+            if not confirm_configuration_changes(self.root, changes, retained):
+                return
+            if not self._create_configuration_snapshot("avant import profil"):
+                messagebox.showerror(tr("Import impossible"), tr("Le point de restauration n’a pas pu être créé. Aucun changement n’a été appliqué."), parent=self.root)
+                return
             save_profile(self.dirs["profiles"], pr)
             self._log(f"Profil importé: '{pr.name}'")
             self._refresh_profile_combo()
@@ -3562,13 +3571,13 @@ class WindowManagerApp:
                 self._log(f"Profil ignoré pendant la sauvegarde ({name}) : {exc}")
 
         self.settings.auto_refresh = bool(self.auto_refresh_enabled.get())
-        self.settings.last_profile = self.selected_profile.get().strip()
+        self.settings.last_profile = self._active_profile_name.strip()
         roster = self._ensure_character_roster()
         current_order = list(roster.order)
         return build_configuration_backup(
             self.settings,
             profiles,
-            active_profile=self.selected_profile.get(),
+            active_profile=self._active_profile_name,
             current_order=current_order,
             current_slots=list(roster.slots),
             current_ignored=[name for name in roster.order if character_key(name) in roster.ignored],
@@ -3674,20 +3683,26 @@ class WindowManagerApp:
     def _restore_configuration_data(self, data: object, *, source: str, parent) -> bool:
         try:
             restored_settings, profiles, session = parse_configuration_backup(data)
-        except (ValueError, TypeError) as exc:
+            current_profiles = [load_profile(self.dirs["profiles"], name) for name in list_profiles(self.dirs["profiles"])]
+            roster = getattr(self, "_roster", None)
+            order = list(roster.order if roster is not None else self.desired_order_pseudos)
+            current_session = {
+                "active_profile": self._active_profile_name,
+                "order": order,
+                "aliases": {name: alias.strip() for name, alias in self.aliases.items() if alias.strip()},
+                "character_slots": list(roster.slots) if roster is not None else order,
+                "ignored_characters": [name for name in order if roster is not None and character_key(name) in roster.ignored],
+            }
+            changes, retained = compare_configuration(self.settings.to_dict(), restored_settings.to_dict(),
+                                                       current_profiles, profiles, current_session, session)
+        except (OSError, ValueError, TypeError) as exc:
             messagebox.showerror("Sauvegarde invalide", str(exc), parent=parent)
             return False
-        if not messagebox.askyesno(
-            "Restaurer la configuration",
-            (
-                f"Restaurer {len(profiles)} profil(s) et remplacer les réglages actuels ?\n\n"
-                "Un point de restauration de l’état actuel sera créé avant de continuer. "
-                "Les profils locaux portant un autre nom seront conservés."
-            ),
-            parent=parent,
-        ):
+        if not confirm_configuration_changes(parent, changes, retained):
             return False
-        self._create_configuration_snapshot("avant restauration")
+        if not self._create_configuration_snapshot("avant restauration"):
+            messagebox.showerror(tr("Import impossible"), tr("Le point de restauration n’a pas pu être créé. Aucun changement n’a été appliqué."), parent=parent)
+            return False
         self._apply_restored_configuration(
             restored_settings,
             profiles,
