@@ -138,8 +138,9 @@ export function buildCharacterKeySvg(
 		})
 		.join("");
 
-	const background = active ? palette.bg3 : palette.bg;
-	const border = window.attention
+	const unavailable = window.available === false;
+	const background = active && !unavailable ? palette.bg3 : palette.bg;
+	const border = unavailable ? palette.muted : window.attention
 		? attentionColor
 		: window.ignored
 			? "#f87171"
@@ -159,7 +160,8 @@ export function buildCharacterKeySvg(
 	const badgeLayer = badgeImage
 		? `<circle cx="18" cy="18" r="13" fill="#111827" opacity=".85"/><image href="${badgeImage}" x="6" y="6" width="24" height="24" preserveAspectRatio="xMidYMid meet"/>`
 		: "";
-	return `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144"><rect width="144" height="144" rx="18" fill="${background}"/>${portraitLayer}<rect x="5" y="5" width="134" height="134" rx="15" fill="none" stroke="${border}" stroke-width="${window.attention ? 7 : 4}" opacity="0.92"/><path d="M18 40h108M18 72h108M18 104h108" stroke="${palette.line}" stroke-width="1" opacity="0.38"/>${attentionMarker}${badgeLayer}${textElements}</svg>`;
+	const unavailableMarker = unavailable ? `<circle cx="126" cy="18" r="11" fill="${palette.bg3}"/><path d="M120 18h12" stroke="${palette.fg}" stroke-width="3"/>` : "";
+	return `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144"><rect width="144" height="144" rx="18" fill="${background}"/><g opacity="${unavailable ? 0.4 : 1}">${portraitLayer}<rect x="5" y="5" width="134" height="134" rx="15" fill="none" stroke="${border}" stroke-width="${window.attention ? 7 : 4}" opacity="0.92"/><path d="M18 40h108M18 72h108M18 104h108" stroke="${palette.line}" stroke-width="1" opacity="0.38"/>${attentionMarker}${badgeLayer}${textElements}</g>${unavailableMarker}</svg>`;
 }
 
 export function svgToDataUrl(svg: string): string {

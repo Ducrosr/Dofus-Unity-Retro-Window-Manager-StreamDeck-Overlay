@@ -23,6 +23,8 @@ class ConfigurationBackupTests(unittest.TestCase):
             current_order=["Korra", "Nealla"],
             current_aliases={"Nealla": "Terre", "Korra": ""},
             app_version="2.18.0",
+            current_slots=["Nealla", "Korra", "Absent"],
+            current_ignored=["Absent"],
         )
 
         settings, profiles, session = parse_configuration_backup(backup)
@@ -32,6 +34,8 @@ class ConfigurationBackupTests(unittest.TestCase):
         self.assertEqual(session["active_profile"], "Équipe")
         self.assertEqual(session["order"], ["Korra", "Nealla"])
         self.assertEqual(session["aliases"], {"Nealla": "Terre"})
+        self.assertEqual(session["character_slots"], ["Nealla", "Korra", "Absent"])
+        self.assertEqual(session["ignored_characters"], ["Absent"])
 
     def test_unrelated_json_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "sauvegarde Dofus Window Manager"):

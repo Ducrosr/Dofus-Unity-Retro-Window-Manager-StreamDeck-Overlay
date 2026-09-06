@@ -190,7 +190,7 @@ export class CharacterAction extends SingletonAction<CharacterSettings> {
 		try {
 			const status = dwmClient.getState().status;
 			const window = status ? findSelectedWindow(status, ev.payload.settings) : undefined;
-			if (!window) throw new Error("Le personnage attribué n'est pas disponible.");
+			if (!window || window.available === false || window.hwnd <= 0) throw new Error("Le personnage attribué n'est pas disponible.");
 			await dwmClient.focus(window);
 			ev.action.showOk();
 		} catch (error) {
@@ -278,9 +278,9 @@ export class CharacterAction extends SingletonAction<CharacterSettings> {
 		const items: DataSourceItem[] = [];
 		const language = state.status?.language === "en" || state.status?.language === "es" ? state.status.language : "fr";
 		const text = {
-			fr: { disconnected: "Dofus Window Manager non connecté", empty: "Aucune fenêtre Dofus détectée", alias: "alias", ignored: "ignorée", attention: "demande votre attention" },
-			en: { disconnected: "Dofus Window Manager is not connected", empty: "No Dofus window detected", alias: "alias", ignored: "ignored", attention: "needs your attention" },
-			es: { disconnected: "Dofus Window Manager no está conectado", empty: "No se detectó ninguna ventana de Dofus", alias: "alias", ignored: "ignorada", attention: "requiere tu atención" },
+			fr: { disconnected: "Dofus Window Manager non connecté", empty: "Aucune fenêtre Dofus détectée", alias: "alias", ignored: "ignorée", attention: "demande votre attention", unavailable: "absent ou ambigu" },
+			en: { disconnected: "Dofus Window Manager is not connected", empty: "No Dofus window detected", alias: "alias", ignored: "ignored", attention: "needs your attention", unavailable: "offline or ambiguous" },
+			es: { disconnected: "Dofus Window Manager no está conectado", empty: "No se detectó ninguna ventana de Dofus", alias: "alias", ignored: "ignorada", attention: "requiere tu atención", unavailable: "ausente o ambiguo" },
 		}[language];
 
 		if (!state.connected || !state.status) {
@@ -295,11 +295,12 @@ export class CharacterAction extends SingletonAction<CharacterSettings> {
 				const aliasSuffix = alias && alias !== characterName ? ` · ${text.alias} : ${alias}` : "";
 				const position = window.position == null ? "—" : String(window.position);
 				const ignoredSuffix = window.ignored ? ` · ${text.ignored}` : "";
+				const unavailableSuffix = window.available === false ? ` · ${text.unavailable}` : "";
 				const attentionSuffix = window.attention
 					? ` · !${window.attention_order ?? ""} ${text.attention}`
 					: "";
 				items.push({
-					label: `${position} — ${characterName}${classSuffix}${aliasSuffix}${ignoredSuffix}${attentionSuffix}`,
+					label: `${position} — ${characterName}${classSuffix}${aliasSuffix}${ignoredSuffix}${attentionSuffix}${unavailableSuffix}`,
 					value: String(window.slot),
 				});
 			}

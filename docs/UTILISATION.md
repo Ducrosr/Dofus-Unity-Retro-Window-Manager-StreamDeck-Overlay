@@ -36,9 +36,22 @@ Le mode Unity cible les fenêtres Unity. Le mode Retro combine la classe de fen�
 
 La ligne active est mise en évidence dans l’application. Le bouton Stream Deck actif utilise un état vert.
 
-Ces raccourcis sont globaux tant que le gestionnaire fonctionne. Une touche seule comme `1` est donc réservée par le gestionnaire ; laissez l’accès direct vide ou utilisez une combinaison telle que `Ctrl+Alt+1` si la touche doit rester disponible dans le jeu ou dans les autres applications.
+Par défaut, ces raccourcis sont globaux tant que le gestionnaire fonctionne. Une touche seule comme `1` est donc réservée par le gestionnaire ; laissez l’accès direct vide ou utilisez une combinaison telle que `Ctrl+Alt+1` si la touche doit rester disponible dans le jeu ou dans les autres applications.
 
 Lorsqu’une fenêtre Dofus fait clignoter son bouton dans la barre des tâches Windows, elle passe en orange avec un repère `!` dans l’application, le mode compact, l’overlay et le Stream Deck. Plusieurs demandes forment une file chronologique : `!1` est la prochaine, puis `!2`, etc. Un signal répété pour la même fenêtre ne change pas sa place. Le bouton **Prochaine alerte** indique le nombre restant ; il est également disponible dans le mode compact, l’en-tête de l’overlay déverrouillé et parmi les actions Stream Deck. Un léger clignotement rend l’alerte plus visible ; il peut être désactivé dans **Paramètres → Demandes d’attention** sans retirer la couleur orange ni le repère. L’alerte n’est retirée qu’après un focus réussi. La détection est volontairement limitée aux demandes d’attention Windows : un événement affiché uniquement à l’intérieur du jeu, sans clignotement ni événement d’accessibilité, peut ne pas être détecté.
+
+## Raccourcis contextuels et emplacements fixes
+
+Dans **Paramètres → Raccourcis**, deux options indépendantes sont disponibles :
+
+- **Activer les raccourcis uniquement dans Dofus** : les enregistrements clavier sont retirés lorsque Dofus n’est plus au premier plan et rétablis au retour. Le mode global reste le réglage initial des anciennes installations.
+- **Lier les accès directs et le Stream Deck aux personnages** : les cases suivent l’équipe du profil. La fermeture du personnage 2 laisse sa case indisponible ; les suivants gardent leur numéro. Après reconnexion, la même case cible sa nouvelle fenêtre. Une correspondance ambiguë reste indisponible.
+
+Le bouton **Suspendre les raccourcis** et le menu de la zone de notification permettent une pause manuelle. Les paramètres suspendent temporairement les raccourcis pendant leur édition. Le mode contextuel ne reconnaît pas le champ de chat à l’intérieur de Dofus : utilisez la pause ou une combinaison avec Ctrl/Alt pour écrire. La transition de contexte utilise une vérification native toutes les 50 ms ; le mode global n’ajoute pas de scrutation périodique.
+
+**Navigation → Équipe et emplacements…** permet d’inspecter les cases et les personnages absents, puis de réattribuer explicitement les emplacements selon l’ordre courant. Enregistrez un profil pour conserver l’équipe. Un nom absent reste mémorisé jusqu’à son retrait explicite ; retirer les absents renumérote les cases suivantes et doit être suivi d’un enregistrement du profil.
+
+L’overlay conserve l’ordre de rotation ; les emplacements fixes concernent les raccourcis directs et les touches Stream Deck. Un personnage ignoré reste accessible directement en mode fixe. Les raccourcis clavier directs restent limités aux huit premiers emplacements.
 
 ## Modifier l’ordre
 
@@ -49,7 +62,9 @@ Quatre méthodes sont disponibles :
 - utiliser les touches Monter/Descendre du Stream Deck.
 - utiliser les flèches ou glisser une ligne dans l’overlay déverrouillé.
 
-Pendant un glisser-déposer, la destination est surlignée et la barre d’état précise si le dépôt se fera avant ou après. L’ordre est immédiatement transmis au Stream Deck : les personnages changent donc de touche pour rester cohérents avec la liste.
+Pendant un glisser-déposer, la destination est surlignée et la barre d’état précise si le dépôt se fera avant ou après. L’ordre est immédiatement transmis à l’overlay et au Stream Deck. En mode fixe, les cases Stream Deck restent associées aux personnages et leur numéro de rotation est actualisé ; sinon les personnages changent de touche pour suivre la liste.
+
+**Annuler le déplacement** restaure les changements d’ordre précédents (jusqu’à vingt opérations pendant la session), y compris après une reconnexion. **Rétablir l’ordre du profil** revient à l’ordre enregistré. L’indicateur « Ordre modifié — non enregistré » rappelle de sauvegarder le profil. Un scan n’efface plus une réorganisation en cours ; charger un autre profil réinitialise l’historique.
 
 ## Alias, portrait et icône
 
@@ -80,7 +95,7 @@ Une fenêtre ignorée peut toujours être activée directement. Elle conserve sa
 
 ## Profils
 
-Un profil enregistre l’ordre des personnages, leurs alias, leurs portraits et leurs icônes en les associant à leur pseudo plutôt qu’à un identifiant de fenêtre temporaire. Créez un profil par serveur : deux personnages portant le même nom sur des serveurs différents peuvent ainsi avoir une classe, un alias et une apparence distincts.
+Un profil enregistre l’ordre des personnages, leurs emplacements fixes, leur état ignoré, leurs alias, leurs portraits et leurs icônes en les associant à leur pseudo plutôt qu’à un identifiant de fenêtre temporaire. Créez un profil par serveur : deux personnages portant le même nom sur des serveurs différents peuvent ainsi avoir une classe, un alias et une apparence distincts.
 
 Au premier scan, la reconnaissance intelligente peut charger automatiquement un profil uniquement si son mode Unity/Retro et l’ensemble complet de ses personnages correspondent exactement aux fenêtres détectées. Si deux profils contiennent les mêmes personnages, aucun n’est choisi : sélectionnez alors le serveur manuellement. Les correspondances partielles et les anciens profils qui n’ont pas encore de mode enregistré ne sont jamais chargés automatiquement. Cette fonction peut être désactivée dans **Paramètres → Général → Profils**.
 

@@ -10,6 +10,7 @@ import ctypes
 import threading
 from ctypes import wintypes
 from typing import Callable, Dict, Optional, Tuple
+from .hotkey_context import context_allows_hotkeys
 
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -20,6 +21,7 @@ WM_QUIT = 0x0012
 WM_APP = 0x8000
 WM_HK_REGISTER = WM_APP + 1
 WM_HK_UNREGISTER = WM_APP + 2
+WM_HK_CONTEXT = WM_APP + 3
 
 MOD_ALT = 0x0001
 MOD_CONTROL = 0x0002
@@ -82,6 +84,12 @@ kernel32.GetCurrentThreadId.argtypes = []
 kernel32.GetCurrentThreadId.restype = wintypes.DWORD
 
 PM_NOREMOVE = 0x0000
+PM_REMOVE = 0x0001
+QS_ALLINPUT = 0x04FF
+user32.GetForegroundWindow.argtypes = []
+user32.GetForegroundWindow.restype = wintypes.HWND
+user32.MsgWaitForMultipleObjects.argtypes = [wintypes.DWORD, ctypes.c_void_p, wintypes.BOOL, wintypes.DWORD, wintypes.DWORD]
+user32.MsgWaitForMultipleObjects.restype = wintypes.DWORD
 
 
 def _vk_from_key(key: str) -> Optional[int]:
@@ -166,6 +174,32 @@ class HotkeyManager:
         self._last_error: Optional[str] = None
         self._registration_errors: list[str] = []
         self._ready = threading.Event()
+        self._context_enabled = True
+        self._allowed_hwnds: frozenset[int] | None = None
+        self._context_active = False
+
+    def set_context(self, *, enabled: bool, allowed_hwnds: frozenset[int] | None = None) -> None:
+        with self._lock:
+            self._context_enabled = bool(enabled)
+            self._allowed_hwnds = allowed_hwnds
+        if self._thread_id:
+            user32.PostThreadMessageW(self._thread_id, WM_HK_CONTEXT, 0, 0)
+
+    def _context_allows(self) -> bool:
+        with self._lock:
+            enabled, allowed = self._context_enabled, self._allowed_hwnds
+        foreground = int(user32.GetForegroundWindow() or 0) if enabled and allowed is not None else 0
+        return context_allows_hotkeys(enabled, allowed, foreground)
+
+    def _sync_context(self) -> None:
+        allowed = self._context_allows()
+        if allowed == self._context_active:
+            return
+        self._context_active = allowed
+        if allowed:
+            self._register_all()
+        else:
+            self._unregister_all()
 
     def get_last_error(self) -> Optional[str]:
         return self._last_error
@@ -237,6 +271,8 @@ class HotkeyManager:
             pair = self._registered.get(hotkey_id)
         if not pair:
             return True
+        if not self._context_active:
+            return True
         mods, vk = pair
         try:
             user32.UnregisterHotKey(None, hotkey_id)
@@ -279,14 +315,25 @@ class HotkeyManager:
         # Thread is ready to receive WM_HOTKEY / WM_APP messages
         self._ready.set()
 
-        self._register_all()
+        self._context_active = False
+        self._sync_context()
 
         while self._running.is_set():
-            ret = user32.GetMessageW(ctypes.byref(msg), None, 0, 0)
-            if ret == 0:  # WM_QUIT
+            # RegisterHotKey reserves keys system-wide: release registrations,
+            # rather than merely ignoring callbacks, when outside the game.
+            self._sync_context()
+            if not user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, PM_REMOVE):
+                with self._lock:
+                    delay = 50 if self._context_enabled and self._allowed_hwnds is not None else 0xFFFFFFFF
+                if user32.MsgWaitForMultipleObjects(0, None, False, delay, QS_ALLINPUT) == 0xFFFFFFFF:
+                    break
+                continue
+            if msg.message == WM_QUIT:
                 break
-            if ret == -1:
-                break
+
+            if msg.message == WM_HK_CONTEXT:
+                self._sync_context()
+                continue
 
             if msg.message == WM_HK_REGISTER:
                 try:
@@ -301,6 +348,8 @@ class HotkeyManager:
                     pass
                 continue
             if msg.message == WM_HOTKEY:
+                if not self._context_allows():
+                    continue
                 hotkey_id = int(msg.wParam)
                 cb = None
                 with self._lock:

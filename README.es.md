@@ -35,6 +35,12 @@ Gestor local de ventanas para Windows compatible con **Dofus Unity** y **Dofus R
 
 La versión 2.20.0 es la beta pública actual. Reúne la interfaz multilingüe, los overlays, las solicitudes de atención, los retratos, los iconos oficiales y los temas Unity/Retro. El ejecutable de Windows correspondiente está disponible en la [Release oficial v2.20.0-beta.4](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.4).
 
+## En desarrollo — perfiles y atajos
+
+El código fuente aplica inmediatamente los perfiles reconocidos y ofrece atajos limitados a Dofus, posiciones fijas por personaje, reconexión conservando el estado ignorado y la opción de deshacer cambios de orden. El plugin incluido pasa a 0.8.1. Estas novedades todavía no están en el ejecutable beta 4 enlazado arriba.
+
+Activa los nuevos modos en **Ajustes → Atajos**. **Navegación → Equipo y posiciones…** muestra los personajes ausentes y sus asociaciones. Las configuraciones existentes conservan los atajos globales y los accesos por posición.
+
 ## Funciones principales
 
 - detección nativa de ventanas Dofus Unity y Retro;
@@ -74,7 +80,7 @@ La versión 2.20.0 es la beta pública actual. Reúne la interfaz multilingüe, 
 
 Standard es el tema predeterminado tanto para Unity como para Retro. Todos los temas pueden utilizarse en ambos modos y la aplicación recuerda un tema y un conjunto de preferencias de visualización distintos para cada versión del juego.
 
-## Stream Deck 0.8.0
+## Stream Deck 0.8.1
 
 El plugin incluye ocho teclas de personaje y acciones Anterior, Siguiente, Siguiente alerta, Subir, Bajar, Ignorar/restaurar, Actualizar y Abrir/mostrar. La tecla Siguiente alerta muestra el número pendiente y activa la solicitud más antigua. En cada tecla se puede colocar el número, nombre, clase y alias de forma independiente en cuatro líneas. Los retratos, iconos, orden de alertas, tema activo e idioma se sincronizan automáticamente.
 

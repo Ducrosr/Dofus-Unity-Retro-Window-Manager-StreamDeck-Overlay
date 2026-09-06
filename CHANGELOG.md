@@ -2,6 +2,16 @@
 
 ## À venir
 
+- chargement automatique des profils aligné sur le chargement manuel : ordre, alias, overlay et Stream Deck sont appliqués immédiatement, y compris après une détection par événements ;
+- raccourcis facultativement limités aux fenêtres Dofus, libérés dans les autres applications ; pause/reprise dans l’application et la zone de notification, et suspension pendant l’édition des paramètres ;
+- accès directs et cases Stream Deck fixes par personnage, activables dans les paramètres, avec conservation des emplacements absents et refus des noms ambigus ;
+- restauration de l’ordre et de l’état ignoré après reconnexion, indépendamment des identifiants Windows ; conservation des membres absents lors de l’enregistrement d’un profil ;
+- panneau Équipe et emplacements pour vérifier les associations, les réattribuer explicitement ou retirer des personnages absents ;
+- annulation des vingt derniers changements d’ordre et retour à l’ordre enregistré du profil, avec indication des modifications non enregistrées ;
+- profils JSON v3 et paramètres v24 compatibles avec les anciennes configurations ; sauvegardes complètes étendues aux emplacements et personnages ignorés de la session ;
+- plugin Stream Deck 0.8.1 : touches absentes atténuées, refus d’activation des emplacements indisponibles et vérification de l’identité lors du focus ;
+- traduction du menu de notification et des nouvelles commandes en français, anglais et espagnol.
+
 ## 2.20.0-beta.4 — préversion Windows
 
 - passage du plugin Stream Deck en version 0.8.0 avec cinq profils modifiables et installés automatiquement selon le type d’appareil : Standard 15 touches, Mini, XL, Plus et Neo ;

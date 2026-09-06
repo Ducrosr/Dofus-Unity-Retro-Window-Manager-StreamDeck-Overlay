@@ -35,6 +35,12 @@ A local Windows window manager for **Dofus Unity** and **Dofus Retro**, designed
 
 Version 2.20.0 is the current public beta. It brings together the multilingual interface, overlays, attention requests, portraits, official icons and Unity/Retro themes. The matching Windows executable is available from the [official v2.20.0-beta.4 Release](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.4).
 
+## In development — profiles and shortcuts
+
+The sources now apply recognized profiles immediately and offer game-only shortcuts, fixed character slots, reconnection with preserved ignored state, and undo for order changes. The bundled plugin is 0.8.1. These changes are not yet included in the beta 4 executable linked above.
+
+Enable the new modes in **Settings → Shortcuts**. **Navigation → Team and slots…** shows offline characters and slot assignments. Existing settings retain global shortcuts and position-based direct access.
+
 ## Main features
 
 - native Dofus Unity and Retro window detection;
@@ -74,7 +80,7 @@ Version 2.20.0 is the current public beta. It brings together the multilingual i
 
 Standard is the default theme for both Unity and Retro. Every theme can be selected in either mode, and the application remembers one theme and a separate set of display preferences for each game version.
 
-## Stream Deck 0.8.0
+## Stream Deck 0.8.1
 
 The bundled plugin provides eight character keys and actions for Previous, Next, Next alert, Move up, Move down, Ignore/restore, Refresh and Launch/show. The Next alert key displays the pending count and focuses the oldest request. Character keys can place the number, name, class and alias independently on four lines. Portraits, badges, attention order, current application theme and language are synchronized automatically.
 

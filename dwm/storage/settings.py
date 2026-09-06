@@ -24,7 +24,7 @@ from ..services.themes import (
 from .atomic import atomic_write_text
 
 
-SETTINGS_SCHEMA_VERSION = 23
+SETTINGS_SCHEMA_VERSION = 24
 MODERN_DARK_THEME = UNITY_STANDARD_THEME  # Backward-compatible public name.
 DEFAULT_WINDOW_COLUMN_ORDER = ("class", "name", "alias", "hwnd")
 
@@ -190,6 +190,8 @@ class Settings:
 
     # Hotkeys
     hotkeys: Dict[str, str] | None = None
+    hotkey_scope: str = "global"
+    fixed_character_slots: bool = False
 
     # Profiles
     last_profile: str = ""
@@ -272,6 +274,7 @@ class Settings:
         self.display_by_game_mode = remembered
 
     def __post_init__(self):
+        self.hotkey_scope = "game" if self.hotkey_scope == "game" else "global"
         requested_columns = self.window_column_order or []
         normalized_columns: list[str] = []
         for column in (*requested_columns, *DEFAULT_WINDOW_COLUMN_ORDER):
@@ -425,6 +428,8 @@ class Settings:
             "event_hook_enabled": bool(self.event_hook_enabled),
             "popup_watch_enabled": bool(getattr(self, "popup_watch_enabled", False)),
             "hotkeys": dict(self.hotkeys or {}),
+            "hotkey_scope": self.hotkey_scope,
+            "fixed_character_slots": bool(self.fixed_character_slots),
             "last_profile": self.last_profile,
             "smart_profile_loading_enabled": bool(self.smart_profile_loading_enabled),
             "game_mode": self.game_mode,
@@ -530,6 +535,8 @@ class Settings:
             event_hook_enabled=bool(d.get("event_hook_enabled", True)),
             popup_watch_enabled=bool(d.get("popup_watch_enabled", False)),
             hotkeys=d.get("hotkeys") or None,
+            hotkey_scope=d.get("hotkey_scope", "global"),
+            fixed_character_slots=bool(d.get("fixed_character_slots", False)),
             last_profile=d.get("last_profile", ""),
             smart_profile_loading_enabled=bool(
                 d.get("smart_profile_loading_enabled", True)

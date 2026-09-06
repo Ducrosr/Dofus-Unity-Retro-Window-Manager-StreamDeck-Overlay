@@ -8,6 +8,7 @@ export type DofusWindow = {
 	slot: number;
 	position?: number | null;
 	hwnd: number;
+	available?: boolean;
 	pseudo: string;
 	alias: string;
 	name: string;
@@ -26,6 +27,7 @@ export type DwmStatus = {
 	api_version: number;
 	app_version: string;
 	game_mode: "unity" | "retro";
+	profile?: string;
 	theme?: string;
 	language?: "fr" | "en" | "es";
 	scan_revision?: number;
@@ -84,8 +86,8 @@ class DwmClient {
 		return this.state;
 	}
 
-	async focus(window: Pick<DofusWindow, "hwnd" | "slot">): Promise<void> {
-		await this.focusCommand("focus", { hwnd: window.hwnd, slot: window.slot });
+	async focus(window: Pick<DofusWindow, "hwnd" | "slot" | "pseudo">): Promise<void> {
+		await this.focusCommand("focus", { hwnd: window.hwnd, slot: window.slot, pseudo: window.pseudo, game_mode: this.state.status?.game_mode, profile: this.state.status?.profile });
 	}
 
 	async rotate(direction: "forward" | "backward"): Promise<void> {

@@ -41,6 +41,12 @@ Dofus Window Manager est un gestionnaire de fenêtres local pour **Dofus Unity**
 
 Le code source 2.20.0 est proposé en **bêta publique**. Il réunit l’interface multilingue, les overlays, les demandes d’attention, les portraits, les icônes officielles et les thèmes Unity/Retro. Les retours de bugs, d’ergonomie et de compatibilité sont les bienvenus dans les [Issues GitHub](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/issues).
 
+## En développement — profils et raccourcis
+
+Les sources incluent le chargement immédiat des profils reconnus, des raccourcis limités à Dofus au choix, des emplacements fixes par personnage, la reconnexion avec conservation de l’état ignoré et l’annulation des changements d’ordre. Le plugin embarqué passe en 0.8.1. Ces nouveautés ne sont pas encore dans l’exécutable bêta 4 lié ci-dessus.
+
+Activez les deux nouveaux modes dans **Paramètres → Raccourcis**. **Navigation → Équipe et emplacements…** affiche les personnages absents et les associations. Les anciennes configurations conservent les raccourcis globaux et les accès par position. [Détails d’utilisation](docs/UTILISATION.md).
+
 ## Ce que fait l’application
 
 - détection native des fenêtres Dofus Unity et Dofus Retro ;
@@ -88,7 +94,7 @@ Le code source 2.20.0 est proposé en **bêta publique**. Il réunit l’interfa
 
 ## Intégration Stream Deck
 
-Le plugin 0.8.0 fourni avec le projet comprend :
+Le plugin 0.8.1 fourni avec le projet comprend :
 
 - huit touches Personnage avec numéro, nom, classe et alias ;
 - choix individuel des lignes de texte et de leur visibilité ;

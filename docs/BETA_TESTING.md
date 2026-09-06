@@ -70,3 +70,15 @@ Il n'est pas nécessaire de tout tester. Indiquez simplement les parties réelle
 - vulnérabilité ou doute de sécurité : suivez [SECURITY.md](../SECURITY.md) sans publier de détail sensible.
 
 Le rapport de diagnostic peut contenir des noms de personnages et des chemins locaux. Relisez-le avant de le publier.
+
+
+## Lot en développement : profils, raccourcis et reconnexion
+
+Les tests automatisés couvrent les transitions de contexte via des API Windows simulées et les parcours de détection, reconnexion, annulation et publication vers les affichages. Les essais Windows réels suivants restent nécessaires avant une release :
+
+1. Charger automatiquement une équipe déjà ouverte dans un ordre différent : vérifier immédiatement tableau, overlay, alias et Stream Deck, sans autre scan.
+2. Choisir le mode contextuel et un chiffre seul : passer de Dofus au Bloc-notes et vérifier la saisie normale, puis revenir au jeu. Tester la pause depuis l’application et la zone de notification, ainsi que la capture dans les paramètres.
+3. En mode fixe, fermer le personnage 2, utiliser le 3, puis reconnecter le 2 : les cases doivent rester stables et le 2 retrouver sa cible. Répéter avec un personnage ignoré, puis avec le hook désactivé pour utiliser les scans.
+4. Déplacer un personnage depuis l’application, l’overlay et le Stream Deck ; vérifier l’ordre après rafraîchissement, puis annuler avant et après reconnexion. Changer de profil et confirmer la remise à zéro de l’historique.
+5. Exporter/restaurer une configuration avec un membre absent, des cases réattribuées et un personnage ignoré ; vérifier leur conservation. Tester également un profil JSON v2.
+6. Vérifier les nouveaux contrôles en FR/EN/ES, à 100 % et 150 %, et tester la reprise après veille.

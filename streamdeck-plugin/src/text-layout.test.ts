@@ -24,6 +24,13 @@ const nealla: DofusWindow = {
 	active: true,
 };
 
+test("un personnage absent garde son nom sur une touche atténuée", () => {
+	const svg = buildCharacterKeySvg({ ...nealla, hwnd: -4, available: false, active: false, position: null }, 4, defaultTextLayout(), false);
+	assert.match(svg, /Nealla/u);
+	assert.match(svg, /<g opacity="0.4">/u);
+	assert.doesNotMatch(svg, /fill="#4ade80"/u);
+});
+
 test("la migration conserve l'ancien choix de classe", () => {
 	assert.deepEqual(layoutForLegacyDisplay("class"), {
 		position: "1",

@@ -70,6 +70,7 @@ from .services.onboarding import (
     onboarding_required,
 )
 from .services.profile_matching import rank_profile_matches, unique_exact_profile_match
+from .services.character_roster import CharacterRoster, character_key, character_names
 from .services.performance import RuntimeMetrics, adaptive_refresh_delay_seconds
 from .services.support_bundle import create_support_bundle
 from .services.streamdeck_bridge import StreamDeckBridge
@@ -84,7 +85,7 @@ from .services.streamdeck_preview import (
     STREAMDECK_PROFILE_LAYOUTS,
     format_character_key,
 )
-from .services.streamdeck_state import build_streamdeck_windows, reconcile_streamdeck_order
+from .services.streamdeck_state import build_streamdeck_windows, reconcile_streamdeck_order, retain_character_slots
 from .services.update_checker import (
     ReleaseInfo,
     UpdateCheckError,
@@ -507,6 +508,9 @@ class WindowManagerApp:
         )
         self.character_visuals = dict(self._legacy_character_visuals)
         self.desired_order_pseudos: list[str] = []  # current profile order
+        self._roster = CharacterRoster()
+        self._saved_profile_order: list[str] = []
+        self._hotkeys_paused = False
 
         # Heuristics (fiabilité)
         self._privilege_mismatch_suspected: bool = False
@@ -589,6 +593,8 @@ class WindowManagerApp:
         self.log_visible = BooleanVar(value=False)
         self.selected_profile = StringVar(value=self.settings.last_profile or "")
         self.overlay_button_text = StringVar(value=tr("Afficher l’overlay"))
+        self.hotkey_pause_text = StringVar(value=tr("Suspendre les raccourcis"))
+        self.roster_status_var = StringVar(value="")
         self.next_attention_button_text = StringVar()
         self.character_preview_var = StringVar(value=tr("Sélectionnez un personnage"))
         self._character_preview_photo: ImageTk.PhotoImage | None = None
@@ -692,6 +698,7 @@ class WindowManagerApp:
             show=lambda: self._queue.put(("tray", "show")),
             refresh=lambda: self._queue.put(("tray", "refresh")),
             quit_app=lambda: self._queue.put(("tray", "quit")),
+            toggle_hotkeys=lambda: self._queue.put(("tray", "hotkeys")),
         )
         if self._start_minimized:
             if tray_started:
@@ -1493,6 +1500,7 @@ class WindowManagerApp:
         ).pack(pady=(4, 0), anchor="w")
 
         TtkLabel(left, text="Fenêtres ignorées").pack(pady=(10, 5), anchor="w")
+        TtkLabel(left, textvariable=self.roster_status_var, wraplength=550, style="Muted.TLabel").pack(fill="x")
         self.ignored_tree = self._create_window_tree(left, height=5)
         self.ignored_tree.bind("<ButtonPress-1>", lambda event: self._on_window_tree_press(event, self.ignored_tree), add="+")
         self.ignored_tree.bind(
@@ -1533,6 +1541,11 @@ class WindowManagerApp:
         self.next_attention_button.grid(
             row=2, column=0, columnspan=2, sticky="ew", pady=(5, 2)
         )
+        self.undo_order_button = TtkButton(navigation, text=tr("Annuler le déplacement"), command=self.undo_order_change, state="disabled")
+        self.undo_order_button.grid(row=3, column=0, columnspan=2, sticky="ew", pady=2)
+        TtkButton(navigation, text=tr("Rétablir l’ordre du profil"), command=self.restore_profile_order).grid(row=4, column=0, columnspan=2, sticky="ew", pady=2)
+        TtkButton(navigation, text=tr("Équipe et emplacements…"), command=self.show_character_slots).grid(row=5, column=0, columnspan=2, sticky="ew", pady=2)
+        TtkButton(navigation, textvariable=self.hotkey_pause_text, command=self.toggle_hotkeys_paused).grid(row=6, column=0, columnspan=2, sticky="ew", pady=2)
 
         selection = TtkLabelFrame(right, text="Fenêtre sélectionnée", padding=8)
         selection.pack(fill="x", pady=(0, 8))
@@ -2249,10 +2262,11 @@ class WindowManagerApp:
             new_order = move_window_to_index(self._managed_order, hwnd, destination)
         if new_order == self._managed_order:
             return
+        self._checkpoint_order()
         self._managed_order = new_order
         if active_hwnd in self._managed_order:
             self.rotation_index = self._managed_order.index(active_hwnd)
-        self._publish_order_consumers()
+        self._commit_order_change()
         self.update_listboxes(publish_consumers=False)
         window = self._all_windows.get(hwnd)
         if window is not None:
@@ -2315,32 +2329,40 @@ class WindowManagerApp:
                     succeeded=succeeded,
                 )
 
-    def _focus_from_auxiliary_display(self, hwnd: int) -> None:
+    def _focus_from_auxiliary_display(self, hwnd: int) -> bool:
         window = self._all_windows.get(hwnd)
         if window is None or not is_window(hwnd):
             self._log("La fenêtre sélectionnée n’est plus disponible.")
             self.refresh_windows(quiet=True, force=True)
-            return
+            return False
         try:
             self._focus_hwnd_measured(hwnd)
         except FocusError as exc:
             self._log(f"Focus échoué depuis le mode compact ou l’overlay : {exc}")
-            return
+            return False
         self._record_character_focus(hwnd, notify=True)
         self._log(f"Mode compact / overlay → {window.title}")
+        return True
 
     def focus_managed_position(self, position: int) -> bool:
         try:
             index = int(position) - 1
         except (TypeError, ValueError):
             return False
-        if index < 0 or index >= len(self._managed_order):
+        targets = self._managed_order
+        if getattr(self.settings, "fixed_character_slots", False):
+            targets = self._ensure_character_roster().bindings(self._all_windows)
+        if index < 0 or index >= len(targets):
             self._log(f"Raccourci fenêtre {index + 1} : aucune fenêtre à cette position")
             return False
-        hwnd = self._managed_order[index]
-        self.rotation_index = index
-        self._focus_from_auxiliary_display(hwnd)
-        return True
+        hwnd = targets[index]
+        if hwnd not in self._all_windows:
+            self._log(tr("Cet emplacement est absent ou ambigu."))
+            return False
+        focused = bool(self._focus_from_auxiliary_display(hwnd))
+        if focused and hwnd in self._managed_order:
+            self.rotation_index = self._managed_order.index(hwnd)
+        return focused
 
     def _activate_next_attention(self, *, source: str) -> dict[str, object]:
         """Focus the oldest valid request and clear it only after focus succeeds."""
@@ -2575,6 +2597,8 @@ class WindowManagerApp:
             return
 
         detected = [window.pseudo for window in self._all_windows.values() if window.pseudo]
+        if len(detected) != len({character_key(name) for name in detected}):
+            return
         signature = (
             self.game_mode,
             tuple(sorted({pseudo.strip().casefold() for pseudo in detected if pseudo.strip()})),
@@ -2607,7 +2631,7 @@ class WindowManagerApp:
         except Exception as exc:
             self._log(f"Chargement intelligent impossible ({name}) : {exc}")
             return
-        self._apply_loaded_profile(profile, migrate_legacy=False)
+        self._activate_profile(profile, migrate_legacy=False)
         self.selected_profile.set(name)
         self.settings.last_profile = name
         try:
@@ -2649,6 +2673,150 @@ class WindowManagerApp:
         else:
             self.character_visuals = sanitize_character_visuals(profile.visuals)
         self.desired_order_pseudos = list(profile.order)
+        self._saved_profile_order = list(profile.order)
+        self._roster = CharacterRoster(
+            order=character_names([*profile.order, *(profile.ignored_characters or [])]),
+            slots=character_names(profile.character_slots if profile.character_slots is not None else profile.order),
+            ignored={character_key(name) for name in profile.ignored_characters or []},
+        )
+
+    def _activate_profile(self, profile: Profile, *, migrate_legacy: bool = True) -> None:
+        """Use the same immediate synchronization for manual and automatic loading."""
+        self._apply_loaded_profile(profile, migrate_legacy=migrate_legacy)
+        self._ignored.clear()
+        self._managed_order = list(self._all_windows)
+        self._reconcile_character_roster()
+        self._publish_order_consumers()
+        self.update_listboxes(publish_consumers=False)
+
+    def _ensure_character_roster(self) -> CharacterRoster:
+        if not hasattr(self, "_roster"):
+            self._roster = CharacterRoster(order=list(getattr(self, "desired_order_pseudos", [])))
+        self._roster.discover(self._all_windows, self._managed_order)
+        return self._roster
+
+    def _reconcile_character_roster(self) -> None:
+        roster = self._ensure_character_roster()
+        for name in roster.order:
+            hwnd = roster.resolve(name, self._all_windows)
+            if hwnd is not None and character_key(name) in roster.ignored:
+                self._ignored.add(hwnd)
+        self._ignored.intersection_update(self._all_windows)
+        self._managed_order = [hwnd for hwnd in self._managed_order if hwnd in self._all_windows and hwnd not in self._ignored]
+        self._managed_order.extend(hwnd for hwnd in self._all_windows if hwnd not in self._managed_order and hwnd not in self._ignored)
+        self.apply_order_by_pseudo(roster.order)
+        self._update_hotkey_context()
+
+    def _remember_ignored_characters(self) -> None:
+        roster = self._ensure_character_roster()
+        for name in roster.order:
+            hwnd = roster.resolve(name, self._all_windows)
+            if hwnd is None:
+                continue
+            key = character_key(name)
+            if hwnd in self._ignored:
+                roster.ignored.add(key)
+            else:
+                roster.ignored.discard(key)
+
+    def _checkpoint_order(self) -> None:
+        self._ensure_character_roster().checkpoint()
+
+    def _commit_order_change(self) -> None:
+        roster = self._ensure_character_roster()
+        roster.remember_order(self._all_windows, self._managed_order)
+        self.desired_order_pseudos = list(roster.order)
+        self._publish_order_consumers()
+
+    def undo_order_change(self) -> None:
+        roster = self._ensure_character_roster()
+        if roster.undo():
+            self.desired_order_pseudos = list(roster.order)
+            self._reconcile_character_roster()
+            self.update_listboxes()
+
+    def restore_profile_order(self) -> None:
+        saved = getattr(self, "_saved_profile_order", [])
+        if not saved:
+            return
+        roster = self._ensure_character_roster()
+        roster.checkpoint()
+        roster.order = character_names([*saved, *roster.order])
+        self.desired_order_pseudos = list(roster.order)
+        self._reconcile_character_roster()
+        self.update_listboxes()
+
+    def _refresh_roster_status(self) -> None:
+        roster = self._ensure_character_roster()
+        absent = [name for name in roster.order if roster.resolve(name, self._all_windows) is None]
+        status = tr("Absents ou ambigus : {names}", names=", ".join(absent)) if absent else ""
+        saved = getattr(self, "_saved_profile_order", [])
+        if saved and [character_key(name) for name in roster.order] != [character_key(name) for name in saved]:
+            status = " · ".join(filter(None, (tr("Ordre modifié — non enregistré"), status)))
+        if hasattr(self, "roster_status_var"):
+            self.roster_status_var.set(status)
+        if hasattr(self, "undo_order_button"):
+            self.undo_order_button.configure(state="normal" if roster.history else "disabled")
+
+    def show_character_slots(self) -> None:
+        win = Toplevel(self.root)
+        win.title(tr("Équipe et emplacements"))
+        win.transient(self.root)
+        content = TtkFrame(win, padding=12)
+        content.pack(fill="both", expand=True)
+        TtkLabel(content, text=tr("Les emplacements fixes servent aux raccourcis directs et au Stream Deck."), wraplength=540).pack(anchor="w", pady=(0, 8))
+        tree = Treeview(content, columns=("slot", "name", "status"), show="headings", height=8)
+        for column, label, width in (("slot", "Emplacement", 90), ("name", "Personnage", 230), ("status", "État", 180)):
+            tree.heading(column, text=tr(label))
+            tree.column(column, width=width)
+        tree.pack(fill="both", expand=True)
+
+        refresh_job = None
+
+        def cancel_refresh(event) -> None:
+            if event.widget is win and refresh_job is not None:
+                self.root.after_cancel(refresh_job)
+
+        win.bind("<Destroy>", cancel_refresh, add="+")
+
+        def render() -> None:
+            nonlocal refresh_job
+            if not win.winfo_exists():
+                return
+            tree.delete(*tree.get_children())
+            current = self._ensure_character_roster()
+            for slot, name in enumerate(current.slots, 1):
+                hwnd = current.resolve(name, self._all_windows)
+                state = "Absent ou ambigu" if hwnd is None else "Ignorée" if hwnd in self._ignored else "Disponible"
+                tree.insert("", "end", values=(slot, name, tr(state)))
+            refresh_job = self.root.after(750, render)
+
+        def rebind() -> None:
+            if not messagebox.askyesno(tr("Réattribuer les emplacements"), tr("Remplacer les emplacements fixes par l’ordre courant ?"), parent=win):
+                return
+            roster = self._ensure_character_roster()
+            roster.slots = list(roster.order)
+            self.update_listboxes()
+            if self._active_profile_name:
+                self._save_active_profile_customizations()
+
+        def forget_absent() -> None:
+            roster = self._ensure_character_roster()
+            present = {character_key(window.pseudo) for window in self._all_windows.values()}
+            absent = [name for name in roster.order if character_key(name) not in present]
+            if not absent or not messagebox.askyesno(tr("Retirer les personnages absents"), tr("Retirer {names} de l’équipe ? Les emplacements suivants seront renumérotés. Enregistrez ensuite le profil.", names=", ".join(absent)), parent=win):
+                return
+            roster.order = [name for name in roster.order if character_key(name) in present]
+            roster.slots = [name for name in roster.slots if character_key(name) in present]
+            roster.ignored.intersection_update(present)
+            roster.history.clear()
+            self.desired_order_pseudos = list(roster.order)
+            self.update_listboxes()
+
+        TtkButton(content, text=tr("Réattribuer selon l’ordre courant"), command=rebind).pack(fill="x", pady=(8, 0))
+        TtkButton(content, text=tr("Retirer les personnages absents"), command=forget_absent).pack(fill="x", pady=(4, 0))
+        TtkLabel(content, text=tr("Enregistrez le profil pour conserver l’équipe et ses emplacements."), wraplength=540).pack(anchor="w", pady=(8, 0))
+        render()
 
     def _save_active_profile_customizations(self) -> bool:
         """Persist aliases and appearances without changing the saved window order."""
@@ -2664,6 +2832,7 @@ class WindowManagerApp:
         }
         profile.visuals = sanitize_character_visuals(self.character_visuals)
         profile.game_mode = self.game_mode
+        profile.character_slots = list(self._ensure_character_roster().slots)
         try:
             save_profile(self.dirs["profiles"], profile)
         except OSError:
@@ -2690,7 +2859,8 @@ class WindowManagerApp:
             return
         if replacing_existing:
             self._create_configuration_snapshot("avant remplacement profil")
-        order_pseudos = [self._all_windows[hwnd].pseudo for hwnd in self._managed_order if hwnd in self._all_windows]
+        roster = self._ensure_character_roster()
+        order_pseudos = list(roster.order)
         saved_aliases = {pseudo: alias.strip() for pseudo, alias in self.aliases.items() if alias.strip()}
         pr = Profile(
             name=name,
@@ -2700,8 +2870,11 @@ class WindowManagerApp:
             updated_at="",
             visuals=sanitize_character_visuals(self.character_visuals),
             game_mode=self.game_mode,
+            character_slots=list(roster.slots),
+            ignored_characters=[name for name in roster.order if character_key(name) in roster.ignored],
         )
         self.desired_order_pseudos = list(order_pseudos)
+        self._saved_profile_order = list(order_pseudos)
         save_profile(self.dirs["profiles"], pr)
         self._log(f"Profil '{name}' enregistré")
         self._refresh_profile_combo()
@@ -2709,6 +2882,8 @@ class WindowManagerApp:
         self._active_profile_name = name
         self.settings.last_profile = name
         save_settings(self.settings_path, self.settings)
+
+        self._refresh_roster_status()
 
     def load_profile_selected(self):
         name = self.selected_profile.get().strip()
@@ -2721,12 +2896,10 @@ class WindowManagerApp:
             messagebox.showerror("Erreur", f"Impossible de charger: {e}")
             return
 
-        self._apply_loaded_profile(pr)
-        self.apply_order_by_pseudo(pr.order)
+        self._activate_profile(pr)
         self._log(f"Profil '{name}' chargé")
         self.settings.last_profile = name
         save_settings(self.settings_path, self.settings)
-        self.update_listboxes()
 
     def delete_profile_selected(self):
         name = self.selected_profile.get().strip()
@@ -3123,7 +3296,7 @@ class WindowManagerApp:
                 style=style,
                 command=lambda target=hwnd: self._execute_preview_command("focus", {"hwnd": target}),
             )
-            button.state(["!disabled"])
+            button.state(["disabled"] if entry.get("available") is False else ["!disabled"])
 
     def _execute_preview_command(self, command: str, payload: dict[str, object]) -> None:
         try:
@@ -3354,16 +3527,15 @@ class WindowManagerApp:
 
         self.settings.auto_refresh = bool(self.auto_refresh_enabled.get())
         self.settings.last_profile = self.selected_profile.get().strip()
-        current_order = [
-            self._all_windows[hwnd].pseudo
-            for hwnd in self._managed_order
-            if hwnd in self._all_windows
-        ]
+        roster = self._ensure_character_roster()
+        current_order = list(roster.order)
         return build_configuration_backup(
             self.settings,
             profiles,
             active_profile=self.selected_profile.get(),
             current_order=current_order,
+            current_slots=list(roster.slots),
+            current_ignored=[name for name in roster.order if character_key(name) in roster.ignored],
             current_aliases=self.aliases,
             app_version=__version__,
         )
@@ -3405,6 +3577,8 @@ class WindowManagerApp:
             save_profile(self.dirs["profiles"], profile)
 
         restored_settings.game_mode = restored_settings.game_mode or self.game_mode
+        if restored_settings.game_mode != self.game_mode:
+            self.switch_game_mode(restored_settings.game_mode)
         self.settings = restored_settings
         self._legacy_character_visuals = sanitize_character_visuals(
             self.settings.character_visuals
@@ -3443,8 +3617,15 @@ class WindowManagerApp:
         self.aliases.clear()
         self.aliases.update(aliases)
         self.desired_order_pseudos = order
-        if order:
-            self.apply_order_by_pseudo(order)
+        self._roster = CharacterRoster(
+            order=character_names(order),
+            slots=character_names(session.get("character_slots", order)),
+            ignored={character_key(name) for name in character_names(session.get("ignored_characters"))},
+        )
+        saved_profile = next((profile for profile in profiles if profile.name == active_profile), None)
+        self._saved_profile_order = list(saved_profile.order) if saved_profile else []
+        self._ignored.clear()
+        self._reconcile_character_roster()
         self.update_listboxes()
         self._register_hotkeys()
         self._log(f"Configuration restaurée depuis {source}")
@@ -3719,6 +3900,9 @@ class WindowManagerApp:
         self.aliases.clear()
         self.character_visuals = {}
         self.desired_order_pseudos = []
+        self._roster = CharacterRoster()
+        self._saved_profile_order = []
+        self._update_hotkey_context()
         self.selected_profile.set("")
         self.attention_state.reset()
         self._windows_sig = tuple()
@@ -3850,6 +4034,11 @@ class WindowManagerApp:
     def _apply_windows(self, wins: list[GameWindow]):
         # Update map
         new_map = {w.hwnd: w for w in wins}
+        self._ignored = {
+            hwnd for hwnd in self._ignored
+            if hwnd in new_map and hwnd in self._all_windows
+            and character_key(new_map[hwnd].pseudo) == character_key(self._all_windows[hwnd].pseudo)
+        }
         self._all_windows = new_map
         self.attention_state.discard_unknown(new_map.keys())
         if self._active_game_hwnd not in new_map:
@@ -3889,9 +4078,8 @@ class WindowManagerApp:
 
         self._schedule_smart_profile_match()
 
-        # Apply current profile order (if loaded)
-        if self.desired_order_pseudos:
-            self.apply_order_by_pseudo(self.desired_order_pseudos)
+        # Reconnect by profile identity, preserving missing and ignored members.
+        self._reconcile_character_roster()
 
         self._streamdeck_order = reconcile_streamdeck_order(
             self._streamdeck_order,
@@ -3977,6 +4165,8 @@ class WindowManagerApp:
                     self.refresh_windows(force=True)
                 elif action == "quit":
                     self.on_close(force=True)
+                elif action == "hotkeys":
+                    self.toggle_hotkeys_paused()
             elif kind == "update_check":
                 self._finish_update_check(
                     manual=bool(item[1]),
@@ -4043,6 +4233,8 @@ class WindowManagerApp:
             return {"ok": True, "accepted": True, "direction": direction}
 
         if command == "focus":
+            if payload.get("game_mode", self.game_mode) != self.game_mode or payload.get("profile", getattr(self, "_active_profile_name", "")) != getattr(self, "_active_profile_name", ""):
+                return {"ok": False, "error": "Le profil a changé. Réessayez après actualisation.", "_status": 409}
             raw_hwnd = payload.get("hwnd")
             slot: int | None = None
             if raw_hwnd is not None:
@@ -4070,6 +4262,8 @@ class WindowManagerApp:
                 hwnd = self._streamdeck_order[slot - 1]
 
             window = self._all_windows.get(hwnd)
+            if window is not None and "pseudo" in payload and character_key(str(payload["pseudo"])) != character_key(window.pseudo):
+                return {"ok": False, "error": "Le personnage attribué a changé.", "_status": 410}
             if window is None or not is_window(hwnd):
                 self.refresh_windows(quiet=True, force=True)
                 return {"ok": False, "error": "La fenêtre n'existe plus.", "_status": 410}
@@ -4150,9 +4344,10 @@ class WindowManagerApp:
                 "_status": 409,
             }
 
+        self._checkpoint_order()
         self._managed_order = new_order
         self.rotation_index = self._managed_order.index(hwnd)
-        self._publish_order_consumers()
+        self._commit_order_change()
         self.update_listboxes(publish_consumers=False)
         self._update_popup_watcher_targets()
 
@@ -4169,11 +4364,15 @@ class WindowManagerApp:
         }
 
     def _publish_streamdeck_state(self) -> None:
-        self._streamdeck_order = reconcile_streamdeck_order(
-            self._streamdeck_order,
-            self._all_windows,
-            (*self._managed_order, *sorted(self._ignored)),
-        )
+        fixed = getattr(self.settings, "fixed_character_slots", False)
+        if fixed:
+            self._streamdeck_order = self._ensure_character_roster().bindings(self._all_windows)
+        else:
+            self._streamdeck_order = reconcile_streamdeck_order(
+                self._streamdeck_order,
+                self._all_windows,
+                (*self._managed_order, *sorted(self._ignored)),
+            )
 
         foreground_hwnd = get_foreground_hwnd()
         active_hwnd = foreground_hwnd if foreground_hwnd in self._all_windows else None
@@ -4192,6 +4391,9 @@ class WindowManagerApp:
             self._active_character_visuals(),
         )
         self._streamdeck_preview_entries = windows
+        if fixed:
+            windows = retain_character_slots(windows, self._roster.slots, self._streamdeck_order, self.aliases, self._active_character_visuals())
+            self._streamdeck_preview_entries = windows
 
         bridge = self.streamdeck_bridge
         if bridge is not None:
@@ -4200,6 +4402,7 @@ class WindowManagerApp:
                     "api_version": 1,
                     "app_version": __version__,
                     "game_mode": self.game_mode,
+                    "profile": getattr(self, "_active_profile_name", ""),
                     "theme": self.settings.theme,
                     "language": self.settings.language,
                     "scan_revision": self._scan_revision,
@@ -4250,6 +4453,9 @@ class WindowManagerApp:
             ignored = True
             self._log(f"Stream Deck : fenêtre ignorée — {window.title}")
 
+        self._remember_ignored_characters()
+        if not ignored:
+            self._reconcile_character_roster()
         self._sync_streamdeck_order_with_managed()
         self.update_listboxes()
         self._update_popup_watcher_targets()
@@ -4370,6 +4576,9 @@ class WindowManagerApp:
                 changed_structure = True
             elif prev.title != gw.title or prev.pseudo != gw.pseudo or prev.character_class != gw.character_class:
                 # A title change also requires updating an optional capture target.
+                if character_key(prev.pseudo) != character_key(gw.pseudo):
+                    self._ignored.discard(hwnd)
+                    self.attention_state.clear(hwnd)
                 self._all_windows[hwnd] = gw
                 changed_structure = True
 
@@ -4378,6 +4587,9 @@ class WindowManagerApp:
 
         if not changed_structure:
             return
+
+        self._reconcile_character_roster()
+        self._schedule_smart_profile_match()
 
         # Keep rotation index valid
         if self._managed_order:
@@ -4529,6 +4741,7 @@ class WindowManagerApp:
             self._publish_order_consumers()
         self._refresh_character_preview()
         self._update_next_attention_controls()
+        self._refresh_roster_status()
 
     def _selected_managed_hwnd(self) -> int | None:
         selection = self.managed_tree.selection()
@@ -4639,6 +4852,7 @@ class WindowManagerApp:
         else:
             self.rotation_index = 0
 
+        self._remember_ignored_characters()
         self._sync_streamdeck_order_with_managed()
         self._log("Fenêtre ignorée")
         self.update_listboxes()
@@ -4652,6 +4866,8 @@ class WindowManagerApp:
             self._ignored.remove(hwnd)
         if hwnd not in self._managed_order and hwnd in self._all_windows:
             self._managed_order.append(hwnd)
+        self._remember_ignored_characters()
+        self._reconcile_character_roster()
         self._sync_streamdeck_order_with_managed()
         self._log("Fenêtre ré-ajoutée")
         self.update_listboxes()
@@ -4668,6 +4884,7 @@ class WindowManagerApp:
         new_idx = idx + delta
         if not (0 <= new_idx < len(self._managed_order)):
             return
+        self._checkpoint_order()
         self._managed_order.pop(idx)
         self._managed_order.insert(new_idx, hwnd)
 
@@ -4679,7 +4896,7 @@ class WindowManagerApp:
         elif new_idx <= self.rotation_index < idx:
             self.rotation_index += 1
 
-        self._publish_order_consumers()
+        self._commit_order_change()
         self.update_listboxes(publish_consumers=False)
 
     def _move_managed_window(self, hwnd: int, target_hwnd: int, *, after: bool) -> None:
@@ -4691,10 +4908,11 @@ class WindowManagerApp:
             self.update_listboxes()
             return
 
+        self._checkpoint_order()
         self._managed_order = new_order
         if active_hwnd in self._managed_order:
             self.rotation_index = self._managed_order.index(active_hwnd)
-        self._publish_order_consumers()
+        self._commit_order_change()
         self.update_listboxes(publish_consumers=False)
         item = str(hwnd)
         if item in self.managed_tree.get_children():
@@ -4703,6 +4921,9 @@ class WindowManagerApp:
         self._log("Ordre des personnages modifié")
 
     def _sync_streamdeck_order_with_managed(self) -> None:
+        if getattr(self.settings, "fixed_character_slots", False):
+            self._streamdeck_order = self._ensure_character_roster().bindings(self._all_windows)
+            return
         self._streamdeck_order = align_streamdeck_slots_with_managed(
             self._streamdeck_order,
             self._managed_order,
@@ -4714,6 +4935,7 @@ class WindowManagerApp:
         self._sync_streamdeck_order_with_managed()
         self._refresh_auxiliary_displays()
         self._publish_streamdeck_state()
+        self._refresh_roster_status()
 
     def _on_character_tree_selected(self, tree: Treeview) -> None:
         selection = tree.selection()
@@ -4973,13 +5195,13 @@ class WindowManagerApp:
             w = self._all_windows.get(hwnd)
             if not w:
                 continue
-            buckets.setdefault(w.pseudo, []).append(hwnd)
+            buckets.setdefault(character_key(w.pseudo), []).append(hwnd)
 
         new_order: list[int] = []
         used = set()
 
         for p in pseudos:
-            lst = buckets.get(p, [])
+            lst = buckets.get(character_key(p), [])
             for hwnd in lst:
                 if hwnd not in used:
                     new_order.append(hwnd)
@@ -4991,18 +5213,30 @@ class WindowManagerApp:
                 new_order.append(hwnd)
                 used.add(hwnd)
 
+        active = self._active_game_hwnd
         self._managed_order = new_order
-        self.rotation_index = 0
+        self.rotation_index = new_order.index(active) if active in new_order else 0
         self._sync_streamdeck_order_with_managed()
 
     # ---------------------------- Settings ----------------------------
 
     def open_settings_window(self):
         win = Toplevel(self.root)
+        self._hotkey_settings_open = True
+        self._update_hotkey_context()
+
+        def resume_after_settings(event) -> None:
+            if event.widget is win:
+                self._hotkey_settings_open = False
+                self._update_hotkey_context()
+
+        win.bind("<Destroy>", resume_after_settings, add="+")
         win.title("Paramètres")
         win.transient(self.root)
         win.grab_set()
         win.resizable(True, True)
+        game_hotkeys = BooleanVar(value=self.settings.hotkey_scope == "game")
+        fixed_slots = BooleanVar(value=self.settings.fixed_character_slots)
         settings_height = max(560, min(820, self.root.winfo_screenheight() - 120))
         win.geometry(f"650x{settings_height}")
 
@@ -5602,6 +5836,12 @@ class WindowManagerApp:
         ).grid(row=17, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=2)
 
         hotkeys = TtkLabelFrame(shortcuts_content, text="Raccourcis clavier", padding=10)
+        context_options = TtkLabelFrame(shortcuts_content, text=tr("Comportement des raccourcis"), padding=10)
+        context_options.pack(fill="x", pady=(0, 8))
+        TtkCheckbutton(context_options, text=tr("Activer les raccourcis uniquement dans Dofus"), variable=game_hotkeys).pack(anchor="w")
+        TtkLabel(context_options, text=tr("Les touches sont libérées dans les autres applications. Dans le chat Dofus, utilisez la pause ou une combinaison avec Ctrl/Alt."), wraplength=560, style="Muted.TLabel").pack(anchor="w", pady=(3, 8))
+        TtkCheckbutton(context_options, text=tr("Lier les accès directs et le Stream Deck aux personnages"), variable=fixed_slots).pack(anchor="w")
+        TtkLabel(context_options, text=tr("Les emplacements suivent l’équipe du profil, même après une déconnexion. Sinon, les accès directs suivent l’ordre courant."), wraplength=560, style="Muted.TLabel").pack(anchor="w", pady=(3, 0))
         hotkeys.pack(fill="x", pady=(0, 8))
         hotkeys.columnconfigure(1, weight=1)
         hotkey_rows = (
@@ -5710,7 +5950,7 @@ class WindowManagerApp:
         direct_start_row = len(hotkey_rows) + 1
         TtkLabel(
             hotkeys,
-            text=tr("Accès direct par position (facultatif)"),
+            text=tr("Accès directs 1 à 8 (facultatif)"),
             style="Header.TLabel",
         ).grid(row=direct_start_row, column=0, columnspan=3, sticky="w", pady=(12, 4))
         for offset, variable in enumerate(direct_hotkeys, start=1):
@@ -5737,7 +5977,7 @@ class WindowManagerApp:
             ).grid(row=direct_start_row + offset, column=2, padx=(6, 0), pady=3)
         TtkLabel(
             hotkeys,
-            text=tr("Raccourcis globaux. Laissez vide pour désactiver. Exemple : 1 → première fenêtre."),
+            text=tr("Laissez vide pour désactiver. La cible dépend du mode choisi ci-dessus."),
             style="Muted.TLabel",
         ).grid(
             row=direct_start_row + len(direct_hotkeys) + 1,
@@ -5846,6 +6086,8 @@ class WindowManagerApp:
                 return
 
             self.settings.hotkeys["forward"] = fwd
+            self.settings.hotkey_scope = "game" if game_hotkeys.get() else "global"
+            self.settings.fixed_character_slots = bool(fixed_slots.get())
             self.settings.hotkeys["backward"] = bwd
             self.settings.hotkeys["ignore"] = ign
             self.settings.hotkeys["next_attention"] = next_attention
@@ -5949,7 +6191,7 @@ class WindowManagerApp:
 
             save_settings(self.settings_path, self.settings)
             self._apply_accessibility_preferences()
-            self._publish_streamdeck_state()
+            self._publish_order_consumers()
             self._log("Paramètres appliqués")
             win.destroy()
             if updates_were_disabled and self.settings.check_updates_automatically:
@@ -6152,6 +6394,7 @@ class WindowManagerApp:
             self._log(f"PopupWatch focus échoué: {exc}")
 
     def _register_hotkeys(self):
+        self._update_hotkey_context()
         # IDs must be stable
         try:
             self.hotkeys.set_hotkey(1, self.settings.hotkeys.get("forward", "F5"), lambda: self.root.after(0, lambda: self.request_rotation("forward")))
@@ -6181,6 +6424,20 @@ class WindowManagerApp:
             )
         except Exception as e:
             self._log(f"Hotkeys non appliqués: {e}")
+
+    def _update_hotkey_context(self) -> None:
+        hotkeys = getattr(self, "hotkeys", None)
+        if hotkeys is None:
+            return
+        allowed = frozenset(self._all_windows) if getattr(self.settings, "hotkey_scope", "global") == "game" else None
+        enabled = not getattr(self, "_hotkeys_paused", False) and not getattr(self, "_hotkey_settings_open", False)
+        hotkeys.set_context(enabled=enabled, allowed_hwnds=allowed)
+
+    def toggle_hotkeys_paused(self) -> None:
+        self._hotkeys_paused = not self._hotkeys_paused
+        self._update_hotkey_context()
+        self.hotkey_pause_text.set(tr("Reprendre les raccourcis") if self._hotkeys_paused else tr("Suspendre les raccourcis"))
+        self._log(tr("Raccourcis suspendus") if self._hotkeys_paused else tr("Raccourcis réactivés"))
 
     def _check_hotkey_errors(self):
         if self._stop_event.is_set():
@@ -6273,7 +6530,7 @@ def run(game_mode: str = "unity", *, start_minimized: bool = False) -> None:
     if last and not app.settings.smart_profile_loading_enabled:
         try:
             pr = load_profile(app.dirs["profiles"], last)
-            app._apply_loaded_profile(pr)
+            app._activate_profile(pr)
             app._log(f"Profil auto-chargé: '{last}'")
         except Exception:
             pass

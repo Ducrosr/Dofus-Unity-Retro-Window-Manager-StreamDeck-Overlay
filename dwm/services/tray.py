@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from .i18n import tr
 
 
 class TrayController:
@@ -22,6 +23,7 @@ class TrayController:
         show: Callable[[], None],
         refresh: Callable[[], None],
         quit_app: Callable[[], None],
+        toggle_hotkeys: Callable[[], None] | None = None,
     ) -> bool:
         if self._icon is not None:
             return True
@@ -34,10 +36,11 @@ class TrayController:
 
             image = Image.open(self.icon_path)
             menu = pystray.Menu(
-                pystray.MenuItem("Afficher Dofus Window Manager", lambda _icon, _item: show(), default=True),
-                pystray.MenuItem("Actualiser les fenêtres", lambda _icon, _item: refresh()),
+                pystray.MenuItem(lambda _item: tr("Afficher Dofus Window Manager"), lambda _icon, _item: show(), default=True),
+                pystray.MenuItem(lambda _item: tr("Actualiser les fenêtres"), lambda _icon, _item: refresh()),
+                pystray.MenuItem(lambda _item: tr("Suspendre / reprendre les raccourcis"), lambda _icon, _item: toggle_hotkeys() if toggle_hotkeys else None, enabled=toggle_hotkeys is not None),
                 pystray.Menu.SEPARATOR,
-                pystray.MenuItem("Quitter", lambda _icon, _item: quit_app()),
+                pystray.MenuItem(lambda _item: tr("Quitter"), lambda _icon, _item: quit_app()),
             )
             icon = pystray.Icon("DofusWindowManager", image, "Dofus Window Manager", menu)
             icon.run_detached()
