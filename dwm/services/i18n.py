@@ -27,6 +27,9 @@ def get_language() -> str:
 
 
 _EN: dict[str, str] = {
+    'Fermeture anormale détectée': 'Abnormal shutdown detected',
+    'La session précédente s’est terminée anormalement.': 'The previous session ended abnormally.',
+    'La session précédente ne s’est pas fermée normalement. Cela peut provenir d’un plantage ou d’un arrêt forcé. Voulez-vous enregistrer un paquet de support anonymisé ? Aucun rapport ne sera envoyé automatiquement.': 'The previous session did not close normally. This may result from a crash or forced shutdown. Would you like to save an anonymized support bundle? No report will be sent automatically.',
     'Nouvelle version : {tag}': 'New version: {tag}',
     'Choisissez un fichier à télécharger et vérifier.': 'Choose a file to download and verify.',
     'Télécharger et vérifier': 'Download and verify',
@@ -443,6 +446,9 @@ _EN: dict[str, str] = {
 }
 
 _ES: dict[str, str] = {
+    'Fermeture anormale détectée': 'Cierre anormal detectado',
+    'La session précédente s’est terminée anormalement.': 'La sesión anterior terminó de forma anormal.',
+    'La session précédente ne s’est pas fermée normalement. Cela peut provenir d’un plantage ou d’un arrêt forcé. Voulez-vous enregistrer un paquet de support anonymisé ? Aucun rapport ne sera envoyé automatiquement.': 'La sesión anterior no se cerró correctamente. Puede deberse a un fallo o un cierre forzado. ¿Desea guardar un paquete de soporte anonimizado? No se enviará ningún informe automáticamente.',
     'Nouvelle version : {tag}': 'Nueva versión: {tag}',
     'Choisissez un fichier à télécharger et vérifier.': 'Elija un archivo para descargar y verificar.',
     'Télécharger et vérifier': 'Descargar y verificar',

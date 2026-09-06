@@ -278,3 +278,22 @@ fermez l’application avant de remplacer votre ancien EXE. Aucun fichier télé
 n’est installé silencieusement.
 
 Source du format des métadonnées : [API GitHub des fichiers de release](https://docs.github.com/en/rest/releases/assets).
+
+### Après une fermeture anormale (en développement)
+
+Si la session précédente ne s’est pas terminée normalement, le lancement suivant
+propose d’enregistrer un paquet de support anonymisé. Vous pouvez refuser, ou choisir
+un emplacement local pour le ZIP. Aucun rapport n’est transmis automatiquement.
+Le paquet utilise les journaux existants et le diagnostic actuel ; il ne contient
+pas de capture de la mémoire du processus planté.
+
+Ce signal peut aussi provenir d’une coupure de courant ou d’un arrêt forcé.
+Une fermeture normale retire le marqueur ; réduire dans la zone de notification
+laisse la session active. Le marqueur ne contient ni pseudo ni chemin personnel.
+La première instance détient le verrou : une instance supplémentaire ne modifie pas
+son suivi et ne bénéficie pas d’un suivi distinct. Si le dossier est inaccessible,
+l’application continue sans ce suivi. Les erreurs récupérées sans arrêt de l’application
+ne sont pas considérées comme une fermeture anormale.
+
+L’export reste accessible à tout moment depuis Diagnostic. Relisez le ZIP avant
+tout partage, notamment les textes libres des journaux.

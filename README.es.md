@@ -161,3 +161,5 @@ PyInstaller crea `dist\DofusWindowManager.exe`; el repositorio también contiene
 Solo Windows. Este proyecto comunitario no está afiliado, aprobado ni patrocinado por Ankama. Dofus, Dofus Retro, Ankama, así como los retratos e iconos del juego incluidos en `assets/ankama`, pertenecen a sus respectivos propietarios. Esos recursos visuales no están cubiertos por la licencia GPL-3.0 del código; consulta el [aviso de recursos](assets/ankama/NOTICE.md) antes de redistribuirlos.
 
 Actualización guiada (en desarrollo): elección de instalador/portable, descarga cancelable y verificación SHA-256 antes de ofrecer la ejecución.
+
+Diagnóstico tras un cierre anormal (en desarrollo): propone un paquete de soporte anonimizado al iniciar de nuevo, guardado solo a petición del usuario.

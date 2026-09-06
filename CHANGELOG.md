@@ -8,6 +8,8 @@
 
 ## À venir
 
+- Détection d’une session interrompue au lancement suivant et proposition facultative d’un paquet de support anonymisé ; aucun envoi automatique, verrou pour éviter les faux positifs liés à une instance encore ouverte.
+
 - choix de l’écran et ancrage de l’overlay sur six positions, dans la zone de travail hors barre des tâches ; récupération après débranchement et retour à l’écran choisi lorsqu’il redevient disponible ; paramètres v25 et mémorisation par profil et mode ;
 
 - recherche dans les trois onglets des paramètres : accents et majuscules ignorés, résultats contextualisés, navigation et défilement vers l’option, Ctrl+F et effacement sans perdre les réglages en cours de saisie ;

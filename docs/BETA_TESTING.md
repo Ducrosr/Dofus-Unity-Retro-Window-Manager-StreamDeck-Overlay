@@ -124,3 +124,12 @@ Les tests automatisés couvrent les transitions de contexte via des API Windows 
 - Refuser le lancement : conserver le fichier vérifié sans lancer l’installateur.
 - Vérifier le parcours portable et l’installation Windows réelle avec conservation des profils.
 - Vérifier la fermeture de l’application pendant un téléchargement et une erreur réseau.
+
+### Diagnostic après interruption
+
+- Fermer normalement puis relancer : aucune proposition de diagnostic.
+- Terminer le processus depuis le Gestionnaire des tâches puis relancer : proposition affichée.
+- Refuser la proposition, fermer normalement et relancer : aucune nouvelle proposition.
+- Accepter puis annuler le choix du fichier : aucun ZIP créé.
+- Accepter et enregistrer : vérifier le ZIP anonymisé et l’absence d’envoi réseau.
+- Ouvrir une deuxième instance : aucune fausse alerte sur la première encore ouverte.

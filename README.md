@@ -258,3 +258,5 @@ Le code est distribué sous licence **GNU GPL v3**, voir [LICENSE](LICENSE).
 Ce projet communautaire n’est ni affilié, ni approuvé, ni sponsorisé par Ankama. Dofus, Dofus Retro, Ankama, ainsi que les portraits et icônes de jeu fournis dans `assets/ankama`, sont la propriété de leurs titulaires respectifs. Ces ressources graphiques ne sont pas couvertes par la GPL-3.0 du code ; consultez leur [notice dédiée](assets/ankama/NOTICE.md) avant toute redistribution.
 
 Mise à jour guidée (en développement) : choix installateur/portable, téléchargement annulable et vérification SHA-256 avant proposition de lancement.
+
+Diagnostic après fermeture anormale (en développement) : proposition d’un paquet de support anonymisé au lancement suivant, enregistré uniquement à votre demande.

@@ -3514,6 +3514,17 @@ class WindowManagerApp:
         ).pack(side="left", padx=(6, 0))
         TtkButton(buttons, text="Fermer", command=win.destroy).pack(side="right")
 
+    def offer_interrupted_session_diagnostic(self) -> None:
+        if self._stop_event.is_set():
+            return
+        self._log("La session précédente s’est terminée anormalement.")
+        if messagebox.askyesno(
+            tr("Fermeture anormale détectée"),
+            tr("La session précédente ne s’est pas fermée normalement. Cela peut provenir d’un plantage ou d’un arrêt forcé. Voulez-vous enregistrer un paquet de support anonymisé ? Aucun rapport ne sera envoyé automatiquement."),
+            parent=self.root,
+        ):
+            self.export_support_bundle()
+
     def export_support_bundle(self, *, parent=None) -> None:
         destination = filedialog.asksaveasfilename(
             title=tr("Créer un paquet de support anonymisé"),
@@ -6646,7 +6657,8 @@ def json_load(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def run(game_mode: str = "unity", *, start_minimized: bool = False) -> None:
+def run(game_mode: str = "unity", *, start_minimized: bool = False,
+        previous_interruption: bool = False) -> None:
     app = WindowManagerApp(game_mode=game_mode, start_minimized=start_minimized)
     # The smart matcher waits for the first scan and only loads a unique exact
     # same-mode profile. Disabling it restores the historical last-profile load.
@@ -6658,4 +6670,6 @@ def run(game_mode: str = "unity", *, start_minimized: bool = False) -> None:
             app._log(f"Profil auto-chargé: '{last}'")
         except Exception:
             pass
+    if previous_interruption:
+        app.root.after(1200, app.offer_interrupted_session_diagnostic)
     app.run()

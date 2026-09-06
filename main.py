@@ -123,9 +123,24 @@ def main() -> None:
     else:
         mode = settings.game_mode
 
-    from dwm.app import run
+    from dwm.services.session_recovery import SessionRecovery
 
-    run(game_mode=mode, start_minimized=args.minimized)
+    recovery = SessionRecovery(dirs["root"])
+    try:
+        recovery.begin()
+    except OSError as exc:
+        logger.warn(f"Session recovery unavailable: {exc}")
+    try:
+        from dwm.app import run
+
+        run(game_mode=mode, start_minimized=args.minimized,
+            previous_interruption=recovery.previous_interruption)
+        try:
+            recovery.complete()
+        except OSError as exc:
+            logger.warn(f"Session completion could not be recorded: {exc}")
+    finally:
+        recovery.close()
 
 
 if __name__ == "__main__":
