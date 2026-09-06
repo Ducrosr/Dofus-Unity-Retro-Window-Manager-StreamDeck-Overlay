@@ -232,3 +232,9 @@ Le journal principal est masqué par défaut. Activez **Afficher le journal** po
 Dans **Profils**, cochez **Mémoriser l’overlay dans le profil**, puis utilisez **Enregistrer…**. Le profil conserve la position, la taille, l’orientation, l’opacité, le verrouillage, l’activation, le contenu des lignes, les portraits, les icônes, le titre et les flèches. Au chargement manuel ou automatique, cette disposition remplace les réglages courants de l’overlay pour le mode actif. Le thème, la popup et les raccourcis restent indépendants.
 
 Les dispositions Unity et Retro sont stockées séparément. Un profil ancien ou sans disposition pour le mode courant laisse l’affichage courant intact. Pour retirer une disposition, décochez l’option et enregistrez le profil. Pour actualiser la disposition après un déplacement ou une modification des paramètres, enregistrez à nouveau le profil. Modifier seulement un alias ou un portrait ne remplace pas la disposition sauvegardée.
+
+### Menu rapide près de l’horloge
+
+Faites un clic droit sur l’icône Dofus Window Manager dans la zone de notification Windows. Le sous-menu **Profils** indique le profil réellement chargé et permet d’en charger un autre. Si le profil appartient à Unity ou Retro, l’application bascule vers ce mode avant de le charger ; un ancien profil sans mode utilise le mode courant. Sa disposition d’overlay est appliquée si elle est enregistrée.
+
+Le sous-menu **Version de Dofus** indique le mode actif. **Afficher l’overlay** est coché quand l’overlay est activé et permet de le masquer ou de le réafficher. Le libellé de pause des raccourcis suit leur état réel. Les commandes de modification sont désactivées tant qu’une boîte de dialogue est ouverte. **Actualiser les fenêtres** relit aussi la liste des profils, notamment après une modification de fichiers externe. Ces commandes fonctionnent lorsque la fenêtre principale est réduite.

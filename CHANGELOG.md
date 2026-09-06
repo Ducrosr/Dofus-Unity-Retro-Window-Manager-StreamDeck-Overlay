@@ -2,6 +2,8 @@
 
 ## À venir
 
+- menu de la zone de notification enrichi : profils avec indication du profil actif, bascule Unity/Retro, affichage de l’overlay et état des raccourcis ; chargement d’un profil dans son mode enregistré et suspension des changements pendant une boîte de dialogue ;
+
 - dispositions d’overlay enregistrables par profil et par mode Unity/Retro : position, taille, orientation, opacité, verrouillage, contenu et éléments visibles ; option de mémorisation dans le panneau Profils ; anciens profils inchangés ;
 
 - chargement automatique des profils aligné sur le chargement manuel : ordre, alias, overlay et Stream Deck sont appliqués immédiatement, y compris après une détection par événements ;

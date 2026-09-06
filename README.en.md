@@ -1,5 +1,7 @@
 <h1 align="center">Dofus Window Manager</h1>
 
+**Quick tray menu (in development).** Right-click the icon near the clock to load a profile, choose Unity/Retro, toggle the overlay or pause shortcuts. Checkmarks identify the active profile and mode. Loading a profile switches to its saved game mode when needed. Changes are disabled while a dialog is open.
+
 **Profile overlay layouts (in development).** In Profiles, enable **Save overlay layout in profile**, then save the profile. Loading it restores the layout for the current Unity/Retro mode. Uncheck and save to detach it; loading then keeps the current display. Save the profile again after changing its layout. Existing profiles remain unchanged.
 
 <p align="center"><strong>Dofus Unity &amp; Retro multi-account window manager — with or without Stream Deck</strong></p>

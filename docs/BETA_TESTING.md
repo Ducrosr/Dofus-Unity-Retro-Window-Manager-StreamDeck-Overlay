@@ -89,3 +89,10 @@ Les tests automatisés couvrent les transitions de contexte via des API Windows 
 - Vérifier le titre, les flèches, la taille automatique et les portraits après chaque chargement.
 - Charger un ancien profil : conserver l’affichage courant. Décocher la mémorisation et enregistrer : obtenir le même comportement.
 - Vérifier que charger une disposition Unity ne modifie pas la disposition Retro enregistrée ; tester également une position provenant d’un écran débranché.
+
+### Menu de la zone de notification
+
+- Réduire l’application ; charger successivement deux profils, dont un pour l’autre mode, et vérifier l’overlay et le Stream Deck.
+- Contrôler les coches du profil, du mode et de l’overlay après une action dans l’application, puis via le menu. Vérifier également la pause/reprise et les trois langues.
+- Ouvrir les paramètres : les changements par le menu doivent être grisés. Fermer les paramètres et vérifier leur réactivation.
+- Supprimer un profil externe puis utiliser Actualiser les fenêtres : vérifier son retrait du menu. Quitter depuis le menu et vérifier la disparition de l’icône.

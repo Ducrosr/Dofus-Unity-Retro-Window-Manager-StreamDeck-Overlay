@@ -1,5 +1,7 @@
 <h1 align="center">Dofus Window Manager</h1>
 
+**Menu rapide (en développement).** Un clic droit sur l’icône près de l’horloge permet de charger un profil, choisir Unity/Retro, afficher ou masquer l’overlay et suspendre les raccourcis. Le profil actif et le mode courant sont cochés. Charger un profil bascule vers son mode enregistré si nécessaire. Les changements sont désactivés pendant une boîte de dialogue.
+
 **Dispositions par profil (en développement).** Dans le panneau Profils, cochez **Mémoriser l’overlay dans le profil**, puis **Enregistrer…**. Le chargement retrouve la disposition sauvegardée pour le mode Unity/Retro courant. Décochez puis enregistrez pour supprimer ce lien : le chargement conservera alors l’affichage courant. Les changements ultérieurs d’affichage nécessitent un nouvel enregistrement du profil. Les anciens profils restent inchangés.
 
 <p align="center"><strong>Gestionnaire multicompte Dofus Unity &amp; Retro — avec ou sans Stream Deck</strong></p>

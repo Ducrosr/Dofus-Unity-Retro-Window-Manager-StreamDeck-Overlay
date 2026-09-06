@@ -139,7 +139,7 @@ from .services.character_visuals import (
     sanitize_character_visuals,
 )
 from .services.shell_attention_hook import ShellAttentionHook
-from .services.tray import TrayController
+from .services.tray import TrayController, TrayState
 from .services.windows_startup import set_startup_enabled
 from .services.window_order import (
     align_streamdeck_slots_with_managed,
@@ -694,11 +694,15 @@ class WindowManagerApp:
         self.root.after(3000, self._check_updates_on_startup)
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+        self._sync_tray_state()
         tray_started = self.tray.start(
             show=lambda: self._queue.put(("tray", "show")),
             refresh=lambda: self._queue.put(("tray", "refresh")),
             quit_app=lambda: self._queue.put(("tray", "quit")),
             toggle_hotkeys=lambda: self._queue.put(("tray", "hotkeys")),
+            select_profile=lambda name: self._queue.put(("tray", "profile", name)),
+            select_mode=lambda mode: self._queue.put(("tray", "mode", mode)),
+            toggle_overlay=lambda: self._queue.put(("tray", "overlay")),
         )
         if self._start_minimized:
             if tray_started:
@@ -2596,7 +2600,9 @@ class WindowManagerApp:
     # ---------------------------- Profiles ----------------------------
 
     def _get_profiles(self):
-        return list_profiles(self.dirs["profiles"])
+        names = list_profiles(self.dirs["profiles"])
+        self._tray_profile_names = tuple(names)
+        return names
 
     def _refresh_profile_combo(self):
         self.profile_combo["values"] = self._get_profiles()
@@ -4188,15 +4194,7 @@ class WindowManagerApp:
                 except Exception:
                     pass
             elif kind == "tray":
-                action = str(item[1])
-                if action == "show":
-                    self._show_main_window()
-                elif action == "refresh":
-                    self.refresh_windows(force=True)
-                elif action == "quit":
-                    self.on_close(force=True)
-                elif action == "hotkeys":
-                    self.toggle_hotkeys_paused()
+                self._handle_tray_action(str(item[1]), str(item[2]) if len(item) > 2 else "")
             elif kind == "update_check":
                 self._finish_update_check(
                     manual=bool(item[1]),
@@ -4210,6 +4208,7 @@ class WindowManagerApp:
                 return
 
         if not self._stop_event.is_set():
+            self._sync_tray_state()
             self.root.after(100, self._process_queue)
 
     # ---------------------------- Stream Deck bridge ----------------------------
@@ -4315,6 +4314,52 @@ class WindowManagerApp:
             }
 
         return {"ok": False, "error": "Commande inconnue.", "_status": 404}
+
+    def _sync_tray_state(self) -> None:
+        tray = getattr(self, "tray", None)
+        if tray is None:
+            return
+        tray.set_state(TrayState(
+            profiles=getattr(self, "_tray_profile_names", ()),
+            active_profile=self._active_profile_name,
+            game_mode=self.game_mode,
+            overlay_enabled=self.settings.rotation_overlay_enabled,
+            hotkeys_paused=self._hotkeys_paused,
+            enabled=self.root.grab_current() is None,
+            language=self.settings.language,
+        ))
+
+    def _handle_tray_action(self, action: str, value: str = "") -> None:
+        """Run tray requests on the Tk thread, rechecking modal state and profiles."""
+        if action in {"profile", "mode", "overlay", "hotkeys"} and self.root.grab_current() is not None:
+            return
+        if action == "show":
+            self._show_main_window()
+        elif action == "refresh":
+            self.refresh_windows(force=True)
+            self._refresh_profile_combo()
+        elif action == "quit":
+            self.on_close(force=True)
+            return
+        elif action == "hotkeys":
+            self.toggle_hotkeys_paused()
+        elif action == "overlay":
+            self.toggle_rotation_overlay()
+        elif action == "mode" and value in {"unity", "retro"}:
+            self.switch_game_mode(value)
+        elif action == "profile":
+            try:
+                profile = load_profile(self.dirs["profiles"], value)
+            except Exception as exc:
+                self._show_main_window()
+                messagebox.showerror(tr("Erreur"), str(exc), parent=self.root)
+                self._refresh_profile_combo()
+                return
+            if profile.game_mode in {"unity", "retro"} and profile.game_mode != self.game_mode:
+                self.switch_game_mode(profile.game_mode)
+            self.selected_profile.set(value)
+            self.load_profile_selected()
+        self._sync_tray_state()
 
     def _show_main_window(self) -> None:
         """Restore and foreground the manager when requested from Stream Deck."""
