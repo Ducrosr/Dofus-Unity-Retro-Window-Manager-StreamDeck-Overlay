@@ -103,3 +103,9 @@ Les tests automatisés couvrent les transitions de contexte via des API Windows 
 - Importer une sauvegarde modifiant le mode, l’overlay et les raccourcis : vérifier le tableau, appliquer puis vérifier le point de restauration créé.
 - Restaurer depuis le gestionnaire déjà ouvert ; annuler avec Échap et vérifier que le gestionnaire reste utilisable.
 - Tester les textes longs, les portraits incorporés, les trois langues, les thèmes et le redimensionnement de la fenêtre d’aperçu.
+
+### Recherche des paramètres
+
+- Rechercher `opacite overlay`, `fenetre` et une option de Général ; vérifier l’ouverture du bon onglet et le défilement.
+- Modifier une option sans appliquer, rechercher une autre option, puis effacer : vérifier que la modification initiale est conservée.
+- Tester Ctrl+F, Entrée, Échap, un terme absent, les trois langues et la fermeture immédiate après saisie.

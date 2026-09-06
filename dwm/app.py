@@ -98,6 +98,7 @@ from .services.ui_scroll import vertical_scroll_needed, wheel_scroll_units
 from .services.configuration_backup import build_configuration_backup, parse_configuration_backup
 from .services.configuration_diff import compare_configuration, compare_profiles
 from .ui_configuration_preview import confirm_configuration_changes
+from .ui_settings_search import SettingsSearch
 from .services.backup_history import (
     BackupSnapshot,
     create_backup_snapshot,
@@ -6300,6 +6301,8 @@ class WindowManagerApp:
         TtkButton(settings_footer, text="Appliquer", command=apply, style="Accent.TButton").pack(
             side="right", padx=(0, 6)
         )
+        self._localize_widget_tree(win)
+        win._settings_search = SettingsSearch(win, settings_notebook, tab_canvases)
 
     def _report_hotkey_error_popup(self):
         try:

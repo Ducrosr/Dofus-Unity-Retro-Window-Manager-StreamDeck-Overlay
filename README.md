@@ -1,5 +1,7 @@
 <h1 align="center">Dofus Window Manager</h1>
 
+**Recherche des paramètres (en développement).** Utilisez le champ en haut des paramètres ou **Ctrl+F**. La recherche porte sur les libellés et les sections des trois onglets, sans distinction de casse ni d’accents. Cliquez sur un résultat ou appuyez sur Entrée pour atteindre le premier. Effacer la recherche conserve vos modifications en cours.
+
 **Aperçu avant importation (en développement).** L’importation d’un profil ou d’une sauvegarde et la restauration locale présentent les différences avant/après. Sélectionnez une ligne pour lire les valeurs complètes. Annuler ne modifie rien ; Appliquer crée d’abord un point de restauration. Les profils locaux non remplacés sont conservés.
 
 **Menu rapide (en développement).** Un clic droit sur l’icône près de l’horloge permet de charger un profil, choisir Unity/Retro, afficher ou masquer l’overlay et suspendre les raccourcis. Le profil actif et le mode courant sont cochés. Charger un profil bascule vers son mode enregistré si nécessaire. Les changements sont désactivés pendant une boîte de dialogue.

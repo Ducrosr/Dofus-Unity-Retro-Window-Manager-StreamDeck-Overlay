@@ -1,5 +1,7 @@
 <h1 align="center">Dofus Window Manager</h1>
 
+**Settings search (in development).** Use the field at the top of Settings or **Ctrl+F**. Search covers labels and sections across all three tabs, ignoring case and accents. Click a result or press Enter to reach the first match. Clearing the search keeps your pending edits.
+
 **Import preview (in development).** Profile imports, backup imports and local restores show before/after differences. Select a row to read the complete values. Cancel leaves everything unchanged; Apply creates a restore point first. Local profiles that are not replaced are kept.
 
 **Quick tray menu (in development).** Right-click the icon near the clock to load a profile, choose Unity/Retro, toggle the overlay or pause shortcuts. Checkmarks identify the active profile and mode. Loading a profile switches to its saved game mode when needed. Changes are disabled while a dialog is open.

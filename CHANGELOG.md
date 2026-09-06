@@ -2,6 +2,8 @@
 
 ## À venir
 
+- recherche dans les trois onglets des paramètres : accents et majuscules ignorés, résultats contextualisés, navigation et défilement vers l’option, Ctrl+F et effacement sans perdre les réglages en cours de saisie ;
+
 - aperçu avant importation de profil, importation de sauvegarde et restauration locale : tableau avant/après, détails sélectionnables, profils conservés et annulation sans modification ; détection des noms de fichiers en conflit ; point de restauration requis avant application ;
 
 - menu de la zone de notification enrichi : profils avec indication du profil actif, bascule Unity/Retro, affichage de l’overlay et état des raccourcis ; chargement d’un profil dans son mode enregistré et suspension des changements pendant une boîte de dialogue ;

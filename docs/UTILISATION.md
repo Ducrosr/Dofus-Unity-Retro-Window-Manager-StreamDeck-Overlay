@@ -246,3 +246,9 @@ Un aperçu est affiché avant l’importation d’un profil JSON, d’une sauveg
 Sélectionnez une ligne pour lire les valeurs complètes dans la zone inférieure, qui dispose de son propre défilement. Les images incorporées sont signalées comme images personnalisées ; leur contenu encodé n’est pas affiché. **Annuler**, la fermeture de la fenêtre ou Échap abandonnent l’opération. **Appliquer les modifications** crée un point de restauration puis applique le contenu présenté. Si le point ne peut pas être créé, l’opération est interrompue. En l’absence de différences, le bouton Appliquer est désactivé.
 
 Une sauvegarde contenant plusieurs profils qui écraseraient le même fichier Windows est refusée, notamment lorsque leurs noms ne diffèrent que par la casse ou deviennent identiques après remplacement des caractères interdits.
+
+### Rechercher dans les paramètres
+
+Dans **Paramètres**, saisissez un ou plusieurs mots dans le champ de recherche, ou utilisez **Ctrl+F** pour y accéder. La recherche porte sur les libellés et le nom des sections des trois onglets. Elle ignore les accents et les majuscules : `opacite overlay` retrouve les réglages d’opacité de l’overlay. Tous les mots doivent correspondre au même résultat ; les correspondances directes dans le libellé sont présentées en premier.
+
+Cliquez sur un résultat pour ouvrir son onglet et faire défiler jusqu’au réglage. **Entrée** depuis le champ ouvre le premier résultat. **Échap** dans le champ ou **Effacer** retire la recherche. Les champs et leurs valeurs restent présents pendant la recherche ; seules les commandes habituelles Appliquer ou Annuler valident ou abandonnent vos modifications.

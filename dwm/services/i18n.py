@@ -27,6 +27,11 @@ def get_language() -> str:
 
 
 _EN: dict[str, str] = {
+    "Rechercher un paramètre": "Search settings",
+    "Effacer": "Clear",
+    "Paramètre": "Setting",
+    "{count} résultat(s)": "{count} result(s)",
+    "Aucun paramètre trouvé.": "No settings found.",
     "Filtre de processus Retro": "Retro process filter",
     "Position horizontale": "Horizontal position",
     "Position verticale": "Vertical position",
@@ -416,6 +421,11 @@ _EN: dict[str, str] = {
 }
 
 _ES: dict[str, str] = {
+    "Rechercher un paramètre": "Buscar un ajuste",
+    "Effacer": "Borrar",
+    "Paramètre": "Ajuste",
+    "{count} résultat(s)": "{count} resultado(s)",
+    "Aucun paramètre trouvé.": "No se encontraron ajustes.",
     "Filtre de processus Retro": "Filtro de proceso Retro",
     "Position horizontale": "Posición horizontal",
     "Position verticale": "Posición vertical",
