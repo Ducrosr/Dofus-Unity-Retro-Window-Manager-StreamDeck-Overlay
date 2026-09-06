@@ -159,3 +159,5 @@ The PyInstaller output is `dist\DofusWindowManager.exe`; the repository also con
 ## Project status
 
 Windows only. The project is community-made and is not affiliated with, endorsed by or sponsored by Ankama. Dofus, Dofus Retro, Ankama, and the bundled portraits and game icons under `assets/ankama` are the property of their respective owners. Those visual assets are not covered by the source code’s GPL-3.0 license; read the [asset notice](assets/ankama/NOTICE.md) before redistributing them.
+
+Guided updates (in development): installer/portable selection, cancellable download and SHA-256 verification before offering to launch.

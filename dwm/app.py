@@ -99,6 +99,7 @@ from .services.configuration_backup import build_configuration_backup, parse_con
 from .services.configuration_diff import compare_configuration, compare_profiles
 from .ui_configuration_preview import confirm_configuration_changes
 from .ui_settings_search import SettingsSearch
+from .ui_update_download import UpdateDownloadDialog
 from .services.monitor_layout import list_monitors
 from .services.backup_history import (
     BackupSnapshot,
@@ -2558,6 +2559,13 @@ class WindowManagerApp:
         )
 
     def _offer_official_release(self, release: ReleaseInfo) -> None:
+        if release.assets:
+            existing = getattr(self, "_update_download_dialog", None)
+            if existing is not None and existing.window.winfo_exists():
+                existing.window.lift()
+            else:
+                self._update_download_dialog = UpdateDownloadDialog(self.root, release)
+            return
         release_label = release.tag
         if release.name and release.name != release.tag:
             release_label = f"{release.tag} — {release.name}"

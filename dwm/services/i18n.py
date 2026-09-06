@@ -27,6 +27,20 @@ def get_language() -> str:
 
 
 _EN: dict[str, str] = {
+    'Nouvelle version : {tag}': 'New version: {tag}',
+    'Choisissez un fichier à télécharger et vérifier.': 'Choose a file to download and verify.',
+    'Télécharger et vérifier': 'Download and verify',
+    'Release officielle': 'Official release',
+    'Annulation en cours…': 'Cancelling…',
+    'Dossier de téléchargement': 'Download folder',
+    'Téléchargement en cours…': 'Downloading…',
+    'Téléchargement annulé.': 'Download cancelled.',
+    'Téléchargement ou vérification impossible. Aucun fichier ne sera lancé.': 'Download or verification failed. No file will be launched.',
+    'Téléchargement : {percent} %': 'Download: {percent}%',
+    'SHA-256 vérifié.': 'SHA-256 verified.',
+    'SHA-256 vérifié. Lancer l’installateur ?': 'SHA-256 verified. Launch the installer?',
+    'Impossible de lancer le fichier vérifié.': 'Unable to launch the verified file.',
+    'Fermez l’application avant de remplacer votre EXE portable.': 'Close the application before replacing your portable EXE.',
     "Automatique · position courante": "Automatic · current position",
     "Écran {number} · {width} × {height}": "Display {number} · {width} × {height}",
     "Écran enregistré indisponible": "Saved display unavailable",
@@ -429,6 +443,20 @@ _EN: dict[str, str] = {
 }
 
 _ES: dict[str, str] = {
+    'Nouvelle version : {tag}': 'Nueva versión: {tag}',
+    'Choisissez un fichier à télécharger et vérifier.': 'Elija un archivo para descargar y verificar.',
+    'Télécharger et vérifier': 'Descargar y verificar',
+    'Release officielle': 'Versión oficial',
+    'Annulation en cours…': 'Cancelando…',
+    'Dossier de téléchargement': 'Carpeta de descarga',
+    'Téléchargement en cours…': 'Descargando…',
+    'Téléchargement annulé.': 'Descarga cancelada.',
+    'Téléchargement ou vérification impossible. Aucun fichier ne sera lancé.': 'La descarga o verificación ha fallado. No se ejecutará ningún archivo.',
+    'Téléchargement : {percent} %': 'Descarga: {percent} %',
+    'SHA-256 vérifié.': 'SHA-256 verificado.',
+    'SHA-256 vérifié. Lancer l’installateur ?': 'SHA-256 verificado. ¿Ejecutar el instalador?',
+    'Impossible de lancer le fichier vérifié.': 'No se puede ejecutar el archivo verificado.',
+    'Fermez l’application avant de remplacer votre EXE portable.': 'Cierre la aplicación antes de reemplazar su EXE portable.',
     "Automatique · position courante": "Automático · posición actual",
     "Écran {number} · {width} × {height}": "Pantalla {number} · {width} × {height}",
     "Écran enregistré indisponible": "Pantalla guardada no disponible",

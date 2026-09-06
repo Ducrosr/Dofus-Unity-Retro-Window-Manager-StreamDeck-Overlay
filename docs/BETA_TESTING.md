@@ -116,3 +116,11 @@ Les tests automatisés couvrent les transitions de contexte via des API Windows 
 - Vérifier que la barre des tâches reste dégagée ; modifier la taille de l’overlay et contrôler que le bord choisi reste respecté.
 - Débrancher puis rebrancher l’écran choisi : contrôler le repli sur le principal puis le retour après environ deux secondes.
 - Tester différentes mises à l’échelle Windows, la position libre, le réordonnancement des personnages avec ancrage et la restauration d’un profil sur un autre écran.
+
+### Mise à jour guidée
+
+- Depuis une ancienne version, rechercher une release puis télécharger les deux formats.
+- Annuler pendant le téléchargement : aucun EXE incomplet ne doit être proposé.
+- Refuser le lancement : conserver le fichier vérifié sans lancer l’installateur.
+- Vérifier le parcours portable et l’installation Windows réelle avec conservation des profils.
+- Vérifier la fermeture de l’application pendant un téléchargement et une erreur réseau.

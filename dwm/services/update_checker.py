@@ -48,6 +48,7 @@ class ReleaseInfo:
     url: str
     published_at: str
     prerelease: bool
+    assets: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -94,12 +95,15 @@ def select_latest_release(
         name = str(raw_release.get("name") or tag).strip() or tag
         published_at = str(raw_release.get("published_at") or "").strip()
         release_url = f"{OFFICIAL_RELEASE_URL}/{quote(tag, safe='')}"
+        from .update_download import release_assets
+
         info = ReleaseInfo(
             tag=tag,
             name=name[:160],
             url=release_url,
             published_at=published_at,
             prerelease=prerelease,
+            assets=release_assets(tag, raw_release.get("assets")),
         )
         candidates.append((version, info))
 

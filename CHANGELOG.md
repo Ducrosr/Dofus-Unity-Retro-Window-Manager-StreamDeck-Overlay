@@ -1,5 +1,11 @@
 # Historique
 
+## En développement — mise à jour guidée
+
+- Téléchargement explicite de l’installateur ou de l’EXE portable officiel avec progression et annulation.
+- Vérification de la taille et du SHA-256 fourni par l’API GitHub ; suppression du fichier partiel en cas d’erreur.
+- Confirmation avant de lancer l’installateur, aucune installation silencieuse. Les versions sans empreinte restent accessibles dans le navigateur.
+
 ## À venir
 
 - choix de l’écran et ancrage de l’overlay sur six positions, dans la zone de travail hors barre des tâches ; récupération après débranchement et retour à l’écran choisi lorsqu’il redevient disponible ; paramètres v25 et mémorisation par profil et mode ;

@@ -260,3 +260,21 @@ Dans **Paramètres → Apparence → Écran et ancrage de l’overlay**, choisis
 **Position libre** conserve le déplacement à la souris. Avec un ancrage, le déplacement de l’ensemble est désactivé ; le glisser-déposer des personnages reste disponible. L’overlay est limité aux dimensions utilisables de l’écran, sans écraser ses dimensions préférées enregistrées.
 
 Tant que l’overlay est activé, un contrôle des écrans toutes les deux secondes détecte les changements de configuration. L’overlay n’est reconstruit que si la disposition des écrans change. Si l’écran choisi manque, l’écran principal le remplace ; le choix reste mémorisé, et l’ancrage est réappliqué sur l’écran choisi lorsqu’il revient. Les coordonnées négatives des écrans à gauche ou au-dessus sont prises en charge. Ces réglages sont indépendants entre Unity et Retro et inclus lorsque vous enregistrez la disposition d’un profil.
+
+### Téléchargement guidé des mises à jour (en développement)
+
+Après une recherche manuelle, choisissez l’installateur ou l’EXE portable puis le dossier
+de téléchargement. Chaque téléchargement utilise un sous-dossier unique pour préserver
+les fichiers existants. La progression est affichée ; l’annulation peut attendre la fin
+de la lecture réseau en cours (délai réseau de 15 secondes).
+
+La taille et le SHA-256 sont comparés aux métadonnées de la release officielle GitHub.
+Les fichiers partiels sont supprimés après une erreur ou une annulation. Sans empreinte
+SHA-256 exploitable, utilisez le lien vers la release officielle dans le navigateur.
+Cette vérification d’intégrité ne remplace pas une signature Authenticode.
+
+L’installateur ne se lance qu’après votre confirmation. Pour la version portable,
+fermez l’application avant de remplacer votre ancien EXE. Aucun fichier téléchargé
+n’est installé silencieusement.
+
+Source du format des métadonnées : [API GitHub des fichiers de release](https://docs.github.com/en/rest/releases/assets).
