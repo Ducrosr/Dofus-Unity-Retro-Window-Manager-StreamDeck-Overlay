@@ -38,6 +38,16 @@ const status: DwmStatus = {
 	windows,
 };
 
+test("une case absente reste réservée jusqu’à la reconnexion", () => {
+	const offline = { ...windows[0], hwnd: -1, available: false };
+	const disconnected = { ...status, windows: [offline, windows[1]] };
+	assert.equal(findSelectedWindow(disconnected, { slot: 1 })?.pseudo, "Nealla");
+	assert.equal(findSelectedWindow(disconnected, { slot: 1 })?.available, false);
+	assert.equal(findSelectedWindow(disconnected, { slot: 2 })?.hwnd, 102);
+	const reconnected = { ...status, windows: [{ ...offline, hwnd: 900, available: true }, windows[1]] };
+	assert.equal(findSelectedWindow(reconnected, { slot: 1 })?.hwnd, 900);
+});
+
 test("une ancienne association par case est migrable", () => {
 	assert.equal(findSelectedWindow(status, { slot: "2" })?.pseudo, "Nat");
 });

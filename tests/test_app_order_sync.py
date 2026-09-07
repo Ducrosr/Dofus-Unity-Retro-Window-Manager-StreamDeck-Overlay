@@ -195,6 +195,12 @@ class AppOrderSyncTests(unittest.TestCase):
 
         self.assertEqual(app._active_profile_name, "Jiva")
         self.assertEqual(app.aliases, {"Nealla": "Terre"})
+        self.assertEqual(app._managed_order, [103, 101, 102])
+        self.assertEqual(app._streamdeck_order, [103, 101, 102])
+        overlay = app.overlay_ui.update_characters.call_args.args[0]
+        self.assertEqual([entry.hwnd for entry in overlay], [103, 101, 102])
+        self.assertEqual(overlay[1].alias, "Terre")
+        app.update_listboxes.assert_called_once_with(publish_consumers=False)
         app.selected_profile.set.assert_called_once_with("Jiva")
 
     def test_smart_loading_refuses_ambiguous_exact_profiles(self) -> None:

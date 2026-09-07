@@ -1,6 +1,41 @@
 # Historique
 
-## À venir
+## 2.20.0-beta.5 — 2026-09-07
+
+### Mise à jour guidée
+
+- Téléchargement explicite de l’installateur ou de l’EXE portable officiel avec progression et annulation.
+- Vérification de la taille et du SHA-256 fourni par l’API GitHub ; suppression du fichier partiel en cas d’erreur.
+- Confirmation avant de lancer l’installateur, aucune installation silencieuse. Les versions sans empreinte restent accessibles dans le navigateur.
+
+### Profils, interface et fiabilité
+
+- Fermeture depuis la zone de notification : arrêt des services en arrière-plan pour conserver la boucle Tk active pendant le nettoyage ; demandes de fermeture répétées ignorées.
+
+- Correction du retour de recherche de mise à jour : réception indépendante de la file des fenêtres et message après expiration du délai de 20 secondes.
+- Correction des aperçus Minimal/Équilibré/Complet : simulation du preset sélectionné, renouvellement d’un aperçu déjà ouvert et chargement dans le formulaire dès la sélection.
+
+- Détection d’une session interrompue au lancement suivant et proposition facultative d’un paquet de support anonymisé ; aucun envoi automatique, verrou pour éviter les faux positifs liés à une instance encore ouverte.
+
+- choix de l’écran et ancrage de l’overlay sur six positions, dans la zone de travail hors barre des tâches ; récupération après débranchement et retour à l’écran choisi lorsqu’il redevient disponible ; paramètres v25 et mémorisation par profil et mode ;
+
+- recherche dans les trois onglets des paramètres : accents et majuscules ignorés, résultats contextualisés, navigation et défilement vers l’option, Ctrl+F et effacement sans perdre les réglages en cours de saisie ;
+
+- aperçu avant importation de profil, importation de sauvegarde et restauration locale : tableau avant/après, détails sélectionnables, profils conservés et annulation sans modification ; détection des noms de fichiers en conflit ; point de restauration requis avant application ;
+
+- menu de la zone de notification enrichi : profils avec indication du profil actif, bascule Unity/Retro, affichage de l’overlay et état des raccourcis ; chargement d’un profil dans son mode enregistré et suspension des changements pendant une boîte de dialogue ;
+
+- dispositions d’overlay enregistrables par profil et par mode Unity/Retro : position, taille, orientation, opacité, verrouillage, contenu et éléments visibles ; option de mémorisation dans le panneau Profils ; anciens profils inchangés ;
+
+- chargement automatique des profils aligné sur le chargement manuel : ordre, alias, overlay et Stream Deck sont appliqués immédiatement, y compris après une détection par événements ;
+- raccourcis facultativement limités aux fenêtres Dofus, libérés dans les autres applications ; pause/reprise dans l’application et la zone de notification, et suspension pendant l’édition des paramètres ;
+- accès directs et cases Stream Deck fixes par personnage, activables dans les paramètres, avec conservation des emplacements absents et refus des noms ambigus ;
+- restauration de l’ordre et de l’état ignoré après reconnexion, indépendamment des identifiants Windows ; conservation des membres absents lors de l’enregistrement d’un profil ;
+- panneau Équipe et emplacements pour vérifier les associations, les réattribuer explicitement ou retirer des personnages absents ;
+- annulation des vingt derniers changements d’ordre et retour à l’ordre enregistré du profil, avec indication des modifications non enregistrées ;
+- profils JSON v4 et paramètres v25 compatibles avec les anciennes configurations ; sauvegardes complètes étendues aux emplacements et personnages ignorés de la session ;
+- plugin Stream Deck 0.8.1 : touches absentes atténuées, refus d’activation des emplacements indisponibles et vérification de l’identité lors du focus ;
+- traduction du menu de notification et des nouvelles commandes en français, anglais et espagnol.
 
 ## 2.20.0-beta.4 — préversion Windows
 

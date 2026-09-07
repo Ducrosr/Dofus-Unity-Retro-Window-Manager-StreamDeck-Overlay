@@ -5,6 +5,7 @@ from typing import Any
 
 from ..storage.profiles import Profile
 from ..storage.settings import Settings
+from .character_roster import character_names
 
 
 BACKUP_FORMAT = "dofus-window-manager-backup"
@@ -19,6 +20,8 @@ def build_configuration_backup(
     current_order: list[str],
     current_aliases: dict[str, str],
     app_version: str,
+    current_slots: list[str] | None = None,
+    current_ignored: list[str] | None = None,
 ) -> dict[str, Any]:
     aliases = {pseudo: alias.strip() for pseudo, alias in current_aliases.items() if alias.strip()}
     return {
@@ -32,6 +35,8 @@ def build_configuration_backup(
             "active_profile": active_profile.strip(),
             "order": list(current_order),
             "aliases": aliases,
+            "character_slots": character_names(current_slots if current_slots is not None else current_order),
+            "ignored_characters": character_names(current_ignored),
         },
     }
 
@@ -73,5 +78,7 @@ def parse_configuration_backup(data: object) -> tuple[Settings, list[Profile], d
         "active_profile": str(session.get("active_profile") or "").strip(),
         "order": order,
         "aliases": aliases,
+        "character_slots": character_names(session.get("character_slots", order)),
+        "ignored_characters": character_names(session.get("ignored_characters")),
     }
     return settings, profiles, normalized_session

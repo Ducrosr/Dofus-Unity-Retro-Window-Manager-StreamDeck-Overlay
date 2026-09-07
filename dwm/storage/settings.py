@@ -21,10 +21,11 @@ from ..services.themes import (
     default_theme_for_mode,
     normalize_theme,
 )
+from ..services.monitor_layout import normalize_monitor_anchor
 from .atomic import atomic_write_text
 
 
-SETTINGS_SCHEMA_VERSION = 23
+SETTINGS_SCHEMA_VERSION = 25
 MODERN_DARK_THEME = UNITY_STANDARD_THEME  # Backward-compatible public name.
 DEFAULT_WINDOW_COLUMN_ORDER = ("class", "name", "alias", "hwnd")
 
@@ -47,6 +48,8 @@ def _default_display_preferences() -> dict[str, object]:
         "rotation_overlay_auto_width": True,
         "rotation_overlay_height": 0,
         "rotation_overlay_orientation": "vertical",
+        "rotation_overlay_monitor": "",
+        "rotation_overlay_anchor": "free",
         "rotation_overlay_show_title": True,
         "rotation_overlay_show_reorder_buttons": True,
         "attention_blink_enabled": True,
@@ -73,7 +76,7 @@ def _normalized_display_preferences(
     def safe_int(key: str, default: int) -> int:
         try:
             return int(base.get(key, default))
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             return default
 
     requested_height = safe_int("rotation_overlay_height", 0)
@@ -112,6 +115,8 @@ def _normalized_display_preferences(
         "rotation_overlay_height": (
             0 if requested_height <= 0 else max(80, min(1600, requested_height))
         ),
+        "rotation_overlay_monitor": str(base.get("rotation_overlay_monitor") or "")[:128],
+        "rotation_overlay_anchor": normalize_monitor_anchor(base.get("rotation_overlay_anchor")),
         "rotation_overlay_orientation": normalize_overlay_orientation(
             base.get("rotation_overlay_orientation")
         ),
@@ -129,6 +134,26 @@ def _normalized_display_preferences(
         "show_character_portraits": bool(base.get("show_character_portraits", True)),
         "show_character_badges": bool(base.get("show_character_badges", True)),
     }
+
+
+def normalize_profile_overlays(value: object) -> dict[str, dict[str, object]]:
+    """Keep only overlay preferences, separately for each supported game mode."""
+    if not isinstance(value, Mapping):
+        return {}
+    allowed = {
+        key for key in _default_display_preferences()
+        if key.startswith("rotation_overlay_") or key.startswith("show_overlay_")
+    }
+    result = {}
+    for mode in ("unity", "retro"):
+        raw = value.get(mode)
+        if not isinstance(raw, Mapping):
+            continue
+        filtered = {key: raw[key] for key in allowed if key in raw}
+        if filtered:
+            normalized = _normalized_display_preferences(filtered)
+            result[mode] = {key: normalized[key] for key in filtered}
+    return result
 
 
 @dataclass
@@ -161,6 +186,8 @@ class Settings:
     rotation_overlay_width: int = 300
     rotation_overlay_auto_width: bool = True
     rotation_overlay_height: int = 0
+    rotation_overlay_monitor: str = ""
+    rotation_overlay_anchor: str = "free"
     rotation_overlay_orientation: str = "vertical"
     rotation_overlay_show_title: bool = True
     rotation_overlay_show_reorder_buttons: bool = True
@@ -190,6 +217,8 @@ class Settings:
 
     # Hotkeys
     hotkeys: Dict[str, str] | None = None
+    hotkey_scope: str = "global"
+    fixed_character_slots: bool = False
 
     # Profiles
     last_profile: str = ""
@@ -238,6 +267,8 @@ class Settings:
                 "rotation_overlay_auto_width": self.rotation_overlay_auto_width,
                 "rotation_overlay_height": self.rotation_overlay_height,
                 "rotation_overlay_orientation": self.rotation_overlay_orientation,
+                "rotation_overlay_monitor": self.rotation_overlay_monitor,
+                "rotation_overlay_anchor": self.rotation_overlay_anchor,
                 "rotation_overlay_show_title": self.rotation_overlay_show_title,
                 "rotation_overlay_show_reorder_buttons": self.rotation_overlay_show_reorder_buttons,
                 "attention_blink_enabled": self.attention_blink_enabled,
@@ -258,6 +289,18 @@ class Settings:
         remembered[mode] = self._display_preferences_snapshot()
         self.display_by_game_mode = remembered
 
+    def overlay_preferences_snapshot(self) -> dict[str, object]:
+        return normalize_profile_overlays({"unity": self._display_preferences_snapshot()})["unity"]
+
+    def apply_profile_overlay(self, preferences: object, game_mode: str) -> bool:
+        overlay = normalize_profile_overlays(preferences).get(game_mode)
+        if not overlay:
+            return False
+        for key, value in overlay.items():
+            setattr(self, key, value)
+        self.remember_display_preferences(game_mode)
+        return True
+
     def activate_display_preferences(self, game_mode: str | None = None) -> None:
         mode = (game_mode or self.game_mode or "unity").strip().lower()
         if mode not in {"unity", "retro"}:
@@ -272,6 +315,7 @@ class Settings:
         self.display_by_game_mode = remembered
 
     def __post_init__(self):
+        self.hotkey_scope = "game" if self.hotkey_scope == "game" else "global"
         requested_columns = self.window_column_order or []
         normalized_columns: list[str] = []
         for column in (*requested_columns, *DEFAULT_WINDOW_COLUMN_ORDER):
@@ -329,6 +373,8 @@ class Settings:
         self.rotation_overlay_orientation = normalize_overlay_orientation(
             self.rotation_overlay_orientation
         )
+        self.rotation_overlay_monitor = str(self.rotation_overlay_monitor or "")[:128]
+        self.rotation_overlay_anchor = normalize_monitor_anchor(self.rotation_overlay_anchor)
         try:
             self.rotation_overlay_width = max(80, min(1800, int(self.rotation_overlay_width)))
             requested_height = int(self.rotation_overlay_height)
@@ -404,6 +450,8 @@ class Settings:
             "rotation_overlay_auto_width": bool(self.rotation_overlay_auto_width),
             "rotation_overlay_height": int(self.rotation_overlay_height),
             "rotation_overlay_orientation": self.rotation_overlay_orientation,
+            "rotation_overlay_monitor": self.rotation_overlay_monitor,
+            "rotation_overlay_anchor": self.rotation_overlay_anchor,
             "rotation_overlay_show_title": bool(self.rotation_overlay_show_title),
             "rotation_overlay_show_reorder_buttons": bool(
                 self.rotation_overlay_show_reorder_buttons
@@ -425,6 +473,8 @@ class Settings:
             "event_hook_enabled": bool(self.event_hook_enabled),
             "popup_watch_enabled": bool(getattr(self, "popup_watch_enabled", False)),
             "hotkeys": dict(self.hotkeys or {}),
+            "hotkey_scope": self.hotkey_scope,
+            "fixed_character_slots": bool(self.fixed_character_slots),
             "last_profile": self.last_profile,
             "smart_profile_loading_enabled": bool(self.smart_profile_loading_enabled),
             "game_mode": self.game_mode,
@@ -496,6 +546,8 @@ class Settings:
                 d.get("rotation_overlay_auto_width", auto_width_default)
             ),
             rotation_overlay_height=int(d.get("rotation_overlay_height", 0)),
+            rotation_overlay_monitor=str(d.get("rotation_overlay_monitor") or "")[:128],
+            rotation_overlay_anchor=normalize_monitor_anchor(d.get("rotation_overlay_anchor")),
             rotation_overlay_orientation=str(
                 d.get("rotation_overlay_orientation") or "vertical"
             ),
@@ -530,6 +582,8 @@ class Settings:
             event_hook_enabled=bool(d.get("event_hook_enabled", True)),
             popup_watch_enabled=bool(d.get("popup_watch_enabled", False)),
             hotkeys=d.get("hotkeys") or None,
+            hotkey_scope=d.get("hotkey_scope", "global"),
+            fixed_character_slots=bool(d.get("fixed_character_slots", False)),
             last_profile=d.get("last_profile", ""),
             smart_profile_loading_enabled=bool(
                 d.get("smart_profile_loading_enabled", True)

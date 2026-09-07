@@ -36,9 +36,22 @@ Le mode Unity cible les fenêtres Unity. Le mode Retro combine la classe de fen�
 
 La ligne active est mise en évidence dans l’application. Le bouton Stream Deck actif utilise un état vert.
 
-Ces raccourcis sont globaux tant que le gestionnaire fonctionne. Une touche seule comme `1` est donc réservée par le gestionnaire ; laissez l’accès direct vide ou utilisez une combinaison telle que `Ctrl+Alt+1` si la touche doit rester disponible dans le jeu ou dans les autres applications.
+Par défaut, ces raccourcis sont globaux tant que le gestionnaire fonctionne. Une touche seule comme `1` est donc réservée par le gestionnaire ; laissez l’accès direct vide ou utilisez une combinaison telle que `Ctrl+Alt+1` si la touche doit rester disponible dans le jeu ou dans les autres applications.
 
 Lorsqu’une fenêtre Dofus fait clignoter son bouton dans la barre des tâches Windows, elle passe en orange avec un repère `!` dans l’application, le mode compact, l’overlay et le Stream Deck. Plusieurs demandes forment une file chronologique : `!1` est la prochaine, puis `!2`, etc. Un signal répété pour la même fenêtre ne change pas sa place. Le bouton **Prochaine alerte** indique le nombre restant ; il est également disponible dans le mode compact, l’en-tête de l’overlay déverrouillé et parmi les actions Stream Deck. Un léger clignotement rend l’alerte plus visible ; il peut être désactivé dans **Paramètres → Demandes d’attention** sans retirer la couleur orange ni le repère. L’alerte n’est retirée qu’après un focus réussi. La détection est volontairement limitée aux demandes d’attention Windows : un événement affiché uniquement à l’intérieur du jeu, sans clignotement ni événement d’accessibilité, peut ne pas être détecté.
+
+## Raccourcis contextuels et emplacements fixes
+
+Dans **Paramètres → Raccourcis**, deux options indépendantes sont disponibles :
+
+- **Activer les raccourcis uniquement dans Dofus** : les enregistrements clavier sont retirés lorsque Dofus n’est plus au premier plan et rétablis au retour. Le mode global reste le réglage initial des anciennes installations.
+- **Lier les accès directs et le Stream Deck aux personnages** : les cases suivent l’équipe du profil. La fermeture du personnage 2 laisse sa case indisponible ; les suivants gardent leur numéro. Après reconnexion, la même case cible sa nouvelle fenêtre. Une correspondance ambiguë reste indisponible.
+
+Le bouton **Suspendre les raccourcis** et le menu de la zone de notification permettent une pause manuelle. Les paramètres suspendent temporairement les raccourcis pendant leur édition. Le mode contextuel ne reconnaît pas le champ de chat à l’intérieur de Dofus : utilisez la pause ou une combinaison avec Ctrl/Alt pour écrire. La transition de contexte utilise une vérification native toutes les 50 ms ; le mode global n’ajoute pas de scrutation périodique.
+
+**Navigation → Équipe et emplacements…** permet d’inspecter les cases et les personnages absents, puis de réattribuer explicitement les emplacements selon l’ordre courant. Enregistrez un profil pour conserver l’équipe. Un nom absent reste mémorisé jusqu’à son retrait explicite ; retirer les absents renumérote les cases suivantes et doit être suivi d’un enregistrement du profil.
+
+L’overlay conserve l’ordre de rotation ; les emplacements fixes concernent les raccourcis directs et les touches Stream Deck. Un personnage ignoré reste accessible directement en mode fixe. Les raccourcis clavier directs restent limités aux huit premiers emplacements.
 
 ## Modifier l’ordre
 
@@ -49,7 +62,9 @@ Quatre méthodes sont disponibles :
 - utiliser les touches Monter/Descendre du Stream Deck.
 - utiliser les flèches ou glisser une ligne dans l’overlay déverrouillé.
 
-Pendant un glisser-déposer, la destination est surlignée et la barre d’état précise si le dépôt se fera avant ou après. L’ordre est immédiatement transmis au Stream Deck : les personnages changent donc de touche pour rester cohérents avec la liste.
+Pendant un glisser-déposer, la destination est surlignée et la barre d’état précise si le dépôt se fera avant ou après. L’ordre est immédiatement transmis à l’overlay et au Stream Deck. En mode fixe, les cases Stream Deck restent associées aux personnages et leur numéro de rotation est actualisé ; sinon les personnages changent de touche pour suivre la liste.
+
+**Annuler le déplacement** restaure les changements d’ordre précédents (jusqu’à vingt opérations pendant la session), y compris après une reconnexion. **Rétablir l’ordre du profil** revient à l’ordre enregistré. L’indicateur « Ordre modifié — non enregistré » rappelle de sauvegarder le profil. Un scan n’efface plus une réorganisation en cours ; charger un autre profil réinitialise l’historique.
 
 ## Alias, portrait et icône
 
@@ -80,7 +95,7 @@ Une fenêtre ignorée peut toujours être activée directement. Elle conserve sa
 
 ## Profils
 
-Un profil enregistre l’ordre des personnages, leurs alias, leurs portraits et leurs icônes en les associant à leur pseudo plutôt qu’à un identifiant de fenêtre temporaire. Créez un profil par serveur : deux personnages portant le même nom sur des serveurs différents peuvent ainsi avoir une classe, un alias et une apparence distincts.
+Un profil enregistre l’ordre des personnages, leurs emplacements fixes, leur état ignoré, leurs alias, leurs portraits et leurs icônes en les associant à leur pseudo plutôt qu’à un identifiant de fenêtre temporaire. Créez un profil par serveur : deux personnages portant le même nom sur des serveurs différents peuvent ainsi avoir une classe, un alias et une apparence distincts.
 
 Au premier scan, la reconnaissance intelligente peut charger automatiquement un profil uniquement si son mode Unity/Retro et l’ensemble complet de ses personnages correspondent exactement aux fenêtres détectées. Si deux profils contiennent les mêmes personnages, aucun n’est choisi : sélectionnez alors le serveur manuellement. Les correspondances partielles et les anciens profils qui n’ont pas encore de mode enregistré ne sont jamais chargés automatiquement. Cette fonction peut être désactivée dans **Paramètres → Général → Profils**.
 
@@ -211,3 +226,74 @@ Le mode performance adaptatif est actif par défaut. Lorsque la synchronisation 
 **Créer un paquet de support…** enregistre, à l’emplacement choisi, une archive ZIP contenant le diagnostic, une vue non restaurable des réglages et les 256 Ko les plus récents de chaque journal. Les portraits ne sont jamais inclus ; les pseudos, alias, noms de profils, identifiants de fenêtres, chemins utilisateurs connus et adresses e-mail sont remplacés. Relisez tout de même le contenu avant de le joindre à une Issue : un texte libre écrit dans un journal peut échapper à une anonymisation automatique.
 
 Le journal principal est masqué par défaut. Activez **Afficher le journal** pour suivre les scans, changements de focus et erreurs. Avant de publier un rapport, retirez les noms ou chemins personnels si nécessaire et ne publiez jamais de donnée de connexion.
+
+### Disposition d’overlay par profil
+
+Dans **Profils**, cochez **Mémoriser l’overlay dans le profil**, puis utilisez **Enregistrer…**. Le profil conserve la position, la taille, l’orientation, l’opacité, le verrouillage, l’activation, le contenu des lignes, les portraits, les icônes, le titre et les flèches. Au chargement manuel ou automatique, cette disposition remplace les réglages courants de l’overlay pour le mode actif. Le thème, la popup et les raccourcis restent indépendants.
+
+Les dispositions Unity et Retro sont stockées séparément. Un profil ancien ou sans disposition pour le mode courant laisse l’affichage courant intact. Pour retirer une disposition, décochez l’option et enregistrez le profil. Pour actualiser la disposition après un déplacement ou une modification des paramètres, enregistrez à nouveau le profil. Modifier seulement un alias ou un portrait ne remplace pas la disposition sauvegardée.
+
+### Menu rapide près de l’horloge
+
+Faites un clic droit sur l’icône Dofus Window Manager dans la zone de notification Windows. Le sous-menu **Profils** indique le profil réellement chargé et permet d’en charger un autre. Si le profil appartient à Unity ou Retro, l’application bascule vers ce mode avant de le charger ; un ancien profil sans mode utilise le mode courant. Sa disposition d’overlay est appliquée si elle est enregistrée.
+
+Le sous-menu **Version de Dofus** indique le mode actif. **Afficher l’overlay** est coché quand l’overlay est activé et permet de le masquer ou de le réafficher. Le libellé de pause des raccourcis suit leur état réel. Les commandes de modification sont désactivées tant qu’une boîte de dialogue est ouverte. **Actualiser les fenêtres** relit aussi la liste des profils, notamment après une modification de fichiers externe. Ces commandes fonctionnent lorsque la fenêtre principale est réduite.
+
+### Vérifier les changements avant importation ou restauration
+
+Un aperçu est affiché avant l’importation d’un profil JSON, d’une sauvegarde complète ou la restauration d’un point local. Le tableau compare les paramètres, les profils et, pour une sauvegarde complète, la session actuelle. Les dates internes des profils ne sont pas considérées comme des modifications. Les profils locaux absents du fichier importé sont conservés.
+
+Sélectionnez une ligne pour lire les valeurs complètes dans la zone inférieure, qui dispose de son propre défilement. Les images incorporées sont signalées comme images personnalisées ; leur contenu encodé n’est pas affiché. **Annuler**, la fermeture de la fenêtre ou Échap abandonnent l’opération. **Appliquer les modifications** crée un point de restauration puis applique le contenu présenté. Si le point ne peut pas être créé, l’opération est interrompue. En l’absence de différences, le bouton Appliquer est désactivé.
+
+Une sauvegarde contenant plusieurs profils qui écraseraient le même fichier Windows est refusée, notamment lorsque leurs noms ne diffèrent que par la casse ou deviennent identiques après remplacement des caractères interdits.
+
+### Rechercher dans les paramètres
+
+Dans **Paramètres**, saisissez un ou plusieurs mots dans le champ de recherche, ou utilisez **Ctrl+F** pour y accéder. La recherche porte sur les libellés et le nom des sections des trois onglets. Elle ignore les accents et les majuscules : `opacite overlay` retrouve les réglages d’opacité de l’overlay. Tous les mots doivent correspondre au même résultat ; les correspondances directes dans le libellé sont présentées en premier.
+
+Cliquez sur un résultat pour ouvrir son onglet et faire défiler jusqu’au réglage. **Entrée** depuis le champ ouvre le premier résultat. **Échap** dans le champ ou **Effacer** retire la recherche. Les champs et leurs valeurs restent présents pendant la recherche ; seules les commandes habituelles Appliquer ou Annuler valident ou abandonnent vos modifications.
+
+### Écran et ancrage de l’overlay
+
+Dans **Paramètres → Apparence → Écran et ancrage de l’overlay**, choisissez un écran détecté ou **Automatique · position courante**. Les dimensions indiquées sont celles de la zone utilisable, hors barre des tâches. La liste est actualisée à chaque ouverture des paramètres. Choisissez ensuite une position en haut ou en bas, à gauche, au centre ou à droite. L’ancrage conserve une marge de 16 pixels et suit les changements de taille de l’overlay.
+
+**Position libre** conserve le déplacement à la souris. Avec un ancrage, le déplacement de l’ensemble est désactivé ; le glisser-déposer des personnages reste disponible. L’overlay est limité aux dimensions utilisables de l’écran, sans écraser ses dimensions préférées enregistrées.
+
+Tant que l’overlay est activé, un contrôle des écrans toutes les deux secondes détecte les changements de configuration. L’overlay n’est reconstruit que si la disposition des écrans change. Si l’écran choisi manque, l’écran principal le remplace ; le choix reste mémorisé, et l’ancrage est réappliqué sur l’écran choisi lorsqu’il revient. Les coordonnées négatives des écrans à gauche ou au-dessus sont prises en charge. Ces réglages sont indépendants entre Unity et Retro et inclus lorsque vous enregistrez la disposition d’un profil.
+
+### Téléchargement guidé des mises à jour (bêta 5)
+
+Après une recherche manuelle, choisissez l’installateur ou l’EXE portable puis le dossier
+de téléchargement. Chaque téléchargement utilise un sous-dossier unique pour préserver
+les fichiers existants. La progression est affichée ; l’annulation peut attendre la fin
+de la lecture réseau en cours (délai réseau de 15 secondes).
+
+La taille et le SHA-256 sont comparés aux métadonnées de la release officielle GitHub.
+Les fichiers partiels sont supprimés après une erreur ou une annulation. Sans empreinte
+SHA-256 exploitable, utilisez le lien vers la release officielle dans le navigateur.
+Cette vérification d’intégrité ne remplace pas une signature Authenticode.
+
+L’installateur ne se lance qu’après votre confirmation. Pour la version portable,
+fermez l’application avant de remplacer votre ancien EXE. Aucun fichier téléchargé
+n’est installé silencieusement.
+
+Source du format des métadonnées : [API GitHub des fichiers de release](https://docs.github.com/en/rest/releases/assets).
+
+### Après une fermeture anormale (bêta 5)
+
+Si la session précédente ne s’est pas terminée normalement, le lancement suivant
+propose d’enregistrer un paquet de support anonymisé. Vous pouvez refuser, ou choisir
+un emplacement local pour le ZIP. Aucun rapport n’est transmis automatiquement.
+Le paquet utilise les journaux existants et le diagnostic actuel ; il ne contient
+pas de capture de la mémoire du processus planté.
+
+Ce signal peut aussi provenir d’une coupure de courant ou d’un arrêt forcé.
+Une fermeture normale retire le marqueur ; réduire dans la zone de notification
+laisse la session active. Le marqueur ne contient ni pseudo ni chemin personnel.
+La première instance détient le verrou : une instance supplémentaire ne modifie pas
+son suivi et ne bénéficie pas d’un suivi distinct. Si le dossier est inaccessible,
+l’application continue sans ce suivi. Les erreurs récupérées sans arrêt de l’application
+ne sont pas considérées comme une fermeture anormale.
+
+L’export reste accessible à tout moment depuis Diagnostic. Relisez le ZIP avant
+tout partage, notamment les textes libres des journaux.

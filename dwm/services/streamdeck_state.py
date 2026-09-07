@@ -22,6 +22,33 @@ def reconcile_streamdeck_order(
     return result
 
 
+def retain_character_slots(
+    entries: list[dict[str, object]],
+    names: list[str],
+    bindings: list[int],
+    aliases: Mapping[str, str],
+    visuals: Mapping[str, Mapping[str, str]],
+) -> list[dict[str, object]]:
+    """Keep offline slots visible; their negative handles cannot activate a window."""
+    by_hwnd = {entry["hwnd"]: entry for entry in entries}
+    result: list[dict[str, object]] = []
+    for slot, (name, hwnd) in enumerate(zip(names, bindings, strict=True), 1):
+        if hwnd in by_hwnd:
+            result.append({**by_hwnd[hwnd], "slot": slot, "available": True})
+        else:
+            appearance = visuals.get(name, {})
+            badge = str(appearance.get("badge") or "none")
+            result.append({
+                "slot": slot, "hwnd": -slot, "position": None,
+                "pseudo": name, "name": name, "alias": aliases.get(name, ""),
+                "title": "", "character_class": "", "available": False,
+                "active": False, "ignored": False, "attention": False,
+                "portrait": str(appearance.get("portrait") or ""),
+                "badge": badge, "badge_image": bundled_icon_data_uri(badge),
+            })
+    return result
+
+
 def build_streamdeck_windows(
     windows: Mapping[int, GameWindow],
     streamdeck_order: Iterable[int],

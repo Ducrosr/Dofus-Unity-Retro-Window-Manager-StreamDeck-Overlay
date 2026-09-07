@@ -9,9 +9,11 @@ from pathlib import Path
 from typing import Dict, List
 
 from ..services.character_visuals import sanitize_character_visuals
+from ..services.character_roster import character_names
 from .atomic import atomic_write_text
+from .settings import normalize_profile_overlays
 
-PROFILE_SCHEMA_VERSION = 2
+PROFILE_SCHEMA_VERSION = 4
 
 
 class _LegacyProfileUnpickler(pickle.Unpickler):
@@ -37,12 +39,18 @@ class Profile:
     updated_at: str
     visuals: dict[str, dict[str, str]] | None = None
     game_mode: str = ""
+    character_slots: list[str] | None = None
+    ignored_characters: list[str] | None = None
+    overlay_by_game_mode: dict[str, dict[str, object]] | None = None
 
     def to_dict(self) -> dict:
         return {
             "schema_version": PROFILE_SCHEMA_VERSION,
             "name": self.name,
             "order": list(self.order),
+            "character_slots": character_names(self.character_slots if self.character_slots is not None else self.order),
+            "ignored_characters": character_names(self.ignored_characters),
+            "overlay_by_game_mode": normalize_profile_overlays(self.overlay_by_game_mode),
             "aliases": dict(self.aliases),
             "visuals": (
                 sanitize_character_visuals(self.visuals)
@@ -59,10 +67,13 @@ class Profile:
         now = datetime.now().isoformat(timespec="seconds")
         return Profile(
             name=d.get("name", ""),
-            order=list(d.get("order", []) or []),
+            order=character_names(d.get("order")),
             aliases=dict(d.get("aliases", {}) or {}),
             created_at=d.get("created_at", now),
             updated_at=d.get("updated_at", now),
+            character_slots=character_names(d.get("character_slots", d.get("order", []))),
+            ignored_characters=character_names(d.get("ignored_characters")),
+            overlay_by_game_mode=normalize_profile_overlays(d.get("overlay_by_game_mode")),
             visuals=(
                 sanitize_character_visuals(d.get("visuals"))
                 if "visuals" in d
