@@ -27,6 +27,9 @@ def get_language() -> str:
 
 
 _EN: dict[str, str] = {
+    'Simuler le préréglage sélectionné…': 'Preview selected preset…',
+    'Cet aperçu ne modifie pas les réglages enregistrés et n’active aucune fenêtre Dofus.': 'This preview does not change saved settings or activate any Dofus window.',
+    'La recherche a dépassé le délai prévu. Réessayez.': 'The update check timed out. Please try again.',
     'Fermeture anormale détectée': 'Abnormal shutdown detected',
     'La session précédente s’est terminée anormalement.': 'The previous session ended abnormally.',
     'La session précédente ne s’est pas fermée normalement. Cela peut provenir d’un plantage ou d’un arrêt forcé. Voulez-vous enregistrer un paquet de support anonymisé ? Aucun rapport ne sera envoyé automatiquement.': 'The previous session did not close normally. This may result from a crash or forced shutdown. Would you like to save an anonymized support bundle? No report will be sent automatically.',
@@ -446,6 +449,9 @@ _EN: dict[str, str] = {
 }
 
 _ES: dict[str, str] = {
+    'Simuler le préréglage sélectionné…': 'Simular el ajuste seleccionado…',
+    'Cet aperçu ne modifie pas les réglages enregistrés et n’active aucune fenêtre Dofus.': 'Esta vista previa no modifica los ajustes guardados ni activa ventanas de Dofus.',
+    'La recherche a dépassé le délai prévu. Réessayez.': 'La búsqueda ha superado el tiempo límite. Inténtelo de nuevo.',
     'Fermeture anormale détectée': 'Cierre anormal detectado',
     'La session précédente s’est terminée anormalement.': 'La sesión anterior terminó de forma anormal.',
     'La session précédente ne s’est pas fermée normalement. Cela peut provenir d’un plantage ou d’un arrêt forcé. Voulez-vous enregistrer un paquet de support anonymisé ? Aucun rapport ne sera envoyé automatiquement.': 'La sesión anterior no se cerró correctamente. Puede deberse a un fallo o un cierre forzado. ¿Desea guardar un paquete de soporte anonimizado? No se enviará ningún informe automáticamente.',

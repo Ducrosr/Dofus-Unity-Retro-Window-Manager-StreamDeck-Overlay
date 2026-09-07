@@ -12,6 +12,15 @@ que l’application installée ; sauvegardez votre configuration avant l’essai
 3. Décompressez le paquet et commencez par DofusWindowManager.exe.
 4. Notez le commit, Windows, le nombre de fenêtres, les écrans/échelles et le modèle Stream Deck éventuel.
 
+## Vérification des deux corrections signalées
+
+- Cliquer sur Rechercher une mise à jour : obtenir un résultat ou une erreur explicite
+  sous environ 20 secondes, même si le suivi des fenêtres rencontre un problème.
+- Choisir successivement Minimal, Équilibré et Complet dans Apparence, puis simuler :
+  Minimal masque portraits/titre/flèches ; Équilibré montre les portraits et le titre ;
+  Complet ajoute les icônes et flèches. Un aperçu déjà ouvert doit changer.
+- Appliquer reste nécessaire pour enregistrer le formulaire. Simuler ne sauvegarde rien.
+
 ## Parcours prioritaire — environ 20 minutes
 
 | Essai | Résultat attendu | Résultat observé |

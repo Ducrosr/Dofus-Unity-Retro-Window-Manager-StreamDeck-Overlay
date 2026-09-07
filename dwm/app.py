@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 import os
 import queue
 import threading
@@ -2109,11 +2110,18 @@ class WindowManagerApp:
         state = "affiché" if self.settings.rotation_overlay_enabled else "masqué"
         self._log(f"Overlay de rotation {state}")
 
-    def open_display_simulation(self) -> None:
+    def open_display_simulation(self, *, preset_id: str | None = None) -> None:
+        preview_settings = deepcopy(self.settings)
+        if preset_id is not None:
+            for key, value in display_preset_values(preset_id).items():
+                setattr(preview_settings, key, value)
         current = self.display_simulation_window
         if current is not None:
             try:
-                if current.winfo_exists():
+                if current.winfo_exists() and preset_id is not None:
+                    self._display_simulation_ui.close_all()
+                    current.destroy()
+                elif current.winfo_exists():
                     current.lift()
                     current.focus_force()
                     return
@@ -2133,7 +2141,7 @@ class WindowManagerApp:
         TtkLabel(
             content,
             text=tr(
-                "Cet aperçu utilise les réglages enregistrés. Les clics et déplacements simulés n’activent aucune fenêtre et ne modifient pas l’ordre réel."
+                "Cet aperçu ne modifie pas les réglages enregistrés et n’active aucune fenêtre Dofus."
             ),
             style="Muted.TLabel",
             wraplength=470,
@@ -2148,7 +2156,7 @@ class WindowManagerApp:
             save_overlay_size=lambda _width, _height, **_kwargs: None,
             reorder_character=lambda _hwnd, _destination: None,
             focus_next_attention=lambda: False,
-            palette=resolved_theme_palette(self.root, self.settings.theme),
+            palette=resolved_theme_palette(self.root, preview_settings.theme),
         )
         self._display_simulation_ui = simulation_ui
         active_index = 0
@@ -2189,19 +2197,19 @@ class WindowManagerApp:
             )
             simulation_ui.configure_persistent(
                 enabled=True,
-                x=self.settings.rotation_overlay_x + 36,
-                y=self.settings.rotation_overlay_y + 36,
-                opacity=self.settings.rotation_overlay_opacity,
+                x=preview_settings.rotation_overlay_x + 36,
+                y=preview_settings.rotation_overlay_y + 36,
+                opacity=preview_settings.rotation_overlay_opacity,
                 locked=False,
-                layout=self.settings.rotation_overlay_layout,
-                orientation=self.settings.rotation_overlay_orientation,
-                width=self.settings.rotation_overlay_width,
-                auto_width=self.settings.rotation_overlay_auto_width,
-                height=self.settings.rotation_overlay_height,
-                show_title=self.settings.rotation_overlay_show_title,
-                show_reorder_buttons=self.settings.rotation_overlay_show_reorder_buttons,
-                show_portrait=self.settings.show_overlay_portraits,
-                show_badge=self.settings.show_overlay_badges,
+                layout=preview_settings.rotation_overlay_layout,
+                orientation=preview_settings.rotation_overlay_orientation,
+                width=preview_settings.rotation_overlay_width,
+                auto_width=preview_settings.rotation_overlay_auto_width,
+                height=preview_settings.rotation_overlay_height,
+                show_title=preview_settings.rotation_overlay_show_title,
+                show_reorder_buttons=preview_settings.rotation_overlay_show_reorder_buttons,
+                show_portrait=preview_settings.show_overlay_portraits,
+                show_badge=preview_settings.show_overlay_badges,
             )
 
         def next_character() -> None:
@@ -2218,12 +2226,12 @@ class WindowManagerApp:
             entry = entries()[active_index]
             simulation_ui.show_swap_notification(
                 entry,
-                anchor=self.settings.swap_notification_anchor,
-                duration_ms=self.settings.swap_notification_duration_ms,
-                opacity=self.settings.swap_notification_opacity,
-                layout=self.settings.swap_notification_layout,
-                show_portrait=self.settings.show_popup_portraits,
-                show_badge=self.settings.show_popup_badges,
+                anchor=preview_settings.swap_notification_anchor,
+                duration_ms=preview_settings.swap_notification_duration_ms,
+                opacity=preview_settings.swap_notification_opacity,
+                layout=preview_settings.swap_notification_layout,
+                show_portrait=preview_settings.show_popup_portraits,
+                show_badge=preview_settings.show_popup_badges,
             )
 
         def close_simulation() -> None:
@@ -2479,6 +2487,9 @@ class WindowManagerApp:
 
         include_prereleases = bool(self.settings.include_prereleases)
 
+        results = queue.Queue()
+        deadline = time.monotonic() + 20.0
+
         def worker() -> None:
             checked_at = utc_now_iso()
             try:
@@ -2486,14 +2497,12 @@ class WindowManagerApp:
                     __release_tag__,
                     include_prereleases=include_prereleases,
                 )
-                self._queue.put(("update_check", manual, result, "", checked_at))
+                results.put((result, "", checked_at))
             except UpdateCheckError as exc:
-                self._queue.put(("update_check", manual, None, str(exc), checked_at))
+                results.put((None, str(exc), checked_at))
             except Exception:
-                self._queue.put(
+                results.put(
                     (
-                        "update_check",
-                        manual,
                         None,
                         "La recherche de mise à jour a échoué de manière inattendue.",
                         checked_at,
@@ -2501,6 +2510,20 @@ class WindowManagerApp:
                 )
 
         threading.Thread(target=worker, name="DWMUpdateCheck", daemon=True).start()
+
+        def poll_result() -> None:
+            if self._stop_event.is_set():
+                return
+            try:
+                result, error, checked_at = results.get_nowait()
+            except queue.Empty:
+                if time.monotonic() < deadline:
+                    self.root.after(100, poll_result)
+                    return
+                result, error, checked_at = None, tr("La recherche a dépassé le délai prévu. Réessayez."), utc_now_iso()
+            self._finish_update_check(manual=manual, result=result, error=error, checked_at=checked_at)
+
+        self.root.after(100, poll_result)
 
     def _finish_update_check(
         self,
@@ -5610,15 +5633,7 @@ class WindowManagerApp:
         TtkLabel(scale_row, text=" %", style="Muted.TLabel").pack(side="left")
 
         def load_display_preset_into_form() -> None:
-            selected_label = display_preset_var.get().strip()
-            preset_id = next(
-                (
-                    candidate
-                    for candidate, label in localized_preset_labels.items()
-                    if label == selected_label
-                ),
-                "balanced",
-            )
+            preset_id = DISPLAY_PRESET_IDS[preset_combo.current()]
             values = display_preset_values(preset_id)
             overlay_auto_width.set(bool(values["rotation_overlay_auto_width"]))
             overlay_show_title.set(bool(values["rotation_overlay_show_title"]))
@@ -5659,13 +5674,15 @@ class WindowManagerApp:
         presets_section.pack(fill="x", pady=(0, 8))
         presets_row = TtkFrame(presets_section)
         presets_row.pack(fill="x")
-        Combobox(
+        preset_combo = Combobox(
             presets_row,
             values=tuple(localized_preset_labels.values()),
             state="readonly",
             textvariable=display_preset_var,
             width=18,
-        ).pack(side="left")
+        )
+        preset_combo.pack(side="left")
+        preset_combo.bind("<<ComboboxSelected>>", lambda _event: load_display_preset_into_form())
         TtkButton(
             presets_row,
             text=tr("Charger dans le formulaire"),
@@ -5673,8 +5690,8 @@ class WindowManagerApp:
         ).pack(side="left", padx=(6, 0))
         TtkButton(
             presets_row,
-            text=tr("Simuler les réglages enregistrés…"),
-            command=self.open_display_simulation,
+            text=tr("Simuler le préréglage sélectionné…"),
+            command=lambda: self.open_display_simulation(preset_id=DISPLAY_PRESET_IDS[preset_combo.current()]),
         ).pack(side="right")
         TtkLabel(
             presets_section,
