@@ -1,7 +1,7 @@
 # Validation du lot PR #5
 
 Ce paquet est une compilation de test des changements de la PR #5, pas une release.
-Les libellés de version restent ceux de la bêta 4 : identifiez le paquet par le commit
+Les premiers paquets portaient le libellé bêta 4 ; les suivants portent bêta 5. Identifiez le paquet par le commit
 dans BUILD_INFO.txt et par SHA256SUMS.txt. L’EXE portable utilise les mêmes réglages
 que l’application installée ; sauvegardez votre configuration avant l’essai.
 
@@ -72,3 +72,16 @@ de focus doit être corrigée avant publication. Les autres parcours non testés
 - Répéter avec le plugin Stream Deck connecté, puis avec Retro et la surveillance des invitations.
 - Relancer : aucun avertissement de fermeture anormale après ces sorties.
 - La croix conserve son comportement de réduction si cette option est activée.
+
+## Bilan des retours avant bêta 5
+
+L’utilisateur a indiqué que le reste du lot semblait fonctionner après avoir signalé
+l’absence de retour de mise à jour et les aperçus identiques. Ces deux parcours ont
+été corrigés et couverts par des tests. Le gel lors de Quitter depuis la zone de
+notification a ensuite été corrigé ; le dernier paquet a été confirmé fonctionnel.
+
+Validation automatique : 269 tests Python, 37 tests Stream Deck, Ruff, compilation
+Windows de l’EXE et de l’installateur. La configuration matérielle détaillée et chaque
+ligne du tableau n’ont pas fait l’objet d’un retour individuel : ne pas les considérer
+comme validées séparément. Le téléchargement d’une prochaine release plus récente
+reste à vérifier de bout en bout après publication.

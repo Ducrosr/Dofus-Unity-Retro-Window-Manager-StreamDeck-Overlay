@@ -1,14 +1,14 @@
 <h1 align="center">Dofus Window Manager</h1>
 
-**Displays and anchoring (in development).** In Settings → Appearance, select the overlay display and an edge position. Anchoring accounts for overlay size and the taskbar. A disconnected display temporarily falls back to the primary display. Free position allows mouse dragging. These preferences are stored per game mode and in profile layouts.
+**Displays and anchoring (beta 5).** In Settings → Appearance, select the overlay display and an edge position. Anchoring accounts for overlay size and the taskbar. A disconnected display temporarily falls back to the primary display. Free position allows mouse dragging. These preferences are stored per game mode and in profile layouts.
 
-**Settings search (in development).** Use the field at the top of Settings or **Ctrl+F**. Search covers labels and sections across all three tabs, ignoring case and accents. Click a result or press Enter to reach the first match. Clearing the search keeps your pending edits.
+**Settings search (beta 5).** Use the field at the top of Settings or **Ctrl+F**. Search covers labels and sections across all three tabs, ignoring case and accents. Click a result or press Enter to reach the first match. Clearing the search keeps your pending edits.
 
-**Import preview (in development).** Profile imports, backup imports and local restores show before/after differences. Select a row to read the complete values. Cancel leaves everything unchanged; Apply creates a restore point first. Local profiles that are not replaced are kept.
+**Import preview (beta 5).** Profile imports, backup imports and local restores show before/after differences. Select a row to read the complete values. Cancel leaves everything unchanged; Apply creates a restore point first. Local profiles that are not replaced are kept.
 
-**Quick tray menu (in development).** Right-click the icon near the clock to load a profile, choose Unity/Retro, toggle the overlay or pause shortcuts. Checkmarks identify the active profile and mode. Loading a profile switches to its saved game mode when needed. Changes are disabled while a dialog is open.
+**Quick tray menu (beta 5).** Right-click the icon near the clock to load a profile, choose Unity/Retro, toggle the overlay or pause shortcuts. Checkmarks identify the active profile and mode. Loading a profile switches to its saved game mode when needed. Changes are disabled while a dialog is open.
 
-**Profile overlay layouts (in development).** In Profiles, enable **Save overlay layout in profile**, then save the profile. Loading it restores the layout for the current Unity/Retro mode. Uncheck and save to detach it; loading then keeps the current display. Save the profile again after changing its layout. Existing profiles remain unchanged.
+**Profile overlay layouts (beta 5).** In Profiles, enable **Save overlay layout in profile**, then save the profile. Loading it restores the layout for the current Unity/Retro mode. Uncheck and save to detach it; loading then keeps the current display. Save the profile again after changing its layout. Existing profiles remain unchanged.
 
 <p align="center"><strong>Dofus Unity &amp; Retro multi-account window manager — with or without Stream Deck</strong></p>
 
@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.4"><strong>⬇ Download for Windows</strong></a>
+  <a href="https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.5"><strong>⬇ Download for Windows</strong></a>
   ·
   <a href="docs/INSTALLATION.md">Installation guide</a>
   ·
@@ -43,11 +43,11 @@ A local Windows window manager for **Dofus Unity** and **Dofus Retro**, designed
 >
 > Also read Ankama’s official guidance: **[Recognizing and protecting yourself from phishing](https://support.ankama.com/hc/en-us/articles/201376953-Recognizing-and-Protecting-Yourself-from-Phishing)**.
 
-Version 2.20.0 is the current public beta. It brings together the multilingual interface, overlays, attention requests, portraits, official icons and Unity/Retro themes. The matching Windows executable is available from the [official v2.20.0-beta.4 Release](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.4).
+Version 2.20.0 is the current public beta. It brings together the multilingual interface, overlays, attention requests, portraits, official icons and Unity/Retro themes. The matching Windows executable is available from the [official v2.20.0-beta.5 Release](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.5).
 
-## In development — profiles and shortcuts
+## New in beta 5 — profiles and shortcuts
 
-The sources now apply recognized profiles immediately and offer game-only shortcuts, fixed character slots, reconnection with preserved ignored state, and undo for order changes. The bundled plugin is 0.8.1. These changes are not yet included in the beta 4 executable linked above.
+The sources now apply recognized profiles immediately and offer game-only shortcuts, fixed character slots, reconnection with preserved ignored state, and undo for order changes. The bundled plugin is 0.8.1. These changes are included in the beta 5 executable.
 
 Enable the new modes in **Settings → Shortcuts**. **Navigation → Team and slots…** shows offline characters and slot assignments. Existing settings retain global shortcuts and position-based direct access.
 
@@ -160,6 +160,6 @@ The PyInstaller output is `dist\DofusWindowManager.exe`; the repository also con
 
 Windows only. The project is community-made and is not affiliated with, endorsed by or sponsored by Ankama. Dofus, Dofus Retro, Ankama, and the bundled portraits and game icons under `assets/ankama` are the property of their respective owners. Those visual assets are not covered by the source code’s GPL-3.0 license; read the [asset notice](assets/ankama/NOTICE.md) before redistributing them.
 
-Guided updates (in development): installer/portable selection, cancellable download and SHA-256 verification before offering to launch.
+Guided updates (beta 5): installer/portable selection, cancellable download and SHA-256 verification before offering to launch.
 
-Abnormal shutdown diagnostics (in development): offers an anonymized support bundle on the next launch, saved only at your request.
+Abnormal shutdown diagnostics (beta 5): offers an anonymized support bundle on the next launch, saved only at your request.

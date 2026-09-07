@@ -1,12 +1,14 @@
 # Historique
 
-## En développement — mise à jour guidée
+## 2.20.0-beta.5 — 2026-09-07
+
+### Mise à jour guidée
 
 - Téléchargement explicite de l’installateur ou de l’EXE portable officiel avec progression et annulation.
 - Vérification de la taille et du SHA-256 fourni par l’API GitHub ; suppression du fichier partiel en cas d’erreur.
 - Confirmation avant de lancer l’installateur, aucune installation silencieuse. Les versions sans empreinte restent accessibles dans le navigateur.
 
-## À venir
+### Profils, interface et fiabilité
 
 - Fermeture depuis la zone de notification : arrêt des services en arrière-plan pour conserver la boucle Tk active pendant le nettoyage ; demandes de fermeture répétées ignorées.
 

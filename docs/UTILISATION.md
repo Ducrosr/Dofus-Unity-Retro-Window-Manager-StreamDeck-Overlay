@@ -261,7 +261,7 @@ Dans **Paramètres → Apparence → Écran et ancrage de l’overlay**, choisis
 
 Tant que l’overlay est activé, un contrôle des écrans toutes les deux secondes détecte les changements de configuration. L’overlay n’est reconstruit que si la disposition des écrans change. Si l’écran choisi manque, l’écran principal le remplace ; le choix reste mémorisé, et l’ancrage est réappliqué sur l’écran choisi lorsqu’il revient. Les coordonnées négatives des écrans à gauche ou au-dessus sont prises en charge. Ces réglages sont indépendants entre Unity et Retro et inclus lorsque vous enregistrez la disposition d’un profil.
 
-### Téléchargement guidé des mises à jour (en développement)
+### Téléchargement guidé des mises à jour (bêta 5)
 
 Après une recherche manuelle, choisissez l’installateur ou l’EXE portable puis le dossier
 de téléchargement. Chaque téléchargement utilise un sous-dossier unique pour préserver
@@ -279,7 +279,7 @@ n’est installé silencieusement.
 
 Source du format des métadonnées : [API GitHub des fichiers de release](https://docs.github.com/en/rest/releases/assets).
 
-### Après une fermeture anormale (en développement)
+### Après une fermeture anormale (bêta 5)
 
 Si la session précédente ne s’est pas terminée normalement, le lancement suivant
 propose d’enregistrer un paquet de support anonymisé. Vous pouvez refuser, ou choisir

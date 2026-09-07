@@ -1,14 +1,14 @@
 <h1 align="center">Dofus Window Manager</h1>
 
-**Pantallas y anclaje (en desarrollo).** En Ajustes → Apariencia, elige la pantalla del overlay y una posición de borde. El anclaje tiene en cuenta el tamaño del overlay y la barra de tareas. Una pantalla desconectada se sustituye temporalmente por la principal. Posición libre permite arrastrar con el ratón. Estos ajustes se guardan por modo y en las disposiciones de los perfiles.
+**Pantallas y anclaje (beta 5).** En Ajustes → Apariencia, elige la pantalla del overlay y una posición de borde. El anclaje tiene en cuenta el tamaño del overlay y la barra de tareas. Una pantalla desconectada se sustituye temporalmente por la principal. Posición libre permite arrastrar con el ratón. Estos ajustes se guardan por modo y en las disposiciones de los perfiles.
 
-**Búsqueda de ajustes (en desarrollo).** Usa el campo superior de Ajustes o **Ctrl+F**. La búsqueda incluye etiquetas y secciones de las tres pestañas e ignora mayúsculas y acentos. Haz clic en un resultado o pulsa Intro para ir al primero. Borrar la búsqueda conserva los cambios pendientes.
+**Búsqueda de ajustes (beta 5).** Usa el campo superior de Ajustes o **Ctrl+F**. La búsqueda incluye etiquetas y secciones de las tres pestañas e ignora mayúsculas y acentos. Haz clic en un resultado o pulsa Intro para ir al primero. Borrar la búsqueda conserva los cambios pendientes.
 
-**Vista previa de importación (en desarrollo).** La importación de perfiles y copias de seguridad y la restauración local muestran las diferencias antes/después. Selecciona una fila para leer los valores completos. Cancelar no modifica nada; Aplicar crea primero un punto de restauración. Los perfiles locales que no se reemplazan se conservan.
+**Vista previa de importación (beta 5).** La importación de perfiles y copias de seguridad y la restauración local muestran las diferencias antes/después. Selecciona una fila para leer los valores completos. Cancelar no modifica nada; Aplicar crea primero un punto de restauración. Los perfiles locales que no se reemplazan se conservan.
 
-**Menú rápido (en desarrollo).** Haz clic derecho en el icono junto al reloj para cargar un perfil, elegir Unity/Retro, mostrar u ocultar el overlay y pausar los atajos. Las marcas indican el perfil y el modo activos. Cargar un perfil cambia a su modo guardado si es necesario. Los cambios se desactivan mientras hay un diálogo abierto.
+**Menú rápido (beta 5).** Haz clic derecho en el icono junto al reloj para cargar un perfil, elegir Unity/Retro, mostrar u ocultar el overlay y pausar los atajos. Las marcas indican el perfil y el modo activos. Cargar un perfil cambia a su modo guardado si es necesario. Los cambios se desactivan mientras hay un diálogo abierto.
 
-**Disposiciones por perfil (en desarrollo).** En Perfiles, activa **Guardar la disposición del overlay en el perfil** y guarda el perfil. Al cargarlo se restaura la disposición del modo Unity/Retro actual. Desmarca y guarda para desvincularla; al cargar se mantendrá la visualización actual. Guarda de nuevo el perfil después de modificar la disposición. Los perfiles antiguos no cambian.
+**Disposiciones por perfil (beta 5).** En Perfiles, activa **Guardar la disposición del overlay en el perfil** y guarda el perfil. Al cargarlo se restaura la disposición del modo Unity/Retro actual. Desmarca y guarda para desvincularla; al cargar se mantendrá la visualización actual. Guarda de nuevo el perfil después de modificar la disposición. Los perfiles antiguos no cambian.
 
 <p align="center"><strong>Gestor multicuenta para Dofus Unity y Retro — con o sin Stream Deck</strong></p>
 
@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.4"><strong>⬇ Descargar para Windows</strong></a>
+  <a href="https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.5"><strong>⬇ Descargar para Windows</strong></a>
   ·
   <a href="docs/INSTALLATION.md">Guía de instalación</a>
   ·
@@ -43,11 +43,11 @@ Gestor local de ventanas para Windows compatible con **Dofus Unity** y **Dofus R
 >
 > Consulta también la guía oficial de Ankama: **[Reconocer el phishing y protegerse](https://support.ankama.com/hc/fr/articles/201376953-Reconna%C3%AEtre-le-phishing-et-s-en-prot%C3%A9ger)**.
 
-La versión 2.20.0 es la beta pública actual. Reúne la interfaz multilingüe, los overlays, las solicitudes de atención, los retratos, los iconos oficiales y los temas Unity/Retro. El ejecutable de Windows correspondiente está disponible en la [Release oficial v2.20.0-beta.4](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.4).
+La versión 2.20.0 es la beta pública actual. Reúne la interfaz multilingüe, los overlays, las solicitudes de atención, los retratos, los iconos oficiales y los temas Unity/Retro. El ejecutable de Windows correspondiente está disponible en la [Release oficial v2.20.0-beta.5](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.5).
 
-## En desarrollo — perfiles y atajos
+## Novedades de la beta 5 — perfiles y atajos
 
-El código fuente aplica inmediatamente los perfiles reconocidos y ofrece atajos limitados a Dofus, posiciones fijas por personaje, reconexión conservando el estado ignorado y la opción de deshacer cambios de orden. El plugin incluido pasa a 0.8.1. Estas novedades todavía no están en el ejecutable beta 4 enlazado arriba.
+El código fuente aplica inmediatamente los perfiles reconocidos y ofrece atajos limitados a Dofus, posiciones fijas por personaje, reconexión conservando el estado ignorado y la opción de deshacer cambios de orden. El plugin incluido pasa a 0.8.1. Estas novedades están incluidas en el ejecutable beta 5.
 
 Activa los nuevos modos en **Ajustes → Atajos**. **Navegación → Equipo y posiciones…** muestra los personajes ausentes y sus asociaciones. Las configuraciones existentes conservan los atajos globales y los accesos por posición.
 
@@ -160,6 +160,6 @@ PyInstaller crea `dist\DofusWindowManager.exe`; el repositorio también contiene
 
 Solo Windows. Este proyecto comunitario no está afiliado, aprobado ni patrocinado por Ankama. Dofus, Dofus Retro, Ankama, así como los retratos e iconos del juego incluidos en `assets/ankama`, pertenecen a sus respectivos propietarios. Esos recursos visuales no están cubiertos por la licencia GPL-3.0 del código; consulta el [aviso de recursos](assets/ankama/NOTICE.md) antes de redistribuirlos.
 
-Actualización guiada (en desarrollo): elección de instalador/portable, descarga cancelable y verificación SHA-256 antes de ofrecer la ejecución.
+Actualización guiada (beta 5): elección de instalador/portable, descarga cancelable y verificación SHA-256 antes de ofrecer la ejecución.
 
-Diagnóstico tras un cierre anormal (en desarrollo): propone un paquete de soporte anonimizado al iniciar de nuevo, guardado solo a petición del usuario.
+Diagnóstico tras un cierre anormal (beta 5): propone un paquete de soporte anonimizado al iniciar de nuevo, guardado solo a petición del usuario.
