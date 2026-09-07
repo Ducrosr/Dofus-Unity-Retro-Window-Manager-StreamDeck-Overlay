@@ -6618,11 +6618,14 @@ class WindowManagerApp:
 # ---------------------------- Lifecycle ----------------------------
 
     def on_close(self, *, force: bool = False):
+        if self._stop_event.is_set():
+            return
         if not force and self.settings.minimize_to_tray and self.tray.is_running:
             self._hide_main_window()
             return
 
         self._stop_event.set()
+        self.status_var.set(tr("Fermeture en cours…"))
         try:
             self.settings.auto_refresh = bool(self.auto_refresh_enabled.get())
             self.settings.last_profile = self.selected_profile.get().strip()
@@ -6630,33 +6633,49 @@ class WindowManagerApp:
         except Exception:
             pass
 
-        try:
-            if self.streamdeck_bridge is not None:
-                self.streamdeck_bridge.stop()
-        except Exception:
-            pass
-
-        try:
-            self.hotkeys.stop()
-        except Exception:
-            pass
-
-        self._stop_win_event_hook()
-        self._shutdown_popup_watcher()
+        # Tk-owned windows must be closed on this thread. Service stop methods
+        # may wait for other threads, which themselves need the Tk event loop.
         simulation_ui = getattr(self, "_display_simulation_ui", None)
-        if simulation_ui is not None:
+        for ui in (simulation_ui, self.overlay_ui):
+            if ui is not None:
+                try:
+                    ui.close_all()
+                except Exception:
+                    pass
+
+        services = [
+            (getattr(self, "streamdeck_bridge", None), "stop"),
+            (self.hotkeys, "stop"),
+            (getattr(self, "win_events", None), "stop"),
+            (getattr(self, "shell_attention", None), "stop"),
+            (getattr(self, "popup_watcher", None), "shutdown"),
+            (self.tray, "stop"),
+        ]
+        self.win_events = None
+        self.shell_attention = None
+        self.popup_watcher = None
+        finished = threading.Event()
+
+        def stop_services() -> None:
             try:
-                simulation_ui.close_all()
-            except Exception:
-                pass
-        try:
-            self.overlay_ui.close_all()
-        except Exception:
-            pass
+                for service, method in services:
+                    if service is not None:
+                        try:
+                            getattr(service, method)()
+                        except Exception:
+                            # One failed service must not prevent the others closing.
+                            pass
+            finally:
+                finished.set()
 
-        self.tray.stop()
+        def finish_close() -> None:
+            if finished.is_set():
+                self.root.destroy()
+            else:
+                self.root.after(50, finish_close)
 
-        self.root.destroy()
+        threading.Thread(target=stop_services, name="DWMShutdown", daemon=True).start()
+        self.root.after(50, finish_close)
 
 
     def run(self):

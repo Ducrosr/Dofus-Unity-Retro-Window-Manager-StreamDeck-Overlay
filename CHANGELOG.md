@@ -8,6 +8,8 @@
 
 ## À venir
 
+- Fermeture depuis la zone de notification : arrêt des services en arrière-plan pour conserver la boucle Tk active pendant le nettoyage ; demandes de fermeture répétées ignorées.
+
 - Correction du retour de recherche de mise à jour : réception indépendante de la file des fenêtres et message après expiration du délai de 20 secondes.
 - Correction des aperçus Minimal/Équilibré/Complet : simulation du preset sélectionné, renouvellement d’un aperçu déjà ouvert et chargement dans le formulaire dès la sélection.
 

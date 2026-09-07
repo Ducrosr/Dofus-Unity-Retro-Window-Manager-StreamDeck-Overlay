@@ -65,3 +65,10 @@ Les parcours de profil, de reconnexion, de raccourcis et de conservation des ré
 doivent avoir été essayés sans régression. Toute perte de données ou mauvaise cible
 de focus doit être corrigée avant publication. Les autres parcours non testés doivent
 être explicitement signalés dans le bilan.
+
+## Fermeture depuis la zone de notification
+
+- Choisir Quitter avec l’application visible puis réduite : vérifier la disparition du processus et de l’icône.
+- Répéter avec le plugin Stream Deck connecté, puis avec Retro et la surveillance des invitations.
+- Relancer : aucun avertissement de fermeture anormale après ces sorties.
+- La croix conserve son comportement de réduction si cette option est activée.
