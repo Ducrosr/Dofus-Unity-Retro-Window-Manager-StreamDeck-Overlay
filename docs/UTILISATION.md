@@ -297,3 +297,11 @@ ne sont pas considérées comme une fermeture anormale.
 
 L’export reste accessible à tout moment depuis Diagnostic. Relisez le ZIP avant
 tout partage, notamment les textes libres des journaux.
+
+### Liens de téléchargement du mini-site
+
+Le déploiement GitHub Pages génère les liens et les métadonnées de version à partir
+du tag déclaré dans l’application. Une publication de release réussie déclenche
+automatiquement le déploiement du site au même commit ; une compilation échouée
+ne le déclenche pas. Les sources HTML servent de modèle et ne sont pas modifiées
+par la génération.
