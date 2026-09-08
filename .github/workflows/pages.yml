@@ -6,7 +6,12 @@ on:
       - main
     paths:
       - "website/**"
+      - "build_website.py"
       - ".github/workflows/pages.yml"
+  workflow_run:
+    workflows: ["Compiler et publier une version"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -21,6 +26,7 @@ concurrency:
 jobs:
   deploy:
     name: Déployer GitHub Pages
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -28,6 +34,11 @@ jobs:
     steps:
       - name: Récupérer les sources
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Générer les liens de la version
+        run: python3 build_website.py --destination _site
 
       - name: Configurer GitHub Pages
         uses: actions/configure-pages@v5
@@ -37,7 +48,7 @@ jobs:
       - name: Préparer le site statique
         uses: actions/upload-pages-artifact@v3
         with:
-          path: website
+          path: _site
 
       - name: Publier
         id: deployment
