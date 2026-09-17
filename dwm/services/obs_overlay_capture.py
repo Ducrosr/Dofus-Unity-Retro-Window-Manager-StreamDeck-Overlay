@@ -6,10 +6,18 @@ from ctypes import wintypes
 
 
 OVERLAY_WINDOW_TITLE = "Dofus Window Manager — Overlay"
+POPUP_WINDOW_TITLE = "Dofus Window Manager — Focus Popup"
+
+
+def _set_window_title(window, title: str) -> None:
+    try:
+        window.title(title)
+    except Exception:
+        return
 
 
 def _clear_toolwindow_style(window) -> None:
-    """Remove WS_EX_TOOLWINDOW so OBS can enumerate the persistent overlay."""
+    """Remove WS_EX_TOOLWINDOW so OBS can enumerate the DWM overlay windows."""
     if os.name != "nt":
         return
 
@@ -62,32 +70,53 @@ def _clear_toolwindow_style(window) -> None:
             swp_nomove | swp_nosize | swp_noactivate | swp_showwindow | swp_framechanged,
         )
     except Exception:
-        # This is a compatibility enhancement only; never prevent the overlay
-        # from being shown if Windows rejects a style update.
+        # OBS compatibility must never prevent the overlay from being shown.
         return
 
 
 def enable_obs_overlay_capture() -> None:
-    """Keep the existing overlay behaviour while making it capturable by OBS.
+    """Make both persistent overlay windows discoverable by OBS.
 
-    ``ui_overlays._apply_non_activating_style`` intentionally marks the
-    persistent overlay as ``WS_EX_TOOLWINDOW``. OBS filters tool windows from
-    its window-capture picker, so wrap the existing style helper and remove
-    only that flag after its normal focus/click-through settings are applied.
+    The regular persistent character list and the short focus notification are
+    distinct Tk/Win32 windows. OBS must therefore be able to enumerate each one
+    independently. Keep the existing non-activating/click-through behaviour,
+    remove only ``WS_EX_TOOLWINDOW``, and give both windows stable titles so an
+    OBS Window Capture source can reacquire them by title/executable.
     """
     from dwm import ui_overlays
 
-    original = ui_overlays._apply_non_activating_style
-    if getattr(original, "_dwm_obs_capture_wrapper", False):
-        return
+    style_original = ui_overlays._apply_non_activating_style
+    if not getattr(style_original, "_dwm_obs_capture_wrapper", False):
 
-    def apply_obs_compatible_style(window, *, click_through: bool) -> None:
-        original(window, click_through=click_through)
-        try:
-            window.title(OVERLAY_WINDOW_TITLE)
-        except Exception:
-            pass
-        _clear_toolwindow_style(window)
+        def apply_obs_compatible_style(window, *, click_through: bool) -> None:
+            style_original(window, click_through=click_through)
+            _clear_toolwindow_style(window)
 
-    apply_obs_compatible_style._dwm_obs_capture_wrapper = True
-    ui_overlays._apply_non_activating_style = apply_obs_compatible_style
+        apply_obs_compatible_style._dwm_obs_capture_wrapper = True
+        ui_overlays._apply_non_activating_style = apply_obs_compatible_style
+
+    ensure_original = ui_overlays.OverlayUI._ensure_persistent
+    if not getattr(ensure_original, "_dwm_obs_capture_wrapper", False):
+
+        def ensure_obs_persistent(self) -> None:
+            ensure_original(self)
+            window = self.persistent_window
+            if window is not None:
+                _set_window_title(window, OVERLAY_WINDOW_TITLE)
+                _clear_toolwindow_style(window)
+
+        ensure_obs_persistent._dwm_obs_capture_wrapper = True
+        ui_overlays.OverlayUI._ensure_persistent = ensure_obs_persistent
+
+    popup_original = ui_overlays.OverlayUI._show_swap_notification_now
+    if not getattr(popup_original, "_dwm_obs_capture_wrapper", False):
+
+        def show_obs_focus_popup(self, request) -> None:
+            popup_original(self, request)
+            window = self.toast_window
+            if window is not None:
+                _set_window_title(window, POPUP_WINDOW_TITLE)
+                _clear_toolwindow_style(window)
+
+        show_obs_focus_popup._dwm_obs_capture_wrapper = True
+        ui_overlays.OverlayUI._show_swap_notification_now = show_obs_focus_popup
