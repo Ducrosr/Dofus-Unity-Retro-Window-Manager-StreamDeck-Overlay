@@ -6156,8 +6156,8 @@ class WindowManagerApp:
             obs_sync_section,
             text=tr(
                 "DWM crée automatiquement une Capture de fenêtre persistante par client détecté dans cette scène, "
-                "sans limite fixe de 8 clients. Une nouvelle capture n’est créée que lorsqu’un client supplémentaire "
-                "apparaît ; pendant les rotations, DWM change uniquement la visibilité des captures déjà initialisées."
+                "sans limite fixe de 8 clients. Les captures des clients ouverts restent actives en permanence ; "
+                "pendant les rotations, DWM ne change que leur opacité afin d’éviter une réacquisition WGC."
             ),
             style="Muted.TLabel",
             wraplength=560,
