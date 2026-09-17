@@ -12,7 +12,7 @@ L’interface principale conserve les actions fréquentes visibles et regroupe l
 - **Application** : mode Unity/Retro, accès aux paramètres, mode compact, overlay et bouton **Outils…** ;
 - **Outils et maintenance** : assistant, aperçu Stream Deck, simulation, diagnostic, sauvegarde/restauration, réparation du plugin, mises à jour et liens de sécurité.
 
-Sur une nouvelle installation, l’assistant guide successivement le choix de la langue et du mode de jeu, la détection des clients, un test réel du focus, l’apparence initiale de l’overlay et l’installation facultative de Stream Deck. Il peut être relancé à tout moment depuis **Application → Assistant de configuration…**.
+Sur une nouvelle installation, l’assistant guide successivement le choix de la langue et du mode de jeu, la détection des clients, un test réel du focus, l’apparence initiale de l’overlay et l’installation facultative de Stream Deck. Il peut être relancé à tout moment depuis **Application → Outils… → Assistant de configuration…**.
 
 La barre verticale à droite conserve l’accès aux commandes lorsque la fenêtre est courte ou que Windows utilise une mise à l’échelle élevée. La molette garde la priorité au tableau ou au journal lorsqu’elle se trouve au-dessus.
 
@@ -125,7 +125,7 @@ Le panneau **Sauvegarder/restaurer…** conserve également les douze points de 
 
 Dans **Paramètres → Apparence**, les préréglages **Minimal**, **Équilibré** et **Complet** remplissent les options de contenu et de visuels sans toucher au thème, à l’orientation ou à la position. Minimal conserve le numéro et le nom sans portrait, icône, titre ni flèches ; Équilibré affiche les informations complètes et le portrait avec moins de commandes visibles ; Complet restaure portraits, icônes, titre et flèches. Sélectionnez ensuite **Appliquer** pour enregistrer le résultat dans les préférences Unity ou Retro actives.
 
-**Application → Simuler l’affichage…** ouvre le véritable composant d’overlay avec quatre personnages fictifs et permet de tester le changement de personnage, une demande d’attention et la notification. Cette simulation n’utilise aucun identifiant de fenêtre réel : ses clics, déplacements et flèches n’activent pas Dofus et ne modifient pas l’ordre enregistré.
+**Application → Outils… → Simuler l’affichage…** ouvre le véritable composant d’overlay avec quatre personnages fictifs et permet de tester le changement de personnage, une demande d’attention et la notification. Cette simulation n’utilise aucun identifiant de fenêtre réel : ses clics, déplacements et flèches n’activent pas Dofus et ne modifient pas l’ordre enregistré.
 
 Dans **Paramètres → Raccourcis**, utilisez **Capturer** puis appuyez sur la combinaison souhaitée. Le formulaire contrôle immédiatement les touches non prises en charge et les doublons entre navigation, alerte, actualisation et accès directs. Après **Appliquer**, Windows peut encore refuser une combinaison réservée par le système ou déjà utilisée par un autre logiciel ; le message indique alors précisément l’action à modifier.
 
