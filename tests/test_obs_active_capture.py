@@ -13,9 +13,11 @@ from dwm.services.obs_active_capture import (
     POPUP_OPACITY_FILTER_NAME,
     POPUP_SOURCE_NAME,
     VISIBILITY_FILTER_NAME,
+    fit_window_to_canvas,
+    project_window_over_reference,
     probe_obs_connection,
 )
-from dwm.services.window_telemetry import WindowTelemetry
+from dwm.services.window_telemetry import RectSnapshot, WindowTelemetry
 
 
 class _FakeReqClient:
@@ -46,6 +48,8 @@ class _FakeReqClient:
 
         if request == "GetVersion":
             return {"obsVersion": "32.0.0"}
+        if request == "GetVideoSettings":
+            return {"baseWidth": 1920, "baseHeight": 1080}
         if request == "GetSceneList":
             return {"scenes": [{"sceneName": name} for name in sorted(self.scenes)]}
         if request == "CreateScene":
@@ -105,6 +109,8 @@ class _FakeReqClient:
                 ]
             }
         if request == "SetSceneItemIndex":
+            return {}
+        if request == "SetSceneItemTransform":
             return {}
         if request == "GetSourceFilterList":
             source = str(payload["sourceName"])
@@ -194,6 +200,58 @@ def _opacity(source_name: str) -> float:
     return float(
         _FakeReqClient.filters[source_name][VISIBILITY_FILTER_NAME]["settings"]["opacity"]
     )
+
+
+class OBSProjectionTests(unittest.TestCase):
+    def test_fit_1440p_game_into_1080p_canvas(self):
+        game = WindowTelemetry(
+            hwnd=1,
+            session_id="1",
+            game_mode="unity",
+            title="Dofus",
+            window_class="UnityWndClass",
+            pseudo="",
+            character_class="",
+            client_rect_screen=RectSnapshot(1920, 0, 4480, 1440),
+        )
+
+        transform = fit_window_to_canvas(game, 1920, 1080)
+
+        self.assertIsNotNone(transform)
+        self.assertAlmostEqual(transform.position_x, 0.0)
+        self.assertAlmostEqual(transform.position_y, 0.0)
+        self.assertAlmostEqual(transform.scale_x, 0.75)
+        self.assertAlmostEqual(transform.scale_y, 0.75)
+
+    def test_overlay_is_projected_relative_to_active_game_client(self):
+        game = WindowTelemetry(
+            hwnd=1,
+            session_id="1",
+            game_mode="unity",
+            title="Dofus",
+            window_class="UnityWndClass",
+            pseudo="",
+            character_class="",
+            client_rect_screen=RectSnapshot(1920, 0, 4480, 1440),
+        )
+        overlay = WindowTelemetry(
+            hwnd=2,
+            session_id="2",
+            game_mode="dwm",
+            title="Dofus Window Manager — Overlay",
+            window_class="TkTopLevel",
+            pseudo="",
+            character_class="",
+            client_rect_screen=RectSnapshot(2180, 160, 2480, 760),
+        )
+
+        transform = project_window_over_reference(overlay, game, 1920, 1080)
+
+        self.assertIsNotNone(transform)
+        self.assertAlmostEqual(transform.position_x, 195.0)
+        self.assertAlmostEqual(transform.position_y, 120.0)
+        self.assertAlmostEqual(transform.scale_x, 0.75)
+        self.assertAlmostEqual(transform.scale_y, 0.75)
 
 
 class OBSActiveCaptureTests(unittest.TestCase):
