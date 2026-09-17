@@ -285,7 +285,7 @@ class OBSActiveCaptureBridge:
         self._ensure_scene(client, config)
         self._discover_existing_slots(client, config)
         self._visible_slot = None
-        for slot, item_id in sorted(self._item_id_by_slot.items()):
+        for _slot, item_id in sorted(self._item_id_by_slot.items()):
             self._send(
                 client,
                 "SetSceneItemEnabled",
