@@ -2343,7 +2343,12 @@ class WindowManagerApp:
         elif previous_hwnd != hwnd:
             self._refresh_focus_views()
         if previous_hwnd != hwnd:
-            self._sync_obs_window_pool(refresh_hwnds=(hwnd,))
+            refresh_targets = (
+                (previous_hwnd, hwnd)
+                if previous_hwnd is not None
+                else (hwnd,)
+            )
+            self._sync_obs_window_pool(refresh_hwnds=refresh_targets)
         if not notify or not self.settings.swap_notification_enabled:
             return
         window = self._all_windows.get(hwnd)
