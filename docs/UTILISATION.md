@@ -2,14 +2,15 @@
 
 ## Vue d’ensemble
 
-L’interface principale comporte deux tableaux et quatre groupes de commandes :
+L’interface principale conserve les actions fréquentes visibles et regroupe les opérations plus rares :
 
 - **Fenêtres gérées** : personnages inclus dans la rotation ;
 - **Fenêtres ignorées** : personnages toujours détectés mais exclus de Suivant/Précédent ;
 - **Navigation** : rotation et changement d’ordre ;
 - **Fenêtre sélectionnée** : alias, portrait, icône et statut ignoré ;
 - **Profils** : enregistrement et restauration d’une formation ;
-- **Application** : mode Unity/Retro, assistant de configuration, mode compact, overlay, paramètres, aperçu Stream Deck, diagnostic, sauvegarde, installation du plugin et mises à jour.
+- **Application** : mode Unity/Retro, accès aux paramètres, mode compact, overlay et bouton **Outils…** ;
+- **Outils et maintenance** : assistant, aperçu Stream Deck, simulation, diagnostic, sauvegarde/restauration, réparation du plugin, mises à jour et liens de sécurité.
 
 Sur une nouvelle installation, l’assistant guide successivement le choix de la langue et du mode de jeu, la détection des clients, un test réel du focus, l’apparence initiale de l’overlay et l’installation facultative de Stream Deck. Il peut être relancé à tout moment depuis **Application → Assistant de configuration…**.
 
@@ -130,7 +131,7 @@ Dans **Paramètres → Raccourcis**, utilisez **Capturer** puis appuyez sur la c
 
 Dans **Paramètres → Général → Accessibilité**, **Contraste renforcé** utilise des fonds noirs, des textes blancs et des séparateurs plus visibles tout en conservant l’accent du thème. L’échelle globale peut être réglée de 80 à 160 %. **Réduire les animations** maintient le repère orange des alertes mais désactive leur pulsation dans l’application, l’overlay et le Stream Deck.
 
-Les paramètres sont répartis dans trois onglets défilants : **Général** pour l’actualisation, le démarrage, les mises à jour et la détection ; **Apparence** pour le thème, les demandes d’attention, la notification et l’overlay ; **Raccourcis** pour les actions habituelles et les huit accès directs facultatifs aux positions 1 à 8.
+Les paramètres sont répartis dans quatre onglets défilants : **Général** pour l’actualisation, le démarrage, les mises à jour et la détection ; **Apparence** pour le thème, les demandes d’attention, la notification et l’overlay ; **OBS** pour la connexion WebSocket, les captures automatiques et les repères DWM → OBS ; **Raccourcis** pour les actions habituelles et les huit accès directs facultatifs aux positions 1 à 8.
 
 La section **Demandes d’attention**, placée près du haut des paramètres, permet d’activer ou de désactiver le léger clignotement. La couleur orange et le repère `!` restent actifs dans les deux cas.
 
@@ -305,3 +306,12 @@ du tag déclaré dans l’application. Une publication de release réussie décl
 automatiquement le déploiement du site au même commit ; une compilation échouée
 ne le déclenche pas. Les sources HTML servent de modèle et ne sont pas modifiées
 par la génération.
+
+
+## Intégration OBS
+
+Dans **Paramètres → OBS**, activez la synchronisation puis configurez le port et le mot de passe WebSocket d’OBS. DWM crée une scène dédiée, une capture persistante par client Dofus détecté, ainsi que les captures de l’overlay et de la popup. Les captures Dofus restent actives afin d’éviter une réacquisition WGC lors des changements de personnage ; seul leur filtre d’opacité change.
+
+L’overlay et la popup DWM restent au-dessus des captures Dofus. Leur position Windows est projetée automatiquement dans le canvas OBS à partir de la position du client Dofus actif et de la résolution de base d’OBS.
+
+La page OBS affiche également les coordonnées et dimensions courantes de l’overlay et de la popup pour faciliter le diagnostic.
