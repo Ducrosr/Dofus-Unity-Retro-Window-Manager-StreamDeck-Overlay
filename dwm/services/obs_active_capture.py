@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from ..models import GameWindow
 from .obs_overlay_capture import (
     OVERLAY_WINDOW_TITLE,
-    POPUP_IDLE_COLOR,
     POPUP_WINDOW_TITLE,
 )
 from .win32_enum import enum_top_level_windows
@@ -149,6 +148,8 @@ class OBSActiveCaptureBridge:
         self._interface_item_ids: dict[str, int] = {}
         self._interface_selectors: dict[str, str] = {}
         self._popup_filters_ready = False
+        self._popup_filter_opacity: float | None = None
+        self._interface_order_dirty = True
         self._obs_layout_ready = False
 
         self._thread = threading.Thread(
@@ -232,6 +233,8 @@ class OBSActiveCaptureBridge:
         self._interface_item_ids.clear()
         self._interface_selectors.clear()
         self._popup_filters_ready = False
+        self._popup_filter_opacity = None
+        self._interface_order_dirty = True
         self._obs_layout_ready = False
 
     def _snapshot(self) -> tuple[OBSActiveCaptureConfig, dict[int, WindowTelemetry], int | None]:
@@ -405,6 +408,7 @@ class OBSActiveCaptureBridge:
             self._interface_known_inputs.add(source_name)
             self._interface_item_ids[source_name] = item_id
             self._interface_selectors[source_name] = window.obs_window_selector
+            self._interface_order_dirty = True
         else:
             if not item_id:
                 try:
@@ -433,6 +437,7 @@ class OBSActiveCaptureBridge:
                         f"Impossible d'ajouter {source_name} à la scène OBS."
                     )
                 self._interface_item_ids[source_name] = item_id
+                self._interface_order_dirty = True
 
             if self._interface_selectors.get(source_name) != window.obs_window_selector:
                 self._send(
@@ -463,6 +468,12 @@ class OBSActiveCaptureBridge:
         client,
         config: OBSActiveCaptureConfig,
     ) -> None:
+        if (
+            self._popup_filters_ready
+            and self._popup_filter_opacity == float(config.popup_opacity)
+        ):
+            return
+
         response = self._send(
             client,
             "GetSourceFilterList",
@@ -567,6 +578,7 @@ class OBSActiveCaptureBridge:
             },
         )
         self._popup_filters_ready = True
+        self._popup_filter_opacity = float(config.popup_opacity)
 
     def _ensure_interface_order(
         self,
@@ -576,6 +588,8 @@ class OBSActiveCaptureBridge:
         overlay_item_id: int | None,
         popup_item_id: int | None,
     ) -> None:
+        if not self._interface_order_dirty:
+            return
         if not overlay_item_id and not popup_item_id:
             return
         response = self._send(
@@ -612,6 +626,7 @@ class OBSActiveCaptureBridge:
                     "sceneItemIndex": top_index,
                 },
             )
+        self._interface_order_dirty = False
 
     def _reconcile_interface_sources(
         self,
@@ -695,6 +710,7 @@ class OBSActiveCaptureBridge:
             self._known_slots.add(slot)
             self._item_id_by_slot[slot] = item_id
             self._selector_by_slot[slot] = window.obs_window_selector
+            self._interface_order_dirty = True
             return
 
         if slot not in self._item_id_by_slot:
@@ -722,6 +738,7 @@ class OBSActiveCaptureBridge:
             if not item_id:
                 raise RuntimeError(f"Impossible d'ajouter {source_name} à la scène OBS.")
             self._item_id_by_slot[slot] = item_id
+            self._interface_order_dirty = True
 
         selector = window.obs_window_selector
         if self._selector_by_slot.get(slot) != selector:
@@ -963,6 +980,8 @@ class OBSActiveCaptureBridge:
             self._interface_item_ids.clear()
             self._interface_selectors.clear()
             self._popup_filters_ready = False
+            self._popup_filter_opacity = None
+            self._interface_order_dirty = True
 
     def _run(self) -> None:
         while not self._stop.is_set():
