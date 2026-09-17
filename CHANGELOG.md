@@ -4,6 +4,12 @@
 
 ### OBS et overlay
 
+- Intégration OBS WebSocket avec pool dynamique de Captures de fenêtre persistantes, sans limite fixe à huit clients.
+- Changement de personnage sans réacquisition WGC : les captures restent actives et seul leur filtre d’opacité est modifié.
+- Création automatique des captures de l’overlay et de la popup DWM, toujours maintenues au-dessus des fenêtres Dofus.
+- Projection automatique de la position et de l’échelle de l’overlay et de la popup dans le canvas OBS.
+- Nouvel onglet **OBS** dans les paramètres, séparant connexion WebSocket, captures automatiques et repères de géométrie.
+- Interface principale allégée : les actions peu fréquentes sont regroupées dans **Outils et maintenance**.
 - Overlay persistant et popup de changement de focus exposés comme fenêtres capturables séparément dans OBS.
 - Popup conservée ouverte avec un HWND stable pour éviter le délai de réacquisition ; surface magenta lorsqu’elle est inactive pour un Color Key OBS.
 - Repères OBS en lecture seule dans les paramètres : position X/Y relative à l’écran et dimensions réelles de l’overlay et de la popup.
