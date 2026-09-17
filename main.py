@@ -70,8 +70,8 @@ def choose_game_dialog(default_mode: str = "unity", language: str = "fr") -> tup
     def on_cancel():
         root.destroy()
 
-    ttk.Button(btns, text="OK", command=on_ok()).pack(side="right")
-    ttk.Button(btns, text=tr("Annuler"), command=on_cancel()).pack(side="right", padx=(0, 8))
+    ttk.Button(btns, text="OK", command=on_ok).pack(side="right")
+    ttk.Button(btns, text=tr("Annuler"), command=on_cancel).pack(side="right", padx=(0, 8))
 
     root.bind("<Return>", lambda e: on_ok())
     root.bind("<Escape>", lambda e: on_cancel())
