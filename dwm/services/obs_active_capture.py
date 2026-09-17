@@ -10,7 +10,7 @@ from .obs_overlay_capture import (
     POPUP_WINDOW_TITLE,
 )
 from .win32_enum import enum_top_level_windows
-from .window_telemetry import WindowTelemetry, collect_window_telemetry
+from .window_telemetry import RectSnapshot, WindowTelemetry, collect_window_telemetry
 
 
 try:
@@ -115,6 +115,80 @@ def _slot_name(prefix: str, slot: int) -> str:
     return f"{prefix} {slot:02d}"
 
 
+@dataclass(frozen=True)
+class OBSSceneTransform:
+    position_x: float
+    position_y: float
+    scale_x: float
+    scale_y: float
+
+    def rounded_signature(self) -> tuple[float, float, float, float]:
+        return (
+            round(self.position_x, 3),
+            round(self.position_y, 3),
+            round(self.scale_x, 6),
+            round(self.scale_y, 6),
+        )
+
+
+def _capture_rect(window: WindowTelemetry) -> RectSnapshot:
+    client = window.client_rect_screen
+    if client.width > 0 and client.height > 0:
+        return client
+    return window.window_rect
+
+
+def fit_window_to_canvas(
+    window: WindowTelemetry,
+    base_width: int,
+    base_height: int,
+) -> OBSSceneTransform | None:
+    rect = _capture_rect(window)
+    if rect.width <= 0 or rect.height <= 0 or base_width <= 0 or base_height <= 0:
+        return None
+    scale = min(base_width / rect.width, base_height / rect.height)
+    rendered_width = rect.width * scale
+    rendered_height = rect.height * scale
+    return OBSSceneTransform(
+        position_x=(base_width - rendered_width) / 2.0,
+        position_y=(base_height - rendered_height) / 2.0,
+        scale_x=scale,
+        scale_y=scale,
+    )
+
+
+def project_window_over_reference(
+    window: WindowTelemetry,
+    reference: WindowTelemetry,
+    base_width: int,
+    base_height: int,
+) -> OBSSceneTransform | None:
+    reference_transform = fit_window_to_canvas(reference, base_width, base_height)
+    if reference_transform is None:
+        return None
+    reference_rect = _capture_rect(reference)
+    window_rect = _capture_rect(window)
+    if window_rect.width <= 0 or window_rect.height <= 0:
+        return None
+
+    # Window/client rectangles and WGC source pixels are both expressed in
+    # desktop physical pixels. Apply the same uniform scale as the active Dofus
+    # client so the DWM interface retains its real desktop position relative to
+    # the game after the game is fitted into the OBS base canvas.
+    return OBSSceneTransform(
+        position_x=(
+            reference_transform.position_x
+            + (window_rect.left - reference_rect.left) * reference_transform.scale_x
+        ),
+        position_y=(
+            reference_transform.position_y
+            + (window_rect.top - reference_rect.top) * reference_transform.scale_y
+        ),
+        scale_x=reference_transform.scale_x,
+        scale_y=reference_transform.scale_y,
+    )
+
+
 class OBSActiveCaptureBridge:
     """Maintain a dynamic OBS Window Capture pool for Dofus clients.
 
@@ -150,6 +224,8 @@ class OBSActiveCaptureBridge:
         self._popup_filters_ready = False
         self._popup_filter_opacity: float | None = None
         self._interface_order_dirty = True
+        self._canvas_size: tuple[int, int] | None = None
+        self._transform_signatures: dict[int, tuple[float, float, float, float]] = {}
         self._obs_layout_ready = False
 
         self._thread = threading.Thread(
@@ -213,6 +289,9 @@ class OBSActiveCaptureBridge:
             self._active_hwnd = int(hwnd) if hwnd else None
         self._wake.set()
 
+    def request_refresh(self) -> None:
+        self._wake.set()
+
     def stop(self) -> None:
         self._stop.set()
         self._wake.set()
@@ -235,6 +314,8 @@ class OBSActiveCaptureBridge:
         self._popup_filters_ready = False
         self._popup_filter_opacity = None
         self._interface_order_dirty = True
+        self._canvas_size = None
+        self._transform_signatures.clear()
         self._obs_layout_ready = False
 
     def _snapshot(self) -> tuple[OBSActiveCaptureConfig, dict[int, WindowTelemetry], int | None]:
@@ -260,6 +341,50 @@ class OBSActiveCaptureBridge:
         else:
             response = client.send(request, data, raw=True)
         return response if isinstance(response, dict) else {}
+
+    def _get_canvas_size(self, client) -> tuple[int, int] | None:
+        if self._canvas_size is not None:
+            return self._canvas_size
+        response = self._send(client, "GetVideoSettings")
+        try:
+            base_width = int(response.get("baseWidth") or 0)
+            base_height = int(response.get("baseHeight") or 0)
+        except (TypeError, ValueError):
+            return None
+        if base_width <= 0 or base_height <= 0:
+            return None
+        self._canvas_size = (base_width, base_height)
+        return self._canvas_size
+
+    def _set_scene_item_transform(
+        self,
+        client,
+        config: OBSActiveCaptureConfig,
+        item_id: int | None,
+        transform: OBSSceneTransform | None,
+    ) -> None:
+        if not item_id or transform is None:
+            return
+        signature = transform.rounded_signature()
+        if self._transform_signatures.get(item_id) == signature:
+            return
+        self._send(
+            client,
+            "SetSceneItemTransform",
+            {
+                "sceneName": config.scene_name,
+                "sceneItemId": item_id,
+                "sceneItemTransform": {
+                    "positionX": float(transform.position_x),
+                    "positionY": float(transform.position_y),
+                    "scaleX": float(transform.scale_x),
+                    "scaleY": float(transform.scale_y),
+                    "rotation": 0.0,
+                    "alignment": 5,
+                },
+            },
+        )
+        self._transform_signatures[item_id] = signature
 
     def _ensure_scene(self, client, config: OBSActiveCaptureConfig) -> None:
         response = self._send(client, "GetSceneList")
@@ -632,6 +757,8 @@ class OBSActiveCaptureBridge:
         self,
         client,
         config: OBSActiveCaptureConfig,
+        *,
+        reference_window: WindowTelemetry | None,
     ) -> None:
         overlay_window = self._find_interface_window(OVERLAY_WINDOW_TITLE)
         popup_window = self._find_interface_window(POPUP_WINDOW_TITLE)
@@ -651,6 +778,40 @@ class OBSActiveCaptureBridge:
 
         if popup_window is not None:
             self._ensure_popup_filters(client, config)
+
+        canvas = self._get_canvas_size(client)
+        if canvas is not None and reference_window is not None:
+            base_width, base_height = canvas
+            self._set_scene_item_transform(
+                client,
+                config,
+                overlay_item_id if overlay_window is not None else None,
+                (
+                    project_window_over_reference(
+                        overlay_window,
+                        reference_window,
+                        base_width,
+                        base_height,
+                    )
+                    if overlay_window is not None
+                    else None
+                ),
+            )
+            self._set_scene_item_transform(
+                client,
+                config,
+                popup_item_id if popup_window is not None else None,
+                (
+                    project_window_over_reference(
+                        popup_window,
+                        reference_window,
+                        base_width,
+                        base_height,
+                    )
+                    if popup_window is not None
+                    else None
+                ),
+            )
 
         self._ensure_interface_order(
             client,
@@ -939,6 +1100,8 @@ class OBSActiveCaptureBridge:
 
             by_session = {window.session_id: window for window in windows.values()}
             target_slot = self._desired_visible_slot(windows, active_hwnd)
+            active_window = windows.get(active_hwnd) if active_hwnd else None
+            canvas = self._get_canvas_size(client)
             for slot, session_id in sorted(self._session_by_slot.items()):
                 window = by_session.get(session_id)
                 if window is None:
@@ -960,10 +1123,22 @@ class OBSActiveCaptureBridge:
                     slot,
                     True,
                 )
+                if canvas is not None:
+                    base_width, base_height = canvas
+                    self._set_scene_item_transform(
+                        client,
+                        config,
+                        self._item_id_by_slot.get(slot),
+                        fit_window_to_canvas(window, base_width, base_height),
+                    )
 
             self._set_visibility(client, config, target_slot)
             self._disable_unassigned_slots(client, config)
-            self._reconcile_interface_sources(client, config)
+            self._reconcile_interface_sources(
+                client,
+                config,
+                reference_window=active_window,
+            )
             self.last_error = ""
         except Exception as exc:
             self.last_error = str(exc)
@@ -982,6 +1157,8 @@ class OBSActiveCaptureBridge:
             self._popup_filters_ready = False
             self._popup_filter_opacity = None
             self._interface_order_dirty = True
+            self._canvas_size = None
+            self._transform_signatures.clear()
 
     def _run(self) -> None:
         while not self._stop.is_set():
