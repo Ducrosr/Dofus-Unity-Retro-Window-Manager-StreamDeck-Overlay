@@ -1650,11 +1650,11 @@ class WindowManagerApp:
             wraplength=235,
         ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(2, 0))
 
-        application = TtkLabelFrame(right, text="Application", padding=8)
+        application = TtkLabelFrame(right, text=tr("Application"), padding=8)
         application.pack(fill="x")
         mode_row = TtkFrame(application)
         mode_row.pack(fill="x", pady=(1, 6))
-        TtkLabel(mode_row, text="Version de Dofus").pack(side="left")
+        TtkLabel(mode_row, text=tr("Version de Dofus")).pack(side="left")
         self.game_mode_combo = Combobox(
             mode_row,
             textvariable=self.game_mode_var,
@@ -1664,75 +1664,37 @@ class WindowManagerApp:
         )
         self.game_mode_combo.pack(side="right")
         self.game_mode_combo.bind("<<ComboboxSelected>>", self._on_game_mode_selected)
+
+        quick_actions = TtkFrame(application)
+        quick_actions.pack(fill="x", pady=(2, 0))
+        quick_actions.columnconfigure(0, weight=1)
+        quick_actions.columnconfigure(1, weight=1)
         TtkButton(
-            application,
-            text="Assistant de configuration…",
-            command=lambda: self._show_first_run_assistant(force=True),
-        ).pack(fill="x", pady=2)
-        TtkButton(application, text="Paramètres…", command=self.open_settings_window).pack(fill="x", pady=2)
+            quick_actions,
+            text=tr("Paramètres…"),
+            command=self.open_settings_window,
+            style="Accent.TButton",
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 3), pady=2)
         TtkButton(
-            application,
-            text="Réinitialiser l’affichage…",
-            command=self.reset_display_settings,
-        ).pack(fill="x", pady=2)
-        display_row = TtkFrame(application)
-        display_row.pack(fill="x", pady=2)
-        TtkButton(display_row, text="Mode compact", command=self.open_compact_mode).pack(
-            side="left", fill="x", expand=True, padx=(0, 3)
-        )
+            quick_actions,
+            text=tr("Outils…"),
+            command=self.open_tools_window,
+        ).grid(row=0, column=1, sticky="ew", padx=(3, 0), pady=2)
         TtkButton(
-            display_row,
+            quick_actions,
+            text=tr("Mode compact"),
+            command=self.open_compact_mode,
+        ).grid(row=1, column=0, sticky="ew", padx=(0, 3), pady=2)
+        TtkButton(
+            quick_actions,
             textvariable=self.overlay_button_text,
             command=self.toggle_rotation_overlay,
-        ).pack(side="left", fill="x", expand=True, padx=(3, 0))
-        TtkButton(application, text="Aperçu Stream Deck…", command=self.open_streamdeck_preview).pack(fill="x", pady=2)
+        ).grid(row=1, column=1, sticky="ew", padx=(3, 0), pady=2)
         TtkButton(
             application,
-            text=tr("Simuler l’affichage…"),
-            command=self.open_display_simulation,
-        ).pack(fill="x", pady=2)
-        TtkButton(application, text="Diagnostic…", command=self.open_diagnostics_window).pack(fill="x", pady=2)
-        TtkButton(
-            application,
-            text="Sauvegarder / restaurer…",
-            command=self.open_configuration_manager,
-        ).pack(fill="x", pady=2)
-        TtkButton(
-            application,
-            text=tr("Installer ou réparer le plugin Stream Deck"),
-            command=self.open_streamdeck_plugin_repair,
-            style="Accent.TButton",
-        ).pack(fill="x", pady=2)
-        TtkButton(
-            application,
-            text="Dépôt GitHub officiel",
-            command=lambda: self._open_trusted_web_page(
-                OFFICIAL_REPOSITORY_URL,
-                "Dépôt GitHub officiel",
-            ),
-        ).pack(fill="x", pady=2)
-        TtkButton(
-            application,
-            text="Conseils anti-phishing Ankama",
-            command=lambda: self._open_trusted_web_page(
-                ANKAMA_ANTI_PHISHING_URL,
-                "Conseils anti-phishing Ankama",
-            ),
-        ).pack(fill="x", pady=2)
-        self.update_button = TtkButton(
-            application,
-            text="Rechercher une mise à jour…",
-            command=self.check_for_updates,
-        )
-        self.update_button.pack(fill="x", pady=2)
-        TtkLabel(
-            application,
-            text="Illustrations et icônes Dofus © Ankama Games. Projet communautaire non affilié.",
-            style="Muted.TLabel",
-            wraplength=235,
-            justify="left",
-        ).pack(fill="x", pady=(7, 1))
-        TtkButton(application, text="Quitter", command=lambda: self.on_close(force=True)).pack(fill="x", pady=2)
+            text=tr("Quitter"),
+            command=lambda: self.on_close(force=True),
+        ).pack(fill="x", pady=(6, 2))
 
         # Status and logs
         bottom = TtkFrame(self.main_content)
@@ -1761,6 +1723,139 @@ class WindowManagerApp:
             command=self._on_toggle_autorefresh,
         ).pack(side="left")
         TtkLabel(self.log_footer, textvariable=self.last_update_time, style="Muted.TLabel").pack(side="right")
+
+    def open_tools_window(self) -> None:
+        existing = getattr(self, "_tools_window", None)
+        try:
+            if existing is not None and existing.winfo_exists():
+                existing.deiconify()
+                existing.lift()
+                existing.focus_force()
+                return
+        except Exception:
+            pass
+
+        win = Toplevel(self.root)
+        self._tools_window = win
+        win.title(tr("Outils et maintenance"))
+        win.transient(self.root)
+        win.resizable(True, True)
+        win.geometry("520x620")
+        win.minsize(480, 520)
+
+        def clear_reference(event) -> None:
+            if event.widget is win:
+                self._tools_window = None
+
+        win.bind("<Destroy>", clear_reference, add="+")
+
+        body = TtkFrame(win, padding=12)
+        body.pack(fill="both", expand=True)
+
+        stream_tools = TtkLabelFrame(
+            body,
+            text=tr("Affichage et stream"),
+            padding=10,
+        )
+        stream_tools.pack(fill="x", pady=(0, 8))
+        stream_tools.columnconfigure(0, weight=1)
+        stream_tools.columnconfigure(1, weight=1)
+        TtkButton(
+            stream_tools,
+            text=tr("Aperçu Stream Deck…"),
+            command=self.open_streamdeck_preview,
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 3), pady=2)
+        TtkButton(
+            stream_tools,
+            text=tr("Simuler l’affichage…"),
+            command=self.open_display_simulation,
+        ).grid(row=0, column=1, sticky="ew", padx=(3, 0), pady=2)
+        TtkButton(
+            stream_tools,
+            text=tr("Diagnostic…"),
+            command=self.open_diagnostics_window,
+        ).grid(row=1, column=0, sticky="ew", padx=(0, 3), pady=2)
+        TtkButton(
+            stream_tools,
+            text=tr("Réinitialiser l’affichage…"),
+            command=self.reset_display_settings,
+        ).grid(row=1, column=1, sticky="ew", padx=(3, 0), pady=2)
+
+        configuration = TtkLabelFrame(
+            body,
+            text=tr("Configuration"),
+            padding=10,
+        )
+        configuration.pack(fill="x", pady=(0, 8))
+        configuration.columnconfigure(0, weight=1)
+        configuration.columnconfigure(1, weight=1)
+        TtkButton(
+            configuration,
+            text=tr("Assistant de configuration…"),
+            command=lambda: self._show_first_run_assistant(force=True),
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 3), pady=2)
+        TtkButton(
+            configuration,
+            text=tr("Sauvegarder / restaurer…"),
+            command=self.open_configuration_manager,
+        ).grid(row=0, column=1, sticky="ew", padx=(3, 0), pady=2)
+        TtkButton(
+            configuration,
+            text=tr("Installer ou réparer le plugin Stream Deck"),
+            command=self.open_streamdeck_plugin_repair,
+            style="Accent.TButton",
+        ).grid(row=1, column=0, columnspan=2, sticky="ew", pady=2)
+
+        maintenance = TtkLabelFrame(
+            body,
+            text=tr("Maintenance et sécurité"),
+            padding=10,
+        )
+        maintenance.pack(fill="x", pady=(0, 8))
+        maintenance.columnconfigure(0, weight=1)
+        maintenance.columnconfigure(1, weight=1)
+        self.update_button = TtkButton(
+            maintenance,
+            text=tr("Rechercher une mise à jour…"),
+            command=self.check_for_updates,
+        )
+        self.update_button.grid(row=0, column=0, columnspan=2, sticky="ew", pady=2)
+        TtkButton(
+            maintenance,
+            text=tr("Dépôt GitHub officiel"),
+            command=lambda: self._open_trusted_web_page(
+                OFFICIAL_REPOSITORY_URL,
+                tr("Dépôt GitHub officiel"),
+            ),
+        ).grid(row=1, column=0, sticky="ew", padx=(0, 3), pady=2)
+        TtkButton(
+            maintenance,
+            text=tr("Conseils anti-phishing Ankama"),
+            command=lambda: self._open_trusted_web_page(
+                ANKAMA_ANTI_PHISHING_URL,
+                tr("Conseils anti-phishing Ankama"),
+            ),
+        ).grid(row=1, column=1, sticky="ew", padx=(3, 0), pady=2)
+
+        TtkLabel(
+            body,
+            text=tr(
+                "Illustrations et icônes Dofus © Ankama Games. Projet communautaire non affilié."
+            ),
+            style="Muted.TLabel",
+            wraplength=470,
+            justify="left",
+        ).pack(fill="x", pady=(6, 8))
+
+        footer = TtkFrame(body)
+        footer.pack(fill="x", side="bottom")
+        TtkButton(
+            footer,
+            text=tr("Fermer"),
+            command=win.destroy,
+        ).pack(side="right")
+
+        self._localize_widget_tree(win)
 
     def _on_main_content_configure(self, _event=None) -> None:
         bounds = self.main_canvas.bbox("all")
