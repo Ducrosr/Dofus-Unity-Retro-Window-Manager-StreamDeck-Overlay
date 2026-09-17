@@ -89,5 +89,5 @@ def enable_obs_overlay_capture() -> None:
             pass
         _clear_toolwindow_style(window)
 
-    setattr(apply_obs_compatible_style, "_dwm_obs_capture_wrapper", True)
+    apply_obs_compatible_style._dwm_obs_capture_wrapper = True
     ui_overlays._apply_non_activating_style = apply_obs_compatible_style
