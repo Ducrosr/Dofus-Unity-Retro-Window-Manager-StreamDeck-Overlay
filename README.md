@@ -162,7 +162,7 @@ py -3.14 -m venv .venv
 
 Python 3.14 peut être remplacé par une autre version installée à partir de Python 3.12.
 
-Pour installer le plugin Stream Deck, lancez d’abord le gestionnaire puis utilisez **Application → Installer le plugin Stream Deck**. Acceptez ensuite le profil proposé par Stream Deck. Aucun téléchargement supplémentaire du plugin n’est nécessaire.
+Pour installer le plugin Stream Deck, lancez d’abord le gestionnaire puis utilisez **Application → Outils… → Installer ou réparer le plugin Stream Deck**. Acceptez ensuite le profil proposé par Stream Deck. Aucun téléchargement supplémentaire du plugin n’est nécessaire.
 
 Le guide détaillé couvre l'exécutable, l’installation depuis un ZIP, les mises à jour, la fonction Retro facultative et les problèmes les plus courants : **[Guide d’installation](docs/INSTALLATION.md)**.
 
