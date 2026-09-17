@@ -5579,7 +5579,10 @@ class WindowManagerApp:
         obs_capture_sync = BooleanVar(value=bool(self.settings.obs_capture_sync_enabled))
         obs_websocket_port = StringVar(value=str(self.settings.obs_websocket_port))
         obs_websocket_password = StringVar(value=self.settings.obs_websocket_password)
-        obs_game_capture_source = StringVar(value=self.settings.obs_game_capture_source)
+        obs_capture_scene = StringVar(value=self.settings.obs_capture_scene)
+        obs_capture_source_prefix = StringVar(value=self.settings.obs_capture_source_prefix)
+        obs_capture_cursor = BooleanVar(value=bool(self.settings.obs_capture_cursor))
+        obs_capture_force_sdr = BooleanVar(value=bool(self.settings.obs_capture_force_sdr))
         obs_connection_status = StringVar(value="")
 
         available_theme_ids = theme_ids_for_mode(self.game_mode)
@@ -5696,7 +5699,10 @@ class WindowManagerApp:
                 enabled=bool(obs_capture_sync.get()),
                 port=port,
                 password=obs_websocket_password.get(),
-                source_name=obs_game_capture_source.get(),
+                scene_name=obs_capture_scene.get(),
+                source_prefix=obs_capture_source_prefix.get(),
+                capture_cursor=bool(obs_capture_cursor.get()),
+                force_sdr=bool(obs_capture_force_sdr.get()),
             ).normalized()
 
         def test_obs_connection() -> None:
@@ -6073,7 +6079,7 @@ class WindowManagerApp:
         obs_sync_section.columnconfigure(1, weight=1)
         TtkCheckbutton(
             obs_sync_section,
-            text=tr("Synchroniser la Capture de jeu OBS avec le client Dofus actif"),
+            text=tr("Afficher automatiquement dans OBS le client Dofus actif"),
             variable=obs_capture_sync,
         ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 6))
         TtkLabel(obs_sync_section, text=tr("Hôte OBS")).grid(
@@ -6094,25 +6100,43 @@ class WindowManagerApp:
             textvariable=obs_websocket_port,
             width=8,
         ).grid(row=2, column=1, sticky="w", pady=3)
-        TtkLabel(obs_sync_section, text=tr("Source Capture de jeu")).grid(
+        TtkLabel(obs_sync_section, text=tr("Scène OBS gérée par DWM")).grid(
             row=3, column=0, sticky="w", padx=(0, 12), pady=3
         )
         TtkEntry(
             obs_sync_section,
-            textvariable=obs_game_capture_source,
+            textvariable=obs_capture_scene,
             width=36,
         ).grid(row=3, column=1, sticky="ew", pady=3)
-        TtkLabel(obs_sync_section, text=tr("Mot de passe OBS")).grid(
+        TtkLabel(obs_sync_section, text=tr("Préfixe des captures")).grid(
             row=4, column=0, sticky="w", padx=(0, 12), pady=3
+        )
+        TtkEntry(
+            obs_sync_section,
+            textvariable=obs_capture_source_prefix,
+            width=36,
+        ).grid(row=4, column=1, sticky="ew", pady=3)
+        TtkLabel(obs_sync_section, text=tr("Mot de passe OBS")).grid(
+            row=5, column=0, sticky="w", padx=(0, 12), pady=3
         )
         TtkEntry(
             obs_sync_section,
             textvariable=obs_websocket_password,
             show="•",
             width=36,
-        ).grid(row=4, column=1, sticky="ew", pady=3)
+        ).grid(row=5, column=1, sticky="ew", pady=3)
+        TtkCheckbutton(
+            obs_sync_section,
+            text=tr("Capturer le curseur dans les fenêtres Dofus"),
+            variable=obs_capture_cursor,
+        ).grid(row=6, column=0, columnspan=2, sticky="w", pady=(5, 2))
+        TtkCheckbutton(
+            obs_sync_section,
+            text=tr("Forcer le SDR pour ces captures"),
+            variable=obs_capture_force_sdr,
+        ).grid(row=7, column=0, columnspan=2, sticky="w", pady=2)
         test_row = TtkFrame(obs_sync_section)
-        test_row.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(7, 2))
+        test_row.grid(row=8, column=0, columnspan=2, sticky="ew", pady=(7, 2))
         TtkButton(
             test_row,
             text=tr("Tester la connexion OBS"),
@@ -6126,13 +6150,13 @@ class WindowManagerApp:
         TtkLabel(
             obs_sync_section,
             text=tr(
-                "Dans OBS, créez une Capture de jeu portant exactement ce nom et choisissez "
-                "« Capturer la fenêtre au premier plan via un raccourci clavier ». "
-                "DWM déclenchera uniquement le raccourci de cette source quand un client Dofus prend le focus."
+                "DWM crée automatiquement une Capture de fenêtre persistante par client détecté dans cette scène, "
+                "sans limite fixe de 8 clients. Une nouvelle capture n’est créée que lorsqu’un client supplémentaire "
+                "apparaît ; pendant les rotations, DWM change uniquement la visibilité des captures déjà initialisées."
             ),
             style="Muted.TLabel",
             wraplength=560,
-        ).grid(row=6, column=0, columnspan=2, sticky="w", pady=(5, 0))
+        ).grid(row=9, column=0, columnspan=2, sticky="w", pady=(5, 0))
 
         overlay_content = TtkLabelFrame(
             in_game_display,
@@ -6475,11 +6499,12 @@ class WindowManagerApp:
                     parent=win,
                 )
                 return
-            obs_source_value = obs_game_capture_source.get().strip()
-            if obs_capture_sync.get() and not obs_source_value:
+            obs_scene_value = obs_capture_scene.get().strip()
+            obs_prefix_value = obs_capture_source_prefix.get().strip()
+            if obs_capture_sync.get() and (not obs_scene_value or not obs_prefix_value):
                 messagebox.showerror(
                     tr("OBS"),
-                    tr("Indiquez le nom de la source Capture de jeu OBS."),
+                    tr("Indiquez un nom de scène OBS et un préfixe de capture."),
                     parent=win,
                 )
                 return
@@ -6537,17 +6562,26 @@ class WindowManagerApp:
             self.settings.obs_capture_sync_enabled = bool(obs_capture_sync.get())
             self.settings.obs_websocket_port = obs_port_value
             self.settings.obs_websocket_password = obs_websocket_password.get()
-            self.settings.obs_game_capture_source = (
-                obs_source_value or "[Dofus] Client actif"
+            self.settings.obs_capture_scene = (
+                obs_scene_value or "[DWM] Dofus Active"
             )
+            self.settings.obs_capture_source_prefix = (
+                obs_prefix_value or "[DWM] Dofus Capture"
+            )
+            self.settings.obs_capture_cursor = bool(obs_capture_cursor.get())
+            self.settings.obs_capture_force_sdr = bool(obs_capture_force_sdr.get())
             self.obs_capture_bridge.configure(
                 OBSActiveCaptureConfig(
                     enabled=self.settings.obs_capture_sync_enabled,
                     port=self.settings.obs_websocket_port,
                     password=self.settings.obs_websocket_password,
-                    source_name=self.settings.obs_game_capture_source,
+                    scene_name=self.settings.obs_capture_scene,
+                    source_prefix=self.settings.obs_capture_source_prefix,
+                    capture_cursor=self.settings.obs_capture_cursor,
+                    force_sdr=self.settings.obs_capture_force_sdr,
                 )
             )
+            self._sync_obs_window_pool(refresh_all=True)
             self.settings.swap_notification_enabled = bool(swap_notification.get())
             selected_position = swap_position.get().strip()
             self.settings.swap_notification_anchor = next(
