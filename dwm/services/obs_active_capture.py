@@ -215,7 +215,10 @@ class OBSActiveCaptureBridge:
 
     @staticmethod
     def _send(client, request: str, data: dict[str, object] | None = None) -> dict[str, object]:
-        response = client.send(request, data or {}, raw=True)
+        if data is None:
+            response = client.send(request, raw=True)
+        else:
+            response = client.send(request, data, raw=True)
         return response if isinstance(response, dict) else {}
 
     def _ensure_scene(self, client, config: OBSActiveCaptureConfig) -> None:
@@ -392,10 +395,14 @@ class OBSActiveCaptureBridge:
         active_hwnd: int | None,
     ) -> int | None:
         if not active_hwnd:
-            return self._visible_slot
+            if self._visible_slot in self._session_by_slot:
+                return self._visible_slot
+            return None
         active = windows.get(active_hwnd)
         if active is None:
-            return self._visible_slot
+            if self._visible_slot in self._session_by_slot:
+                return self._visible_slot
+            return None
         return self._slot_by_session.get(active.session_id)
 
     def _set_visibility(
