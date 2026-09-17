@@ -79,6 +79,7 @@ from .services.obs_active_capture import (
     OBSActiveCaptureConfig,
     probe_obs_connection,
 )
+from .services.window_telemetry import WindowTelemetry, collect_window_telemetry
 from .services.streamdeck_bridge import StreamDeckBridge
 from .services.streamdeck_installer import open_streamdeck_plugin
 from .services.streamdeck_health import (
@@ -506,6 +507,7 @@ class WindowManagerApp:
         self._display_simulation_ui: OverlayUI | None = None
         self.rotation_index: int = 0
         self._active_game_hwnd: int | None = None
+        self._window_telemetry: dict[int, WindowTelemetry] = {}
         self._pending_rotation_delta = 0
         self._rotation_request_job: str | None = None
         self.attention_state = WindowAttentionState()
@@ -572,7 +574,10 @@ class WindowManagerApp:
                 enabled=self.settings.obs_capture_sync_enabled,
                 port=self.settings.obs_websocket_port,
                 password=self.settings.obs_websocket_password,
-                source_name=self.settings.obs_game_capture_source,
+                scene_name=self.settings.obs_capture_scene,
+                source_prefix=self.settings.obs_capture_source_prefix,
+                capture_cursor=self.settings.obs_capture_cursor,
+                force_sdr=self.settings.obs_capture_force_sdr,
             )
         )
 
@@ -2338,7 +2343,7 @@ class WindowManagerApp:
         elif previous_hwnd != hwnd:
             self._refresh_focus_views()
         if previous_hwnd != hwnd:
-            self._schedule_obs_active_capture(hwnd)
+            self._sync_obs_window_pool(refresh_hwnds=(hwnd,))
         if not notify or not self.settings.swap_notification_enabled:
             return
         window = self._all_windows.get(hwnd)
@@ -2362,27 +2367,47 @@ class WindowManagerApp:
             show_badge=self.settings.show_popup_badges,
         )
 
-    def _schedule_obs_active_capture(self, hwnd: int) -> None:
+    def _sync_obs_window_pool(
+        self,
+        *,
+        refresh_all: bool = False,
+        refresh_hwnds: tuple[int, ...] = (),
+    ) -> None:
         if not bool(getattr(self.settings, "obs_capture_sync_enabled", False)):
             return
         bridge = getattr(self, "obs_capture_bridge", None)
-        root = getattr(self, "root", None)
-        if bridge is None or root is None:
+        if bridge is None:
             return
 
-        def trigger_if_still_focused() -> None:
-            if self._stop_event.is_set() or self._active_game_hwnd != hwnd:
-                return
-            try:
-                if get_foreground_hwnd() != hwnd:
-                    return
-            except Exception:
-                return
-            bridge.trigger_capture()
+        current_hwnds = set(self._all_windows)
+        for stale_hwnd in tuple(self._window_telemetry):
+            if stale_hwnd not in current_hwnds:
+                self._window_telemetry.pop(stale_hwnd, None)
 
-        # Let Windows settle the foreground switch before asking OBS Game Capture
-        # to sample GetForegroundWindow(). Rapid rotations naturally coalesce.
-        root.after(60, trigger_if_still_focused)
+        targets = current_hwnds if refresh_all else {
+            int(hwnd) for hwnd in refresh_hwnds if int(hwnd) in current_hwnds
+        }
+        if not self._window_telemetry and current_hwnds:
+            targets = current_hwnds
+
+        for target_hwnd in targets:
+            window = self._all_windows.get(target_hwnd)
+            if window is None:
+                continue
+            try:
+                self._window_telemetry[target_hwnd] = collect_window_telemetry(
+                    window,
+                    self.game_mode,
+                )
+            except Exception as exc:
+                self._log(f"Télémétrie fenêtre {target_hwnd} indisponible : {exc}")
+
+        snapshots = [
+            self._window_telemetry[hwnd]
+            for hwnd in self._all_windows
+            if hwnd in self._window_telemetry
+        ]
+        bridge.sync_windows(snapshots, self._active_game_hwnd)
 
     def _focus_hwnd_measured(self, hwnd: int) -> None:
         started_at = time.monotonic()
