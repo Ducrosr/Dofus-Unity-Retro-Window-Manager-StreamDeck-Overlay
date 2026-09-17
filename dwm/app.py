@@ -5441,17 +5441,6 @@ class WindowManagerApp:
         )
         rotation_overlay = BooleanVar(value=bool(self.settings.rotation_overlay_enabled))
         overlay_opacity = StringVar(value=str(self.settings.rotation_overlay_opacity))
-        monitor_labels = {"": tr("Automatique · position courante")}
-        for number, monitor in enumerate(list_monitors(self.root), start=1):
-            left, top, right, bottom = monitor.area
-            monitor_labels[monitor.identity] = tr("Écran {number} · {width} × {height}", number=number, width=right-left, height=bottom-top)
-        if self.settings.rotation_overlay_monitor not in monitor_labels:
-            monitor_labels[self.settings.rotation_overlay_monitor] = tr("Écran enregistré indisponible")
-        overlay_monitor = StringVar(value=monitor_labels[self.settings.rotation_overlay_monitor])
-        anchor_labels = {"free": tr("Position libre"), **{key: tr(value) for key, value in SWAP_POSITION_LABELS.items()}}
-        overlay_anchor = StringVar(value=anchor_labels.get(self.settings.rotation_overlay_anchor, anchor_labels["free"]))
-        overlay_x = StringVar(value=str(self.settings.rotation_overlay_x))
-        overlay_y = StringVar(value=str(self.settings.rotation_overlay_y))
         overlay_locked = BooleanVar(value=bool(self.settings.rotation_overlay_locked))
         overlay_show_title = BooleanVar(
             value=bool(self.settings.rotation_overlay_show_title)
@@ -5459,9 +5448,6 @@ class WindowManagerApp:
         overlay_show_reorder_buttons = BooleanVar(
             value=bool(self.settings.rotation_overlay_show_reorder_buttons)
         )
-        overlay_width = StringVar(value=str(self.settings.rotation_overlay_width))
-        overlay_auto_width = BooleanVar(value=bool(self.settings.rotation_overlay_auto_width))
-        overlay_height = StringVar(value=str(self.settings.rotation_overlay_height))
         overlay_orientation = StringVar(
             value=(
                 "Horizontal"
@@ -5546,7 +5532,6 @@ class WindowManagerApp:
             try:
                 if not window.winfo_exists():
                     return tr("Fenêtre indisponible")
-                window.update_idletasks()
                 x = int(window.winfo_x())
                 y = int(window.winfo_y())
                 width = max(1, int(window.winfo_width()))
@@ -5557,7 +5542,7 @@ class WindowManagerApp:
             monitors = list_monitors(self.root)
             if not monitors:
                 return tr(
-                    "X {x} · Y {y} · {width} × {height} px",
+                    "Position X {x} / Y {y} · Dim {width} px × {height} px",
                     x=x,
                     y=y,
                     width=width,
@@ -5577,7 +5562,7 @@ class WindowManagerApp:
             monitor_number = monitors.index(monitor) + 1
             left, top, _right, _bottom = monitor.area
             return tr(
-                "Écran {number} · X {x} · Y {y} · {width} × {height} px",
+                "Écran {number} · Position X {x} / Y {y} · Dim {width} px × {height} px",
                 number=monitor_number,
                 x=x - left,
                 y=y - top,
@@ -5697,7 +5682,6 @@ class WindowManagerApp:
         def load_display_preset_into_form() -> None:
             preset_id = DISPLAY_PRESET_IDS[preset_combo.current()]
             values = display_preset_values(preset_id)
-            overlay_auto_width.set(bool(values["rotation_overlay_auto_width"]))
             overlay_show_title.set(bool(values["rotation_overlay_show_title"]))
             overlay_show_reorder_buttons.set(
                 bool(values["rotation_overlay_show_reorder_buttons"])
@@ -5903,15 +5887,6 @@ class WindowManagerApp:
             textvariable=overlay_orientation,
             width=11,
         ).pack(side="left")
-        monitor_section = TtkLabelFrame(appearance_content, text=tr("Écran et ancrage de l’overlay"), padding=10)
-        monitor_section.pack(fill="x", pady=(0, 8))
-        monitor_section.columnconfigure(1, weight=1)
-        TtkLabel(monitor_section, text=tr("Écran de l’overlay")).grid(row=0, column=0, sticky="w", padx=(0, 12), pady=3)
-        Combobox(monitor_section, textvariable=overlay_monitor, values=tuple(monitor_labels.values()), state="readonly", width=32).grid(row=0, column=1, sticky="ew", pady=3)
-        TtkLabel(monitor_section, text=tr("Ancrage de l’overlay")).grid(row=1, column=0, sticky="w", padx=(0, 12), pady=3)
-        Combobox(monitor_section, textvariable=overlay_anchor, values=tuple(anchor_labels.values()), state="readonly", width=32).grid(row=1, column=1, sticky="ew", pady=3)
-        TtkLabel(monitor_section, text=tr("Choisissez Position libre pour déplacer l’overlay à la souris. Un écran absent est remplacé temporairement par l’écran principal."), wraplength=530).grid(row=2, column=0, columnspan=2, sticky="w", pady=(5, 0))
-
         obs_geometry_section = TtkLabelFrame(
             appearance_content,
             text=tr("Repères OBS en direct"),
@@ -5947,30 +5922,6 @@ class WindowManagerApp:
             wraplength=530,
         ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(5, 0))
         refresh_obs_geometry()
-
-        TtkLabel(in_game_display, text="Position X / Y").grid(
-            row=6, column=0, sticky="w", padx=(22, 12), pady=3
-        )
-        position_row = TtkFrame(in_game_display)
-        position_row.grid(row=6, column=1, sticky="w", pady=3)
-        Spinbox(position_row, from_=-10000, to=10000, textvariable=overlay_x, width=7).pack(side="left")
-        TtkLabel(position_row, text=" / ", style="Muted.TLabel").pack(side="left")
-        Spinbox(position_row, from_=-10000, to=10000, textvariable=overlay_y, width=7).pack(side="left")
-
-        TtkLabel(in_game_display, text="Largeur manuelle / hauteur").grid(
-            row=7, column=0, sticky="w", padx=(22, 12), pady=3
-        )
-        size_row = TtkFrame(in_game_display)
-        size_row.grid(row=7, column=1, sticky="w", pady=3)
-        Spinbox(size_row, from_=80, to=1800, textvariable=overlay_width, width=7).pack(side="left")
-        TtkLabel(size_row, text=" / ", style="Muted.TLabel").pack(side="left")
-        Spinbox(size_row, from_=0, to=1600, textvariable=overlay_height, width=7).pack(side="left")
-        TtkLabel(size_row, text=" px · hauteur 0 = automatique", style="Muted.TLabel").pack(side="left")
-        TtkCheckbutton(
-            in_game_display,
-            text="Adapter automatiquement la largeur de l’overlay au contenu",
-            variable=overlay_auto_width,
-        ).grid(row=8, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=(2, 4))
 
         overlay_content = TtkLabelFrame(
             in_game_display,
@@ -6290,19 +6241,6 @@ class WindowManagerApp:
                 default_theme_for_mode(self.game_mode),
             )
             try:
-                overlay_x_value = int(overlay_x.get())
-                overlay_y_value = int(overlay_y.get())
-                overlay_width_value = max(80, min(1800, int(overlay_width.get())))
-                requested_height = int(overlay_height.get())
-                overlay_height_value = 0 if requested_height <= 0 else max(80, min(1600, requested_height))
-            except ValueError:
-                messagebox.showerror(
-                    "Géométrie de l’overlay",
-                    "Les positions et dimensions de l’overlay doivent être des nombres entiers.",
-                    parent=win,
-                )
-                return
-            try:
                 self._apply_runtime_theme(new_theme)
             except Exception:
                 messagebox.showwarning("Thème", f"Thème non disponible: {new_theme}")
@@ -6389,13 +6327,6 @@ class WindowManagerApp:
             }
             self.settings.rotation_overlay_enabled = bool(rotation_overlay.get())
             self.settings.rotation_overlay_opacity = clamp_overlay_opacity(overlay_opacity.get())
-            self.settings.rotation_overlay_monitor = next((key for key, label in monitor_labels.items() if label == overlay_monitor.get()), "")
-            self.settings.rotation_overlay_anchor = next((key for key, label in anchor_labels.items() if label == overlay_anchor.get()), "free")
-            self.settings.rotation_overlay_x = overlay_x_value
-            self.settings.rotation_overlay_y = overlay_y_value
-            self.settings.rotation_overlay_width = overlay_width_value
-            self.settings.rotation_overlay_auto_width = bool(overlay_auto_width.get())
-            self.settings.rotation_overlay_height = overlay_height_value
             self.settings.rotation_overlay_orientation = normalize_overlay_orientation(
                 overlay_orientation.get()
             )
