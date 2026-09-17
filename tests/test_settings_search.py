@@ -13,12 +13,13 @@ class SettingsSearchTests(unittest.TestCase):
         self.entries = [
             SettingSearchEntry("Opacité", "Apparence / Overlay de rotation", "appearance", object()),
             SettingSearchEntry("Opacité", "Apparence / Notification", "appearance", object()),
+            SettingSearchEntry("Port WebSocket", "OBS / Connexion OBS", "obs", object()),
             SettingSearchEntry("Fenêtre 1", "Raccourcis / Accès directs", "shortcuts", object()),
         ]
 
     def test_accents_case_and_word_order_are_ignored(self):
         self.assertEqual(find_settings(self.entries, "OVERLAY opacite"), self.entries[:1])
-        self.assertEqual(find_settings(self.entries, "fenetre raccourcis"), self.entries[2:])
+        self.assertEqual(find_settings(self.entries, "fenetre raccourcis"), self.entries[3:])
 
     def test_empty_and_missing_queries(self):
         for query in ("", "   ", "---", "inexistant", "overlay notification"):
@@ -26,7 +27,10 @@ class SettingsSearchTests(unittest.TestCase):
 
     def test_all_tabs_and_partial_words_are_searched(self):
         self.assertEqual(len(find_settings(self.entries, "opac")), 2)
-        self.assertEqual(find_settings(self.entries, "acces"), self.entries[2:])
+        self.assertEqual(find_settings(self.entries, "acces"), self.entries[3:])
+
+    def test_obs_tab_is_searchable(self):
+        self.assertEqual(find_settings(self.entries, "websocket obs"), self.entries[2:3])
 
     def test_direct_label_matches_rank_before_context_matches(self):
         entries = [SettingSearchEntry("Portraits", "Apparence / Overlay", "a", None),
