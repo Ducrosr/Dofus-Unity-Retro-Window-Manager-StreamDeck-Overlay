@@ -5496,7 +5496,8 @@ class WindowManagerApp:
         game_hotkeys = BooleanVar(value=self.settings.hotkey_scope == "game")
         fixed_slots = BooleanVar(value=self.settings.fixed_character_slots)
         settings_height = max(560, min(820, self.root.winfo_screenheight() - 120))
-        win.geometry(f"650x{settings_height}")
+        win.geometry(f"720x{settings_height}")
+        win.minsize(680, 560)
 
         localized_overlay_labels = {field: tr(label) for field, label in OVERLAY_FIELD_LABELS.items()}
         localized_position_labels = {anchor: tr(label) for anchor, label in SWAP_POSITION_LABELS.items()}
@@ -5660,6 +5661,7 @@ class WindowManagerApp:
 
         general_content = create_scrollable_tab("Général")
         appearance_content = create_scrollable_tab("Apparence")
+        obs_content = create_scrollable_tab("OBS")
         shortcuts_content = create_scrollable_tab("Raccourcis")
 
         def live_obs_geometry(window) -> str:
@@ -6066,9 +6068,114 @@ class WindowManagerApp:
             textvariable=overlay_orientation,
             width=11,
         ).pack(side="left")
+        obs_connection_section = TtkLabelFrame(
+            obs_content,
+            text=tr("Connexion OBS"),
+            padding=10,
+        )
+        obs_connection_section.pack(fill="x", pady=(0, 8))
+        obs_connection_section.columnconfigure(1, weight=1)
+        TtkLabel(obs_connection_section, text=tr("Hôte OBS")).grid(
+            row=0, column=0, sticky="w", padx=(0, 12), pady=3
+        )
+        TtkLabel(
+            obs_connection_section,
+            text="127.0.0.1",
+            style="Muted.TLabel",
+        ).grid(row=0, column=1, sticky="w", pady=3)
+        TtkLabel(obs_connection_section, text=tr("Port WebSocket")).grid(
+            row=1, column=0, sticky="w", padx=(0, 12), pady=3
+        )
+        Spinbox(
+            obs_connection_section,
+            from_=1,
+            to=65535,
+            textvariable=obs_websocket_port,
+            width=8,
+        ).grid(row=1, column=1, sticky="w", pady=3)
+        TtkLabel(obs_connection_section, text=tr("Mot de passe OBS")).grid(
+            row=2, column=0, sticky="w", padx=(0, 12), pady=3
+        )
+        TtkEntry(
+            obs_connection_section,
+            textvariable=obs_websocket_password,
+            show="•",
+            width=36,
+        ).grid(row=2, column=1, sticky="ew", pady=3)
+        test_row = TtkFrame(obs_connection_section)
+        test_row.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(7, 2))
+        TtkButton(
+            test_row,
+            text=tr("Tester la connexion OBS"),
+            command=test_obs_connection,
+        ).pack(side="left")
+        TtkLabel(
+            test_row,
+            textvariable=obs_connection_status,
+            style="Muted.TLabel",
+        ).pack(side="left", padx=(10, 0))
+        TtkLabel(
+            obs_connection_section,
+            text=tr(
+                "OBS WebSocket reste limité à l’hôte local. DWM ne modifie que les scènes et sources qu’il gère."
+            ),
+            style="Muted.TLabel",
+            wraplength=600,
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(5, 0))
+
+        obs_capture_section = TtkLabelFrame(
+            obs_content,
+            text=tr("Captures automatiques"),
+            padding=10,
+        )
+        obs_capture_section.pack(fill="x", pady=(0, 8))
+        obs_capture_section.columnconfigure(1, weight=1)
+        TtkCheckbutton(
+            obs_capture_section,
+            text=tr("Afficher automatiquement dans OBS le client Dofus actif"),
+            variable=obs_capture_sync,
+        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 6))
+        TtkLabel(obs_capture_section, text=tr("Scène OBS gérée par DWM")).grid(
+            row=1, column=0, sticky="w", padx=(0, 12), pady=3
+        )
+        TtkEntry(
+            obs_capture_section,
+            textvariable=obs_capture_scene,
+            width=36,
+        ).grid(row=1, column=1, sticky="ew", pady=3)
+        TtkLabel(obs_capture_section, text=tr("Préfixe des captures")).grid(
+            row=2, column=0, sticky="w", padx=(0, 12), pady=3
+        )
+        TtkEntry(
+            obs_capture_section,
+            textvariable=obs_capture_source_prefix,
+            width=36,
+        ).grid(row=2, column=1, sticky="ew", pady=3)
+        TtkCheckbutton(
+            obs_capture_section,
+            text=tr("Capturer le curseur dans les fenêtres Dofus"),
+            variable=obs_capture_cursor,
+        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(5, 2))
+        TtkCheckbutton(
+            obs_capture_section,
+            text=tr("Forcer le SDR pour ces captures"),
+            variable=obs_capture_force_sdr,
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=2)
+        TtkLabel(
+            obs_capture_section,
+            text=tr(
+                "DWM crée automatiquement une Capture de fenêtre persistante par client détecté dans cette scène, "
+                "sans limite fixe de 8 clients. Les captures des clients ouverts restent actives en permanence ; "
+                "pendant les rotations, DWM ne change que leur opacité afin d’éviter une réacquisition WGC. "
+                "L’overlay et la popup DWM sont aussi capturés automatiquement et maintenus au-dessus des fenêtres Dofus."
+            ),
+            style="Muted.TLabel",
+            wraplength=600,
+        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(5, 0))
+
         obs_geometry_section = TtkLabelFrame(
-            appearance_content,
-            text=tr("Repères OBS en direct"),
+            obs_content,
+            text=tr("Repères DWM → OBS"),
             padding=10,
         )
         obs_geometry_section.pack(fill="x", pady=(0, 8))
@@ -6095,101 +6202,12 @@ class WindowManagerApp:
             obs_geometry_section,
             text=tr(
                 "X / Y sont relatifs au coin supérieur gauche de l’écran contenant la fenêtre. "
-                "Les valeurs et dimensions sont actualisées automatiquement."
+                "DWM projette ensuite automatiquement ces coordonnées dans le canvas OBS."
             ),
             style="Muted.TLabel",
-            wraplength=530,
+            wraplength=600,
         ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(5, 0))
         refresh_obs_geometry()
-
-        obs_sync_section = TtkLabelFrame(
-            appearance_content,
-            text=tr("Synchronisation OBS"),
-            padding=10,
-        )
-        obs_sync_section.pack(fill="x", pady=(0, 8))
-        obs_sync_section.columnconfigure(1, weight=1)
-        TtkCheckbutton(
-            obs_sync_section,
-            text=tr("Afficher automatiquement dans OBS le client Dofus actif"),
-            variable=obs_capture_sync,
-        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 6))
-        TtkLabel(obs_sync_section, text=tr("Hôte OBS")).grid(
-            row=1, column=0, sticky="w", padx=(0, 12), pady=3
-        )
-        TtkLabel(
-            obs_sync_section,
-            text="127.0.0.1",
-            style="Muted.TLabel",
-        ).grid(row=1, column=1, sticky="w", pady=3)
-        TtkLabel(obs_sync_section, text=tr("Port WebSocket")).grid(
-            row=2, column=0, sticky="w", padx=(0, 12), pady=3
-        )
-        Spinbox(
-            obs_sync_section,
-            from_=1,
-            to=65535,
-            textvariable=obs_websocket_port,
-            width=8,
-        ).grid(row=2, column=1, sticky="w", pady=3)
-        TtkLabel(obs_sync_section, text=tr("Scène OBS gérée par DWM")).grid(
-            row=3, column=0, sticky="w", padx=(0, 12), pady=3
-        )
-        TtkEntry(
-            obs_sync_section,
-            textvariable=obs_capture_scene,
-            width=36,
-        ).grid(row=3, column=1, sticky="ew", pady=3)
-        TtkLabel(obs_sync_section, text=tr("Préfixe des captures")).grid(
-            row=4, column=0, sticky="w", padx=(0, 12), pady=3
-        )
-        TtkEntry(
-            obs_sync_section,
-            textvariable=obs_capture_source_prefix,
-            width=36,
-        ).grid(row=4, column=1, sticky="ew", pady=3)
-        TtkLabel(obs_sync_section, text=tr("Mot de passe OBS")).grid(
-            row=5, column=0, sticky="w", padx=(0, 12), pady=3
-        )
-        TtkEntry(
-            obs_sync_section,
-            textvariable=obs_websocket_password,
-            show="•",
-            width=36,
-        ).grid(row=5, column=1, sticky="ew", pady=3)
-        TtkCheckbutton(
-            obs_sync_section,
-            text=tr("Capturer le curseur dans les fenêtres Dofus"),
-            variable=obs_capture_cursor,
-        ).grid(row=6, column=0, columnspan=2, sticky="w", pady=(5, 2))
-        TtkCheckbutton(
-            obs_sync_section,
-            text=tr("Forcer le SDR pour ces captures"),
-            variable=obs_capture_force_sdr,
-        ).grid(row=7, column=0, columnspan=2, sticky="w", pady=2)
-        test_row = TtkFrame(obs_sync_section)
-        test_row.grid(row=8, column=0, columnspan=2, sticky="ew", pady=(7, 2))
-        TtkButton(
-            test_row,
-            text=tr("Tester la connexion OBS"),
-            command=test_obs_connection,
-        ).pack(side="left")
-        TtkLabel(
-            test_row,
-            textvariable=obs_connection_status,
-            style="Muted.TLabel",
-        ).pack(side="left", padx=(10, 0))
-        TtkLabel(
-            obs_sync_section,
-            text=tr(
-                "DWM crée automatiquement une Capture de fenêtre persistante par client détecté dans cette scène, "
-                "sans limite fixe de 8 clients. Les captures des clients ouverts restent actives en permanence ; "
-                "pendant les rotations, DWM ne change que leur opacité afin d’éviter une réacquisition WGC. "
-                "L’overlay et la popup DWM sont aussi capturés automatiquement et maintenus au-dessus des fenêtres Dofus."
-            ),
-            style="Muted.TLabel",
-            wraplength=560,
-        ).grid(row=9, column=0, columnspan=2, sticky="w", pady=(5, 0))
 
         overlay_content = TtkLabelFrame(
             in_game_display,
