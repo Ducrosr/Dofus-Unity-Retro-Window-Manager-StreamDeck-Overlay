@@ -5440,6 +5440,12 @@ class WindowManagerApp:
             value=localized_overlay_labels.get(notification_layout["line2_right"], tr("Alias"))
         )
         rotation_overlay = BooleanVar(value=bool(self.settings.rotation_overlay_enabled))
+        overlay_auto_fit = BooleanVar(
+            value=bool(
+                self.settings.rotation_overlay_auto_width
+                and self.settings.rotation_overlay_height <= 0
+            )
+        )
         overlay_opacity = StringVar(value=str(self.settings.rotation_overlay_opacity))
         overlay_locked = BooleanVar(value=bool(self.settings.rotation_overlay_locked))
         overlay_show_title = BooleanVar(
@@ -5872,6 +5878,11 @@ class WindowManagerApp:
             text="Afficher en permanence la rotation",
             variable=rotation_overlay,
         ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(8, 3))
+        TtkCheckbutton(
+            in_game_display,
+            text=tr("Adapter automatiquement l’overlay en largeur et en hauteur"),
+            variable=overlay_auto_fit,
+        ).grid(row=6, column=0, columnspan=2, sticky="w", padx=(22, 0), pady=(2, 4))
         TtkLabel(in_game_display, text="Opacité").grid(
             row=5, column=0, sticky="w", padx=(22, 12), pady=3
         )
@@ -6327,6 +6338,24 @@ class WindowManagerApp:
             }
             self.settings.rotation_overlay_enabled = bool(rotation_overlay.get())
             self.settings.rotation_overlay_opacity = clamp_overlay_opacity(overlay_opacity.get())
+            if overlay_auto_fit.get():
+                self.settings.rotation_overlay_auto_width = True
+                self.settings.rotation_overlay_height = 0
+            else:
+                overlay_window = getattr(self.overlay_ui, "persistent_window", None)
+                try:
+                    current_width = max(80, min(1800, int(overlay_window.winfo_width())))
+                    current_height = max(80, min(1600, int(overlay_window.winfo_height())))
+                except Exception:
+                    current_width = self.settings.rotation_overlay_width
+                    current_height = (
+                        self.settings.rotation_overlay_height
+                        if self.settings.rotation_overlay_height > 0
+                        else 80
+                    )
+                self.settings.rotation_overlay_width = current_width
+                self.settings.rotation_overlay_height = current_height
+                self.settings.rotation_overlay_auto_width = False
             self.settings.rotation_overlay_orientation = normalize_overlay_orientation(
                 overlay_orientation.get()
             )
