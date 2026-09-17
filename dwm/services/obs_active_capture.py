@@ -4,8 +4,14 @@ import re
 import threading
 from dataclasses import dataclass
 
-
-from .window_telemetry import WindowTelemetry
+from ..models import GameWindow
+from .obs_overlay_capture import (
+    OVERLAY_WINDOW_TITLE,
+    POPUP_IDLE_COLOR,
+    POPUP_WINDOW_TITLE,
+)
+from .win32_enum import enum_top_level_windows
+from .window_telemetry import WindowTelemetry, collect_window_telemetry
 
 
 try:
@@ -23,6 +29,12 @@ WINDOW_CAPTURE_METHOD_WGC = 2
 WINDOW_PRIORITY_TITLE = 1
 VISIBILITY_FILTER_NAME = "[DWM] Visibility"
 VISIBILITY_FILTER_KIND = "color_filter_v2"
+OVERLAY_SOURCE_NAME = "[DWM] Overlay"
+POPUP_SOURCE_NAME = "[DWM] Focus Popup"
+POPUP_COLOR_KEY_FILTER_NAME = "[DWM] Popup Color Key"
+POPUP_OPACITY_FILTER_NAME = "[DWM] Popup Opacity"
+POPUP_COLOR_KEY_FILTER_KIND = "color_key_filter_v2"
+POPUP_OPACITY_FILTER_KIND = "color_filter_v2"
 
 
 @dataclass(frozen=True)
@@ -35,6 +47,7 @@ class OBSActiveCaptureConfig:
     source_prefix: str = DEFAULT_SOURCE_PREFIX
     capture_cursor: bool = False
     force_sdr: bool = False
+    popup_opacity: float = 0.88
 
     def normalized(self) -> "OBSActiveCaptureConfig":
         host = (self.host or DEFAULT_OBS_HOST).strip()
@@ -56,6 +69,7 @@ class OBSActiveCaptureConfig:
             source_prefix=(source_prefix or DEFAULT_SOURCE_PREFIX)[:220],
             capture_cursor=bool(self.capture_cursor),
             force_sdr=bool(self.force_sdr),
+            popup_opacity=max(0.0, min(1.0, float(self.popup_opacity))),
         )
 
 
@@ -80,12 +94,17 @@ def probe_obs_connection(config: OBSActiveCaptureConfig) -> tuple[bool, str]:
         return False, f"Connexion OBS impossible : {exc}"
 
 
-def _input_settings(window: WindowTelemetry, config: OBSActiveCaptureConfig) -> dict[str, object]:
+def _input_settings(
+    window: WindowTelemetry,
+    config: OBSActiveCaptureConfig,
+    *,
+    capture_cursor: bool | None = None,
+) -> dict[str, object]:
     return {
         "window": window.obs_window_selector,
         "method": WINDOW_CAPTURE_METHOD_WGC,
         "priority": WINDOW_PRIORITY_TITLE,
-        "cursor": bool(config.capture_cursor),
+        "cursor": bool(config.capture_cursor if capture_cursor is None else capture_cursor),
         "force_sdr": bool(config.force_sdr),
         "compatibility": False,
         "client_area": True,
@@ -126,6 +145,10 @@ class OBSActiveCaptureBridge:
         self._opacity_by_slot: dict[int, float] = {}
         self._enabled_slots: set[int] = set()
         self._visible_slot: int | None = None
+        self._interface_known_inputs: set[str] = set()
+        self._interface_item_ids: dict[str, int] = {}
+        self._interface_selectors: dict[str, str] = {}
+        self._popup_filters_ready = False
         self._obs_layout_ready = False
 
         self._thread = threading.Thread(
@@ -159,9 +182,11 @@ class OBSActiveCaptureBridge:
             capture_settings_changed = (
                 normalized.capture_cursor,
                 normalized.force_sdr,
+                normalized.popup_opacity,
             ) != (
                 self._config.capture_cursor,
                 self._config.force_sdr,
+                self._config.popup_opacity,
             )
             self._config = normalized
             if connection_changed:
@@ -203,6 +228,10 @@ class OBSActiveCaptureBridge:
         self._opacity_by_slot.clear()
         self._enabled_slots.clear()
         self._visible_slot = None
+        self._interface_known_inputs.clear()
+        self._interface_item_ids.clear()
+        self._interface_selectors.clear()
+        self._popup_filters_ready = False
         self._obs_layout_ready = False
 
     def _snapshot(self) -> tuple[OBSActiveCaptureConfig, dict[int, WindowTelemetry], int | None]:
@@ -292,6 +321,12 @@ class OBSActiveCaptureBridge:
             return
         self._ensure_scene(client, config)
         self._discover_existing_slots(client, config)
+        response = self._send(client, "GetInputList")
+        self._interface_known_inputs = {
+            str(entry.get("inputName") or "")
+            for entry in response.get("inputs", []) or []
+            if isinstance(entry, dict)
+        }
         self._visible_slot = None
         for _slot, item_id in sorted(self._item_id_by_slot.items()):
             self._send(
@@ -304,6 +339,310 @@ class OBSActiveCaptureBridge:
                 },
             )
         self._obs_layout_ready = True
+
+    @staticmethod
+    def _find_interface_window(title: str) -> WindowTelemetry | None:
+        for hwnd, window_title in enum_top_level_windows(
+            class_name=None,
+            visible_only=True,
+        ):
+            if window_title != title:
+                continue
+            try:
+                return collect_window_telemetry(
+                    GameWindow(
+                        hwnd=int(hwnd),
+                        title=window_title,
+                        pseudo="",
+                        character_class="",
+                    ),
+                    "dwm",
+                )
+            except Exception:
+                return None
+        return None
+
+    def _ensure_interface_capture(
+        self,
+        client,
+        config: OBSActiveCaptureConfig,
+        *,
+        source_name: str,
+        window: WindowTelemetry | None,
+    ) -> int | None:
+        item_id = self._interface_item_ids.get(source_name)
+        if window is None:
+            if item_id:
+                self._send(
+                    client,
+                    "SetSceneItemEnabled",
+                    {
+                        "sceneName": config.scene_name,
+                        "sceneItemId": item_id,
+                        "sceneItemEnabled": False,
+                    },
+                )
+            return item_id
+
+        settings = _input_settings(window, config, capture_cursor=False)
+        if source_name not in self._interface_known_inputs:
+            created = self._send(
+                client,
+                "CreateInput",
+                {
+                    "sceneName": config.scene_name,
+                    "inputName": source_name,
+                    "inputKind": WINDOW_CAPTURE_KIND,
+                    "inputSettings": settings,
+                    "sceneItemEnabled": True,
+                },
+            )
+            item_id = int(created.get("sceneItemId") or 0)
+            if not item_id:
+                raise RuntimeError(
+                    f"OBS n'a pas renvoyé d'identifiant pour {source_name}."
+                )
+            self._interface_known_inputs.add(source_name)
+            self._interface_item_ids[source_name] = item_id
+            self._interface_selectors[source_name] = window.obs_window_selector
+        else:
+            if not item_id:
+                try:
+                    existing = self._send(
+                        client,
+                        "GetSceneItemId",
+                        {
+                            "sceneName": config.scene_name,
+                            "sourceName": source_name,
+                        },
+                    )
+                    item_id = int(existing.get("sceneItemId") or 0)
+                except Exception:
+                    created_item = self._send(
+                        client,
+                        "CreateSceneItem",
+                        {
+                            "sceneName": config.scene_name,
+                            "sourceName": source_name,
+                            "sceneItemEnabled": True,
+                        },
+                    )
+                    item_id = int(created_item.get("sceneItemId") or 0)
+                if not item_id:
+                    raise RuntimeError(
+                        f"Impossible d'ajouter {source_name} à la scène OBS."
+                    )
+                self._interface_item_ids[source_name] = item_id
+
+            if self._interface_selectors.get(source_name) != window.obs_window_selector:
+                self._send(
+                    client,
+                    "SetInputSettings",
+                    {
+                        "inputName": source_name,
+                        "inputSettings": settings,
+                        "overlay": True,
+                    },
+                )
+                self._interface_selectors[source_name] = window.obs_window_selector
+
+            self._send(
+                client,
+                "SetSceneItemEnabled",
+                {
+                    "sceneName": config.scene_name,
+                    "sceneItemId": item_id,
+                    "sceneItemEnabled": True,
+                },
+            )
+
+        return item_id
+
+    def _ensure_popup_filters(
+        self,
+        client,
+        config: OBSActiveCaptureConfig,
+    ) -> None:
+        response = self._send(
+            client,
+            "GetSourceFilterList",
+            {"sourceName": POPUP_SOURCE_NAME},
+        )
+        filters = {
+            str(item.get("filterName") or ""): item
+            for item in response.get("filters", []) or []
+            if isinstance(item, dict)
+        }
+
+        color_key_settings = {
+            "key_color_type": "magenta",
+            "key_color": 0xFF00FF,
+            "similarity": 80,
+            "smoothness": 50,
+            "opacity": 1.0,
+        }
+        if POPUP_COLOR_KEY_FILTER_NAME not in filters:
+            self._send(
+                client,
+                "CreateSourceFilter",
+                {
+                    "sourceName": POPUP_SOURCE_NAME,
+                    "filterName": POPUP_COLOR_KEY_FILTER_NAME,
+                    "filterKind": POPUP_COLOR_KEY_FILTER_KIND,
+                    "filterSettings": color_key_settings,
+                },
+            )
+        else:
+            self._send(
+                client,
+                "SetSourceFilterEnabled",
+                {
+                    "sourceName": POPUP_SOURCE_NAME,
+                    "filterName": POPUP_COLOR_KEY_FILTER_NAME,
+                    "filterEnabled": True,
+                },
+            )
+            self._send(
+                client,
+                "SetSourceFilterSettings",
+                {
+                    "sourceName": POPUP_SOURCE_NAME,
+                    "filterName": POPUP_COLOR_KEY_FILTER_NAME,
+                    "filterSettings": color_key_settings,
+                    "overlay": True,
+                },
+            )
+
+        opacity_settings = {"opacity": float(config.popup_opacity)}
+        if POPUP_OPACITY_FILTER_NAME not in filters:
+            self._send(
+                client,
+                "CreateSourceFilter",
+                {
+                    "sourceName": POPUP_SOURCE_NAME,
+                    "filterName": POPUP_OPACITY_FILTER_NAME,
+                    "filterKind": POPUP_OPACITY_FILTER_KIND,
+                    "filterSettings": opacity_settings,
+                },
+            )
+        else:
+            self._send(
+                client,
+                "SetSourceFilterEnabled",
+                {
+                    "sourceName": POPUP_SOURCE_NAME,
+                    "filterName": POPUP_OPACITY_FILTER_NAME,
+                    "filterEnabled": True,
+                },
+            )
+            self._send(
+                client,
+                "SetSourceFilterSettings",
+                {
+                    "sourceName": POPUP_SOURCE_NAME,
+                    "filterName": POPUP_OPACITY_FILTER_NAME,
+                    "filterSettings": opacity_settings,
+                    "overlay": True,
+                },
+            )
+
+        # Preserve the manually validated processing order: key removal first,
+        # opacity correction second.
+        self._send(
+            client,
+            "SetSourceFilterIndex",
+            {
+                "sourceName": POPUP_SOURCE_NAME,
+                "filterName": POPUP_COLOR_KEY_FILTER_NAME,
+                "filterIndex": 0,
+            },
+        )
+        self._send(
+            client,
+            "SetSourceFilterIndex",
+            {
+                "sourceName": POPUP_SOURCE_NAME,
+                "filterName": POPUP_OPACITY_FILTER_NAME,
+                "filterIndex": 1,
+            },
+        )
+        self._popup_filters_ready = True
+
+    def _ensure_interface_order(
+        self,
+        client,
+        config: OBSActiveCaptureConfig,
+        *,
+        overlay_item_id: int | None,
+        popup_item_id: int | None,
+    ) -> None:
+        if not overlay_item_id and not popup_item_id:
+            return
+        response = self._send(
+            client,
+            "GetSceneItemList",
+            {"sceneName": config.scene_name},
+        )
+        scene_items = response.get("sceneItems", []) or []
+        if not scene_items:
+            return
+        top_index = len(scene_items) - 1
+
+        # obs-websocket defines sceneItemIndex 0 as the bottom layer. Move the
+        # overlay to the top first, then the popup to the top; this leaves the
+        # popup highest, overlay directly below it, and every Dofus capture
+        # underneath both — including captures created later.
+        if overlay_item_id:
+            self._send(
+                client,
+                "SetSceneItemIndex",
+                {
+                    "sceneName": config.scene_name,
+                    "sceneItemId": overlay_item_id,
+                    "sceneItemIndex": top_index,
+                },
+            )
+        if popup_item_id:
+            self._send(
+                client,
+                "SetSceneItemIndex",
+                {
+                    "sceneName": config.scene_name,
+                    "sceneItemId": popup_item_id,
+                    "sceneItemIndex": top_index,
+                },
+            )
+
+    def _reconcile_interface_sources(
+        self,
+        client,
+        config: OBSActiveCaptureConfig,
+    ) -> None:
+        overlay_window = self._find_interface_window(OVERLAY_WINDOW_TITLE)
+        popup_window = self._find_interface_window(POPUP_WINDOW_TITLE)
+
+        overlay_item_id = self._ensure_interface_capture(
+            client,
+            config,
+            source_name=OVERLAY_SOURCE_NAME,
+            window=overlay_window,
+        )
+        popup_item_id = self._ensure_interface_capture(
+            client,
+            config,
+            source_name=POPUP_SOURCE_NAME,
+            window=popup_window,
+        )
+
+        if popup_window is not None:
+            self._ensure_popup_filters(client, config)
+
+        self._ensure_interface_order(
+            client,
+            config,
+            overlay_item_id=overlay_item_id if overlay_window is not None else None,
+            popup_item_id=popup_item_id if popup_window is not None else None,
+        )
 
     def _reconcile_assignments(self, windows: dict[int, WindowTelemetry]) -> None:
         current_sessions = {window.session_id for window in windows.values()}
@@ -607,6 +946,7 @@ class OBSActiveCaptureBridge:
 
             self._set_visibility(client, config, target_slot)
             self._disable_unassigned_slots(client, config)
+            self._reconcile_interface_sources(client, config)
             self.last_error = ""
         except Exception as exc:
             self.last_error = str(exc)
@@ -619,6 +959,10 @@ class OBSActiveCaptureBridge:
             self._opacity_by_slot.clear()
             self._enabled_slots.clear()
             self._visible_slot = None
+            self._interface_known_inputs.clear()
+            self._interface_item_ids.clear()
+            self._interface_selectors.clear()
+            self._popup_filters_ready = False
 
     def _run(self) -> None:
         while not self._stop.is_set():
