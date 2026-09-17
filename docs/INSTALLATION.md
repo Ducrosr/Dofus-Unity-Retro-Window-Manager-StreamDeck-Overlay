@@ -94,10 +94,10 @@ Le mode peut ensuite être changé directement dans la section **Application**, 
 ## Installer le plugin Stream Deck
 
 1. Lancez Dofus Window Manager au moins une fois.
-2. Ouvrez **Application → Installer le plugin Stream Deck**.
+2. Ouvrez **Application → Outils… → Installer ou réparer le plugin Stream Deck**.
 3. Confirmez l’installation dans Stream Deck.
 4. Acceptez le profil **Dofus Window Manager** correspondant à votre modèle, proposé lors de la première installation.
-5. Revenez dans le gestionnaire et ouvrez **Aperçu Stream Deck…** pour sélectionner et comparer les dispositions Standard, Mini, XL, Plus et Neo.
+5. Revenez dans le gestionnaire et ouvrez **Application → Outils… → Aperçu Stream Deck…** pour sélectionner et comparer les dispositions Standard, Mini, XL, Plus et Neo.
 
 Le bouton **Installer ou réparer le plugin Stream Deck** compare la version détectée à celle embarquée. Il ne supprime aucun fichier directement : après confirmation, il ouvre le paquet officiel dans Stream Deck afin que le logiciel Elgato effectue lui-même l’installation ou la réparation.
 
