@@ -578,6 +578,7 @@ class WindowManagerApp:
                 source_prefix=self.settings.obs_capture_source_prefix,
                 capture_cursor=self.settings.obs_capture_cursor,
                 force_sdr=self.settings.obs_capture_force_sdr,
+                popup_opacity=self.settings.swap_notification_opacity / 100.0,
             )
         )
 
@@ -5708,6 +5709,7 @@ class WindowManagerApp:
                 source_prefix=obs_capture_source_prefix.get(),
                 capture_cursor=bool(obs_capture_cursor.get()),
                 force_sdr=bool(obs_capture_force_sdr.get()),
+                popup_opacity=clamp_overlay_opacity(swap_opacity.get()) / 100.0,
             ).normalized()
 
         def test_obs_connection() -> None:
@@ -6584,6 +6586,7 @@ class WindowManagerApp:
                     source_prefix=self.settings.obs_capture_source_prefix,
                     capture_cursor=self.settings.obs_capture_cursor,
                     force_sdr=self.settings.obs_capture_force_sdr,
+                    popup_opacity=clamp_overlay_opacity(swap_opacity.get()) / 100.0,
                 )
             )
             self._sync_obs_window_pool(refresh_all=True)
