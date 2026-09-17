@@ -8,6 +8,10 @@ from unittest.mock import patch
 from dwm.services.obs_active_capture import (
     OBSActiveCaptureBridge,
     OBSActiveCaptureConfig,
+    OVERLAY_SOURCE_NAME,
+    POPUP_COLOR_KEY_FILTER_NAME,
+    POPUP_OPACITY_FILTER_NAME,
+    POPUP_SOURCE_NAME,
     VISIBILITY_FILTER_NAME,
     probe_obs_connection,
 )
@@ -88,6 +92,20 @@ class _FakeReqClient:
             item_id = int(payload["sceneItemId"])
             self.enabled[item_id] = bool(payload["sceneItemEnabled"])
             return {}
+        if request == "GetSceneItemList":
+            scene = str(payload["sceneName"])
+            return {
+                "sceneItems": [
+                    {
+                        "sceneItemId": item_id,
+                        "sourceName": source_name,
+                    }
+                    for (item_scene, source_name), item_id in self.scene_items.items()
+                    if item_scene == scene
+                ]
+            }
+        if request == "SetSceneItemIndex":
+            return {}
         if request == "GetSourceFilterList":
             source = str(payload["sourceName"])
             return {
@@ -122,6 +140,8 @@ class _FakeReqClient:
             name = str(payload["filterName"])
             self.filters[source][name]["enabled"] = bool(payload["filterEnabled"])
             return {}
+        if request == "SetSourceFilterIndex":
+            return {}
 
         return {}
 
@@ -141,6 +161,23 @@ def _window(index: int) -> WindowTelemetry:
         process_path=r"C:\Games\Dofus\Dofus.exe",
         process_name="Dofus.exe",
         process_created_100ns=2000 + index,
+    )
+
+
+def _interface_window(index: int, title: str) -> WindowTelemetry:
+    hwnd = 900 + index
+    return WindowTelemetry(
+        hwnd=hwnd,
+        session_id=f"dwm:{index}:{hwnd}",
+        game_mode="dwm",
+        title=title,
+        window_class="TkTopLevel",
+        pseudo="",
+        character_class="",
+        pid=5000,
+        process_path=r"C:\Tools\DofusWindowManager.exe",
+        process_name="DofusWindowManager.exe",
+        process_created_100ns=123456789,
     )
 
 
@@ -278,6 +315,137 @@ class OBSActiveCaptureTests(unittest.TestCase):
             item_id for item_id, enabled in _FakeReqClient.enabled.items() if enabled
         }
         self.assertEqual(enabled_items, set(_FakeReqClient.scene_items.values()))
+
+    def test_overlay_and_popup_are_created_above_dynamic_dofus_captures(self):
+        fake_obs = SimpleNamespace(ReqClient=_FakeReqClient)
+        overlay = _interface_window(1, "Dofus Window Manager — Overlay")
+        popup = _interface_window(2, "Dofus Window Manager — Focus Popup")
+
+        def interface_lookup(title: str):
+            if title.endswith("Overlay"):
+                return overlay
+            if title.endswith("Focus Popup"):
+                return popup
+            return None
+
+        with (
+            patch("dwm.services.obs_active_capture._obs", fake_obs),
+            patch.object(
+                OBSActiveCaptureBridge,
+                "_find_interface_window",
+                side_effect=interface_lookup,
+            ),
+        ):
+            bridge = OBSActiveCaptureBridge(
+                OBSActiveCaptureConfig(enabled=True, popup_opacity=0.71)
+            )
+            try:
+                bridge.sync_windows([_window(1), _window(2)], active_hwnd=102)
+                self.assertTrue(
+                    _wait_until(
+                        lambda: OVERLAY_SOURCE_NAME in _FakeReqClient.inputs
+                        and POPUP_SOURCE_NAME in _FakeReqClient.inputs
+                        and POPUP_SOURCE_NAME in _FakeReqClient.filters
+                    )
+                )
+            finally:
+                bridge.stop()
+
+        self.assertIn(OVERLAY_SOURCE_NAME, _FakeReqClient.inputs)
+        self.assertIn(POPUP_SOURCE_NAME, _FakeReqClient.inputs)
+        self.assertIn(
+            POPUP_COLOR_KEY_FILTER_NAME,
+            _FakeReqClient.filters[POPUP_SOURCE_NAME],
+        )
+        self.assertIn(
+            POPUP_OPACITY_FILTER_NAME,
+            _FakeReqClient.filters[POPUP_SOURCE_NAME],
+        )
+        self.assertEqual(
+            _FakeReqClient.filters[POPUP_SOURCE_NAME][POPUP_OPACITY_FILTER_NAME][
+                "settings"
+            ]["opacity"],
+            0.71,
+        )
+
+        order_calls = [
+            payload
+            for request, payload in _FakeReqClient.calls
+            if request == "SetSceneItemIndex"
+        ]
+        self.assertGreaterEqual(len(order_calls), 2)
+        overlay_item = _FakeReqClient.scene_items[
+            ("[DWM] Dofus Active", OVERLAY_SOURCE_NAME)
+        ]
+        popup_item = _FakeReqClient.scene_items[
+            ("[DWM] Dofus Active", POPUP_SOURCE_NAME)
+        ]
+        self.assertEqual(order_calls[-2]["sceneItemId"], overlay_item)
+        self.assertEqual(order_calls[-1]["sceneItemId"], popup_item)
+        self.assertEqual(
+            order_calls[-2]["sceneItemIndex"],
+            order_calls[-1]["sceneItemIndex"],
+        )
+
+    def test_new_dynamic_capture_reasserts_interface_layers_on_top(self):
+        fake_obs = SimpleNamespace(ReqClient=_FakeReqClient)
+        overlay = _interface_window(1, "Dofus Window Manager — Overlay")
+        popup = _interface_window(2, "Dofus Window Manager — Focus Popup")
+
+        def interface_lookup(title: str):
+            return overlay if title.endswith("Overlay") else popup
+
+        with (
+            patch("dwm.services.obs_active_capture._obs", fake_obs),
+            patch.object(
+                OBSActiveCaptureBridge,
+                "_find_interface_window",
+                side_effect=interface_lookup,
+            ),
+        ):
+            bridge = OBSActiveCaptureBridge(OBSActiveCaptureConfig(enabled=True))
+            try:
+                bridge.sync_windows([_window(1)], active_hwnd=101)
+                self.assertTrue(
+                    _wait_until(lambda: POPUP_SOURCE_NAME in _FakeReqClient.inputs)
+                )
+                _FakeReqClient.calls = []
+
+                bridge.sync_windows([_window(1), _window(2)], active_hwnd=102)
+                self.assertTrue(
+                    _wait_until(
+                        lambda: any(
+                            request == "CreateInput"
+                            and payload
+                            and payload.get("inputName") == "[DWM] Dofus Capture 02"
+                            for request, payload in _FakeReqClient.calls
+                        )
+                        and len(
+                            [
+                                call
+                                for call in _FakeReqClient.calls
+                                if call[0] == "SetSceneItemIndex"
+                            ]
+                        )
+                        >= 2
+                    )
+                )
+            finally:
+                bridge.stop()
+
+        order_calls = [
+            payload
+            for request, payload in _FakeReqClient.calls
+            if request == "SetSceneItemIndex"
+        ]
+        overlay_item = _FakeReqClient.scene_items[
+            ("[DWM] Dofus Active", OVERLAY_SOURCE_NAME)
+        ]
+        popup_item = _FakeReqClient.scene_items[
+            ("[DWM] Dofus Active", POPUP_SOURCE_NAME)
+        ]
+        self.assertEqual(order_calls[-2]["sceneItemId"], overlay_item)
+        self.assertEqual(order_calls[-1]["sceneItemId"], popup_item)
 
     def test_closed_client_is_made_transparent_then_deactivated(self):
         fake_obs = SimpleNamespace(ReqClient=_FakeReqClient)
