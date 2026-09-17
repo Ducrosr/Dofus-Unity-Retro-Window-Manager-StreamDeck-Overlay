@@ -4213,6 +4213,7 @@ class WindowManagerApp:
         # If nothing changed, just update the timestamp and skip rebuilding the UI.
         if unchanged:
             self.last_update_time.set(datetime.now().strftime("Dernier scan: %H:%M:%S"))
+            self._sync_obs_window_pool()
             return
 
         # Heuristic: detect privilege mismatch (Dofus launched as admin but this tool isn't).
@@ -4258,6 +4259,7 @@ class WindowManagerApp:
         self._log(f"{len(self._managed_order)} gérées, {len(self._ignored)} ignorées")
         self.update_listboxes()
         self._update_popup_watcher_targets()
+        self._sync_obs_window_pool(refresh_all=True)
 
     def _schedule_refresh(self):
         if self._stop_event.is_set():
@@ -4828,6 +4830,7 @@ class WindowManagerApp:
             pass
 
         self._request_ui_update()
+        self._sync_obs_window_pool(refresh_all=True)
 
     # ---------------------------- List operations ----------------------------
 
