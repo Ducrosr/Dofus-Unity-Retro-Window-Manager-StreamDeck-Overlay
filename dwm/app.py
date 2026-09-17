@@ -5491,6 +5491,8 @@ class WindowManagerApp:
         overlay_line2_right = StringVar(
             value=localized_overlay_labels.get(overlay_layout["line2_right"], tr("Alias"))
         )
+        obs_overlay_geometry = StringVar(value=tr("Fenêtre indisponible"))
+        obs_popup_geometry = StringVar(value=tr("Fenêtre indisponible"))
 
         available_theme_ids = theme_ids_for_mode(self.game_mode)
         theme_labels = [THEME_LABELS[theme_id] for theme_id in available_theme_ids]
@@ -5537,6 +5539,66 @@ class WindowManagerApp:
         general_content = create_scrollable_tab("Général")
         appearance_content = create_scrollable_tab("Apparence")
         shortcuts_content = create_scrollable_tab("Raccourcis")
+
+        def live_obs_geometry(window) -> str:
+            if window is None:
+                return tr("Fenêtre indisponible")
+            try:
+                if not window.winfo_exists():
+                    return tr("Fenêtre indisponible")
+                window.update_idletasks()
+                x = int(window.winfo_x())
+                y = int(window.winfo_y())
+                width = max(1, int(window.winfo_width()))
+                height = max(1, int(window.winfo_height()))
+            except Exception:
+                return tr("Fenêtre indisponible")
+
+            monitors = list_monitors(self.root)
+            if not monitors:
+                return tr(
+                    "X {x} · Y {y} · {width} × {height} px",
+                    x=x,
+                    y=y,
+                    width=width,
+                    height=height,
+                )
+
+            center_x = x + width // 2
+            center_y = y + height // 2
+
+            def distance_to_monitor(monitor) -> int:
+                left, top, right, bottom = monitor.area
+                delta_x = max(left - center_x, 0, center_x - right)
+                delta_y = max(top - center_y, 0, center_y - bottom)
+                return delta_x * delta_x + delta_y * delta_y
+
+            monitor = min(monitors, key=distance_to_monitor)
+            monitor_number = monitors.index(monitor) + 1
+            left, top, _right, _bottom = monitor.area
+            return tr(
+                "Écran {number} · X {x} · Y {y} · {width} × {height} px",
+                number=monitor_number,
+                x=x - left,
+                y=y - top,
+                width=width,
+                height=height,
+            )
+
+        def refresh_obs_geometry() -> None:
+            try:
+                if not win.winfo_exists():
+                    return
+            except Exception:
+                return
+
+            obs_overlay_geometry.set(
+                live_obs_geometry(getattr(self.overlay_ui, "persistent_window", None))
+            )
+            obs_popup_geometry.set(
+                live_obs_geometry(getattr(self.overlay_ui, "toast_window", None))
+            )
+            win.after(200, refresh_obs_geometry)
 
         def scroll_active_tab(event) -> None:
             canvas = tab_canvases.get(settings_notebook.select())
@@ -5849,6 +5911,42 @@ class WindowManagerApp:
         TtkLabel(monitor_section, text=tr("Ancrage de l’overlay")).grid(row=1, column=0, sticky="w", padx=(0, 12), pady=3)
         Combobox(monitor_section, textvariable=overlay_anchor, values=tuple(anchor_labels.values()), state="readonly", width=32).grid(row=1, column=1, sticky="ew", pady=3)
         TtkLabel(monitor_section, text=tr("Choisissez Position libre pour déplacer l’overlay à la souris. Un écran absent est remplacé temporairement par l’écran principal."), wraplength=530).grid(row=2, column=0, columnspan=2, sticky="w", pady=(5, 0))
+
+        obs_geometry_section = TtkLabelFrame(
+            appearance_content,
+            text=tr("Repères OBS en direct"),
+            padding=10,
+        )
+        obs_geometry_section.pack(fill="x", pady=(0, 8))
+        obs_geometry_section.columnconfigure(1, weight=1)
+        TtkLabel(
+            obs_geometry_section,
+            text=tr("Overlay"),
+        ).grid(row=0, column=0, sticky="w", padx=(0, 12), pady=3)
+        TtkLabel(
+            obs_geometry_section,
+            textvariable=obs_overlay_geometry,
+            style="Muted.TLabel",
+        ).grid(row=0, column=1, sticky="w", pady=3)
+        TtkLabel(
+            obs_geometry_section,
+            text=tr("Popup de focus"),
+        ).grid(row=1, column=0, sticky="w", padx=(0, 12), pady=3)
+        TtkLabel(
+            obs_geometry_section,
+            textvariable=obs_popup_geometry,
+            style="Muted.TLabel",
+        ).grid(row=1, column=1, sticky="w", pady=3)
+        TtkLabel(
+            obs_geometry_section,
+            text=tr(
+                "X / Y sont relatifs au coin supérieur gauche de l’écran contenant la fenêtre. "
+                "Les valeurs et dimensions sont actualisées automatiquement."
+            ),
+            style="Muted.TLabel",
+            wraplength=530,
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(5, 0))
+        refresh_obs_geometry()
 
         TtkLabel(in_game_display, text="Position X / Y").grid(
             row=6, column=0, sticky="w", padx=(22, 12), pady=3
