@@ -25,7 +25,7 @@ from ..services.monitor_layout import normalize_monitor_anchor
 from .atomic import atomic_write_text
 
 
-SETTINGS_SCHEMA_VERSION = 25
+SETTINGS_SCHEMA_VERSION = 26
 MODERN_DARK_THEME = UNITY_STANDARD_THEME  # Backward-compatible public name.
 DEFAULT_WINDOW_COLUMN_ORDER = ("class", "name", "alias", "hwnd")
 
@@ -207,7 +207,10 @@ class Settings:
     obs_capture_sync_enabled: bool = False
     obs_websocket_port: int = 4455
     obs_websocket_password: str = ""
-    obs_game_capture_source: str = "[Dofus] Client actif"
+    obs_capture_scene: str = "[DWM] Dofus Active"
+    obs_capture_source_prefix: str = "[DWM] Dofus Capture"
+    obs_capture_cursor: bool = False
+    obs_capture_force_sdr: bool = False
 
     # Refresh
     auto_refresh: bool = True
@@ -397,10 +400,14 @@ class Settings:
         except (TypeError, ValueError, OverflowError):
             self.obs_websocket_port = 4455
         self.obs_websocket_password = str(self.obs_websocket_password or "")
-        self.obs_game_capture_source = (
-            str(self.obs_game_capture_source or "[Dofus] Client actif").strip()
-            or "[Dofus] Client actif"
+        self.obs_capture_scene = (
+            str(self.obs_capture_scene or "[DWM] Dofus Active").strip()
+            or "[DWM] Dofus Active"
         )[:256]
+        self.obs_capture_source_prefix = (
+            str(self.obs_capture_source_prefix or "[DWM] Dofus Capture").strip()
+            or "[DWM] Dofus Capture"
+        )[:220]
         try:
             self.rotation_overlay_x = int(self.rotation_overlay_x)
             self.rotation_overlay_y = int(self.rotation_overlay_y)
@@ -485,7 +492,10 @@ class Settings:
             "obs_capture_sync_enabled": bool(self.obs_capture_sync_enabled),
             "obs_websocket_port": int(self.obs_websocket_port),
             "obs_websocket_password": self.obs_websocket_password,
-            "obs_game_capture_source": self.obs_game_capture_source,
+            "obs_capture_scene": self.obs_capture_scene,
+            "obs_capture_source_prefix": self.obs_capture_source_prefix,
+            "obs_capture_cursor": bool(self.obs_capture_cursor),
+            "obs_capture_force_sdr": bool(self.obs_capture_force_sdr),
             "auto_refresh": self.auto_refresh,
             "refresh_seconds": int(self.refresh_seconds),
             "adaptive_performance_enabled": bool(self.adaptive_performance_enabled),
@@ -596,9 +606,14 @@ class Settings:
             obs_capture_sync_enabled=bool(d.get("obs_capture_sync_enabled", False)),
             obs_websocket_port=int(d.get("obs_websocket_port", 4455)),
             obs_websocket_password=str(d.get("obs_websocket_password") or ""),
-            obs_game_capture_source=str(
-                d.get("obs_game_capture_source") or "[Dofus] Client actif"
+            obs_capture_scene=str(
+                d.get("obs_capture_scene") or "[DWM] Dofus Active"
             ),
+            obs_capture_source_prefix=str(
+                d.get("obs_capture_source_prefix") or "[DWM] Dofus Capture"
+            ),
+            obs_capture_cursor=bool(d.get("obs_capture_cursor", False)),
+            obs_capture_force_sdr=bool(d.get("obs_capture_force_sdr", False)),
             auto_refresh=bool(d.get("auto_refresh", True)),
             refresh_seconds=int(d.get("refresh_seconds", 10)),
             adaptive_performance_enabled=bool(
