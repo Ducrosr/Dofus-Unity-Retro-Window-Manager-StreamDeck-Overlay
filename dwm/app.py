@@ -74,6 +74,11 @@ from .services.profile_matching import rank_profile_matches, unique_exact_profil
 from .services.character_roster import CharacterRoster, character_key, character_names
 from .services.performance import RuntimeMetrics, adaptive_refresh_delay_seconds
 from .services.support_bundle import create_support_bundle
+from .services.obs_active_capture import (
+    OBSActiveCaptureBridge,
+    OBSActiveCaptureConfig,
+    probe_obs_connection,
+)
 from .services.streamdeck_bridge import StreamDeckBridge
 from .services.streamdeck_installer import open_streamdeck_plugin
 from .services.streamdeck_health import (
@@ -560,6 +565,16 @@ class WindowManagerApp:
             2, int(self.settings.refresh_seconds)
         )
         self.runtime_metrics = RuntimeMetrics()
+
+        # ---- OBS active Dofus capture ----
+        self.obs_capture_bridge = OBSActiveCaptureBridge(
+            OBSActiveCaptureConfig(
+                enabled=self.settings.obs_capture_sync_enabled,
+                port=self.settings.obs_websocket_port,
+                password=self.settings.obs_websocket_password,
+                source_name=self.settings.obs_game_capture_source,
+            )
+        )
 
         # ---- Hotkeys ----
         self.hotkeys = HotkeyManager()
@@ -2322,6 +2337,8 @@ class WindowManagerApp:
             self.update_listboxes()
         elif previous_hwnd != hwnd:
             self._refresh_focus_views()
+        if previous_hwnd != hwnd:
+            self._schedule_obs_active_capture(hwnd)
         if not notify or not self.settings.swap_notification_enabled:
             return
         window = self._all_windows.get(hwnd)
@@ -2344,6 +2361,28 @@ class WindowManagerApp:
             show_portrait=self.settings.show_popup_portraits,
             show_badge=self.settings.show_popup_badges,
         )
+
+    def _schedule_obs_active_capture(self, hwnd: int) -> None:
+        if not bool(getattr(self.settings, "obs_capture_sync_enabled", False)):
+            return
+        bridge = getattr(self, "obs_capture_bridge", None)
+        root = getattr(self, "root", None)
+        if bridge is None or root is None:
+            return
+
+        def trigger_if_still_focused() -> None:
+            if self._stop_event.is_set() or self._active_game_hwnd != hwnd:
+                return
+            try:
+                if get_foreground_hwnd() != hwnd:
+                    return
+            except Exception:
+                return
+            bridge.trigger_capture()
+
+        # Let Windows settle the foreground switch before asking OBS Game Capture
+        # to sample GetForegroundWindow(). Rapid rotations naturally coalesce.
+        root.after(60, trigger_if_still_focused)
 
     def _focus_hwnd_measured(self, hwnd: int) -> None:
         started_at = time.monotonic()
@@ -5509,6 +5548,11 @@ class WindowManagerApp:
         )
         obs_overlay_geometry = StringVar(value=tr("Fenêtre indisponible"))
         obs_popup_geometry = StringVar(value=tr("Fenêtre indisponible"))
+        obs_capture_sync = BooleanVar(value=bool(self.settings.obs_capture_sync_enabled))
+        obs_websocket_port = StringVar(value=str(self.settings.obs_websocket_port))
+        obs_websocket_password = StringVar(value=self.settings.obs_websocket_password)
+        obs_game_capture_source = StringVar(value=self.settings.obs_game_capture_source)
+        obs_connection_status = StringVar(value="")
 
         available_theme_ids = theme_ids_for_mode(self.game_mode)
         theme_labels = [THEME_LABELS[theme_id] for theme_id in available_theme_ids]
@@ -5614,6 +5658,40 @@ class WindowManagerApp:
                 live_obs_geometry(getattr(self.overlay_ui, "toast_window", None))
             )
             win.after(200, refresh_obs_geometry)
+
+        def current_obs_capture_config() -> OBSActiveCaptureConfig:
+            try:
+                port = int(obs_websocket_port.get())
+            except (TypeError, ValueError):
+                port = 4455
+            return OBSActiveCaptureConfig(
+                enabled=bool(obs_capture_sync.get()),
+                port=port,
+                password=obs_websocket_password.get(),
+                source_name=obs_game_capture_source.get(),
+            ).normalized()
+
+        def test_obs_connection() -> None:
+            obs_connection_status.set(tr("Test de connexion en cours…"))
+            config = current_obs_capture_config()
+
+            def worker() -> None:
+                ok, message = probe_obs_connection(config)
+
+                def publish() -> None:
+                    try:
+                        if win.winfo_exists():
+                            obs_connection_status.set(message)
+                    except Exception:
+                        pass
+
+                self.root.after(0, publish)
+
+            threading.Thread(
+                target=worker,
+                name="DWMOBSTest",
+                daemon=True,
+            ).start()
 
         def scroll_active_tab(event) -> None:
             canvas = tab_canvases.get(settings_notebook.select())
@@ -5958,6 +6036,76 @@ class WindowManagerApp:
         ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(5, 0))
         refresh_obs_geometry()
 
+        obs_sync_section = TtkLabelFrame(
+            appearance_content,
+            text=tr("Synchronisation OBS"),
+            padding=10,
+        )
+        obs_sync_section.pack(fill="x", pady=(0, 8))
+        obs_sync_section.columnconfigure(1, weight=1)
+        TtkCheckbutton(
+            obs_sync_section,
+            text=tr("Synchroniser la Capture de jeu OBS avec le client Dofus actif"),
+            variable=obs_capture_sync,
+        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 6))
+        TtkLabel(obs_sync_section, text=tr("Hôte OBS")).grid(
+            row=1, column=0, sticky="w", padx=(0, 12), pady=3
+        )
+        TtkLabel(
+            obs_sync_section,
+            text="127.0.0.1",
+            style="Muted.TLabel",
+        ).grid(row=1, column=1, sticky="w", pady=3)
+        TtkLabel(obs_sync_section, text=tr("Port WebSocket")).grid(
+            row=2, column=0, sticky="w", padx=(0, 12), pady=3
+        )
+        Spinbox(
+            obs_sync_section,
+            from_=1,
+            to=65535,
+            textvariable=obs_websocket_port,
+            width=8,
+        ).grid(row=2, column=1, sticky="w", pady=3)
+        TtkLabel(obs_sync_section, text=tr("Source Capture de jeu")).grid(
+            row=3, column=0, sticky="w", padx=(0, 12), pady=3
+        )
+        TtkEntry(
+            obs_sync_section,
+            textvariable=obs_game_capture_source,
+            width=36,
+        ).grid(row=3, column=1, sticky="ew", pady=3)
+        TtkLabel(obs_sync_section, text=tr("Mot de passe OBS")).grid(
+            row=4, column=0, sticky="w", padx=(0, 12), pady=3
+        )
+        TtkEntry(
+            obs_sync_section,
+            textvariable=obs_websocket_password,
+            show="•",
+            width=36,
+        ).grid(row=4, column=1, sticky="ew", pady=3)
+        test_row = TtkFrame(obs_sync_section)
+        test_row.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(7, 2))
+        TtkButton(
+            test_row,
+            text=tr("Tester la connexion OBS"),
+            command=test_obs_connection,
+        ).pack(side="left")
+        TtkLabel(
+            test_row,
+            textvariable=obs_connection_status,
+            style="Muted.TLabel",
+        ).pack(side="left", padx=(10, 0))
+        TtkLabel(
+            obs_sync_section,
+            text=tr(
+                "Dans OBS, créez une Capture de jeu portant exactement ce nom et choisissez "
+                "« Capturer la fenêtre au premier plan via un raccourci clavier ». "
+                "DWM déclenchera uniquement le raccourci de cette source quand un client Dofus prend le focus."
+            ),
+            style="Muted.TLabel",
+            wraplength=560,
+        ).grid(row=6, column=0, columnspan=2, sticky="w", pady=(5, 0))
+
         overlay_content = TtkLabelFrame(
             in_game_display,
             text="Contenu de l’overlay",
@@ -6288,6 +6436,25 @@ class WindowManagerApp:
             self.settings.accessibility_ui_scale_percent = clamp_ui_scale_percent(
                 accessibility_scale.get()
             )
+            try:
+                obs_port_value = int(obs_websocket_port.get())
+                if not 1 <= obs_port_value <= 65535:
+                    raise ValueError
+            except (TypeError, ValueError):
+                messagebox.showerror(
+                    tr("OBS"),
+                    tr("Le port WebSocket OBS doit être compris entre 1 et 65535."),
+                    parent=win,
+                )
+                return
+            obs_source_value = obs_game_capture_source.get().strip()
+            if obs_capture_sync.get() and not obs_source_value:
+                messagebox.showerror(
+                    tr("OBS"),
+                    tr("Indiquez le nom de la source Capture de jeu OBS."),
+                    parent=win,
+                )
+                return
 
             # Validate hotkeys early (gives immediate feedback)
             fwd = hk_fwd.get().strip() or "F5"
@@ -6338,6 +6505,20 @@ class WindowManagerApp:
             self.settings.include_prereleases = bool(include_prereleases.get())
             self.settings.smart_profile_loading_enabled = bool(
                 smart_profile_loading.get()
+            )
+            self.settings.obs_capture_sync_enabled = bool(obs_capture_sync.get())
+            self.settings.obs_websocket_port = obs_port_value
+            self.settings.obs_websocket_password = obs_websocket_password.get()
+            self.settings.obs_game_capture_source = (
+                obs_source_value or "[Dofus] Client actif"
+            )
+            self.obs_capture_bridge.configure(
+                OBSActiveCaptureConfig(
+                    enabled=self.settings.obs_capture_sync_enabled,
+                    port=self.settings.obs_websocket_port,
+                    password=self.settings.obs_websocket_password,
+                    source_name=self.settings.obs_game_capture_source,
+                )
             )
             self.settings.swap_notification_enabled = bool(swap_notification.get())
             selected_position = swap_position.get().strip()
@@ -6726,6 +6907,7 @@ class WindowManagerApp:
                     pass
 
         services = [
+            (getattr(self, "obs_capture_bridge", None), "stop"),
             (getattr(self, "streamdeck_bridge", None), "stop"),
             (self.hotkeys, "stop"),
             (getattr(self, "win_events", None), "stop"),
