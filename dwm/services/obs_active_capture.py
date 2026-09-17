@@ -21,6 +21,8 @@ DEFAULT_SOURCE_PREFIX = "[DWM] Dofus Capture"
 WINDOW_CAPTURE_KIND = "window_capture"
 WINDOW_CAPTURE_METHOD_WGC = 2
 WINDOW_PRIORITY_TITLE = 1
+VISIBILITY_FILTER_NAME = "[DWM] Visibility"
+VISIBILITY_FILTER_KIND = "color_filter_v2"
 
 
 @dataclass(frozen=True)
@@ -120,6 +122,9 @@ class OBSActiveCaptureBridge:
         self._item_id_by_slot: dict[int, int] = {}
         self._selector_by_slot: dict[int, str] = {}
         self._known_slots: set[int] = set()
+        self._filter_ready_slots: set[int] = set()
+        self._opacity_by_slot: dict[int, float] = {}
+        self._enabled_slots: set[int] = set()
         self._visible_slot: int | None = None
         self._obs_layout_ready = False
 
@@ -194,6 +199,9 @@ class OBSActiveCaptureBridge:
         self._item_id_by_slot.clear()
         self._selector_by_slot.clear()
         self._known_slots.clear()
+        self._filter_ready_slots.clear()
+        self._opacity_by_slot.clear()
+        self._enabled_slots.clear()
         self._visible_slot = None
         self._obs_layout_ready = False
 
@@ -389,6 +397,107 @@ class OBSActiveCaptureBridge:
             )
             self._selector_by_slot[slot] = selector
 
+    def _ensure_visibility_filter(
+        self,
+        client,
+        source_name: str,
+        slot: int,
+        opacity: float,
+    ) -> None:
+        opacity = 1.0 if opacity >= 0.5 else 0.0
+        if slot not in self._filter_ready_slots:
+            response = self._send(
+                client,
+                "GetSourceFilterList",
+                {"sourceName": source_name},
+            )
+            filters = response.get("filters", []) or []
+            existing = next(
+                (
+                    item
+                    for item in filters
+                    if isinstance(item, dict)
+                    and str(item.get("filterName") or "") == VISIBILITY_FILTER_NAME
+                ),
+                None,
+            )
+            if existing is None:
+                self._send(
+                    client,
+                    "CreateSourceFilter",
+                    {
+                        "sourceName": source_name,
+                        "filterName": VISIBILITY_FILTER_NAME,
+                        "filterKind": VISIBILITY_FILTER_KIND,
+                        "filterSettings": {"opacity": opacity},
+                    },
+                )
+            else:
+                self._send(
+                    client,
+                    "SetSourceFilterEnabled",
+                    {
+                        "sourceName": source_name,
+                        "filterName": VISIBILITY_FILTER_NAME,
+                        "filterEnabled": True,
+                    },
+                )
+                self._send(
+                    client,
+                    "SetSourceFilterSettings",
+                    {
+                        "sourceName": source_name,
+                        "filterName": VISIBILITY_FILTER_NAME,
+                        "filterSettings": {"opacity": opacity},
+                        "overlay": True,
+                    },
+                )
+            self._filter_ready_slots.add(slot)
+            self._opacity_by_slot[slot] = opacity
+            return
+
+        if self._opacity_by_slot.get(slot) == opacity:
+            return
+        self._send(
+            client,
+            "SetSourceFilterSettings",
+            {
+                "sourceName": source_name,
+                "filterName": VISIBILITY_FILTER_NAME,
+                "filterSettings": {"opacity": opacity},
+                "overlay": True,
+            },
+        )
+        self._opacity_by_slot[slot] = opacity
+
+    def _set_scene_item_enabled(
+        self,
+        client,
+        config: OBSActiveCaptureConfig,
+        slot: int,
+        enabled: bool,
+    ) -> None:
+        item_id = self._item_id_by_slot.get(slot)
+        if not item_id:
+            return
+        if enabled and slot in self._enabled_slots:
+            return
+        if not enabled and slot not in self._enabled_slots:
+            return
+        self._send(
+            client,
+            "SetSceneItemEnabled",
+            {
+                "sceneName": config.scene_name,
+                "sceneItemId": item_id,
+                "sceneItemEnabled": bool(enabled),
+            },
+        )
+        if enabled:
+            self._enabled_slots.add(slot)
+        else:
+            self._enabled_slots.discard(slot)
+
     def _desired_visible_slot(
         self,
         windows: dict[int, WindowTelemetry],
@@ -414,34 +523,29 @@ class OBSActiveCaptureBridge:
         if target_slot == self._visible_slot:
             return
 
-        # Enable the new capture first so there is never an intentional empty
-        # frame between two already-initialized Window Capture sources.
-        if target_slot is not None:
-            target_item = self._item_id_by_slot.get(target_slot)
-            if target_item:
-                self._send(
-                    client,
-                    "SetSceneItemEnabled",
-                    {
-                        "sceneName": config.scene_name,
-                        "sceneItemId": target_item,
-                        "sceneItemEnabled": True,
-                    },
-                )
-
+        # All assigned captures remain enabled in the scene. OBS Window Capture
+        # frees its WGC session when a source stops "showing", so toggling scene
+        # item visibility would recreate the capture and reintroduce a black
+        # acquisition frame. Opacity changes keep the source showing and its WGC
+        # session warm while making only the focused client visible.
         previous_slot = self._visible_slot
+        if target_slot is not None:
+            source_name = _slot_name(config.source_prefix, target_slot)
+            self._ensure_visibility_filter(
+                client,
+                source_name,
+                target_slot,
+                1.0,
+            )
+
         if previous_slot is not None and previous_slot != target_slot:
-            previous_item = self._item_id_by_slot.get(previous_slot)
-            if previous_item:
-                self._send(
-                    client,
-                    "SetSceneItemEnabled",
-                    {
-                        "sceneName": config.scene_name,
-                        "sceneItemId": previous_item,
-                        "sceneItemEnabled": False,
-                    },
-                )
+            source_name = _slot_name(config.source_prefix, previous_slot)
+            self._ensure_visibility_filter(
+                client,
+                source_name,
+                previous_slot,
+                0.0,
+            )
 
         self._visible_slot = target_slot
 
@@ -452,19 +556,20 @@ class OBSActiveCaptureBridge:
     ) -> None:
         assigned = set(self._session_by_slot)
         for slot in sorted(self._known_slots - assigned):
-            if slot == self._visible_slot:
-                continue
-            item_id = self._item_id_by_slot.get(slot)
-            if item_id:
-                self._send(
+            source_name = _slot_name(config.source_prefix, slot)
+            if slot in self._filter_ready_slots:
+                self._ensure_visibility_filter(
                     client,
-                    "SetSceneItemEnabled",
-                    {
-                        "sceneName": config.scene_name,
-                        "sceneItemId": item_id,
-                        "sceneItemEnabled": False,
-                    },
+                    source_name,
+                    slot,
+                    0.0,
                 )
+            self._set_scene_item_enabled(
+                client,
+                config,
+                slot,
+                False,
+            )
 
     def _reconcile_once(self) -> None:
         config, windows, active_hwnd = self._snapshot()
@@ -477,12 +582,29 @@ class OBSActiveCaptureBridge:
             self._reconcile_assignments(windows)
 
             by_session = {window.session_id: window for window in windows.values()}
+            target_slot = self._desired_visible_slot(windows, active_hwnd)
             for slot, session_id in sorted(self._session_by_slot.items()):
                 window = by_session.get(session_id)
-                if window is not None:
-                    self._ensure_slot(client, config, slot, window)
+                if window is None:
+                    continue
+                self._ensure_slot(client, config, slot, window)
+                source_name = _slot_name(config.source_prefix, slot)
+                # Initialize newly discovered/created filters to the correct
+                # state without hiding the underlying source.
+                if slot not in self._filter_ready_slots:
+                    self._ensure_visibility_filter(
+                        client,
+                        source_name,
+                        slot,
+                        1.0 if slot == target_slot else 0.0,
+                    )
+                self._set_scene_item_enabled(
+                    client,
+                    config,
+                    slot,
+                    True,
+                )
 
-            target_slot = self._desired_visible_slot(windows, active_hwnd)
             self._set_visibility(client, config, target_slot)
             self._disable_unassigned_slots(client, config)
             self.last_error = ""
@@ -493,6 +615,9 @@ class OBSActiveCaptureBridge:
             self._item_id_by_slot.clear()
             self._selector_by_slot.clear()
             self._known_slots.clear()
+            self._filter_ready_slots.clear()
+            self._opacity_by_slot.clear()
+            self._enabled_slots.clear()
             self._visible_slot = None
 
     def _run(self) -> None:
