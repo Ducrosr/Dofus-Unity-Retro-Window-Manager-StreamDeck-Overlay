@@ -8,6 +8,7 @@ from unittest.mock import patch
 from dwm.services.obs_active_capture import (
     OBSActiveCaptureBridge,
     OBSActiveCaptureConfig,
+    VISIBILITY_FILTER_NAME,
     probe_obs_connection,
 )
 from dwm.services.window_telemetry import WindowTelemetry
@@ -19,6 +20,7 @@ class _FakeReqClient:
     inputs: dict[str, dict[str, object]] = {}
     scene_items: dict[tuple[str, str], int] = {}
     enabled: dict[int, bool] = {}
+    filters: dict[str, dict[str, dict[str, object]]] = {}
     next_item_id = 1
 
     @classmethod
@@ -28,6 +30,7 @@ class _FakeReqClient:
         cls.inputs = {}
         cls.scene_items = {}
         cls.enabled = {}
+        cls.filters = {}
         cls.next_item_id = 1
 
     def __init__(self, **kwargs):
@@ -85,6 +88,40 @@ class _FakeReqClient:
             item_id = int(payload["sceneItemId"])
             self.enabled[item_id] = bool(payload["sceneItemEnabled"])
             return {}
+        if request == "GetSourceFilterList":
+            source = str(payload["sourceName"])
+            return {
+                "filters": [
+                    {
+                        "filterName": name,
+                        "filterKind": value["kind"],
+                        "filterEnabled": value["enabled"],
+                        "filterSettings": dict(value["settings"]),
+                    }
+                    for name, value in self.filters.get(source, {}).items()
+                ]
+            }
+        if request == "CreateSourceFilter":
+            source = str(payload["sourceName"])
+            name = str(payload["filterName"])
+            self.filters.setdefault(source, {})[name] = {
+                "kind": str(payload["filterKind"]),
+                "enabled": True,
+                "settings": dict(payload.get("filterSettings") or {}),
+            }
+            return {}
+        if request == "SetSourceFilterSettings":
+            source = str(payload["sourceName"])
+            name = str(payload["filterName"])
+            self.filters[source][name]["settings"].update(
+                dict(payload.get("filterSettings") or {})
+            )
+            return {}
+        if request == "SetSourceFilterEnabled":
+            source = str(payload["sourceName"])
+            name = str(payload["filterName"])
+            self.filters[source][name]["enabled"] = bool(payload["filterEnabled"])
+            return {}
 
         return {}
 
@@ -116,6 +153,12 @@ def _wait_until(predicate, timeout: float = 2.0) -> bool:
     return bool(predicate())
 
 
+def _opacity(source_name: str) -> float:
+    return float(
+        _FakeReqClient.filters[source_name][VISIBILITY_FILTER_NAME]["settings"]["opacity"]
+    )
+
+
 class OBSActiveCaptureTests(unittest.TestCase):
     def setUp(self):
         _FakeReqClient.reset()
@@ -145,7 +188,7 @@ class OBSActiveCaptureTests(unittest.TestCase):
         self.assertIn("OBS WebSocket connecté", message)
         self.assertEqual(_FakeReqClient.calls, [("GetVersion", None)])
 
-    def test_pool_grows_beyond_eight_clients_and_keeps_only_active_visible(self):
+    def test_pool_grows_beyond_eight_clients_and_keeps_all_captures_warm(self):
         fake_obs = SimpleNamespace(ReqClient=_FakeReqClient)
         windows = [_window(index) for index in range(1, 10)]
 
@@ -165,6 +208,7 @@ class OBSActiveCaptureTests(unittest.TestCase):
                             ]
                         )
                         == 9
+                        and len(_FakeReqClient.filters) == 9
                     )
                 )
             finally:
@@ -175,13 +219,19 @@ class OBSActiveCaptureTests(unittest.TestCase):
         }
         self.assertEqual(set(_FakeReqClient.inputs), expected_names)
         self.assertIn("[DWM] Dofus Active", _FakeReqClient.scenes)
-        ninth_item = _FakeReqClient.scene_items[
-            ("[DWM] Dofus Active", "[DWM] Dofus Capture 09")
-        ]
-        enabled_items = {item_id for item_id, enabled in _FakeReqClient.enabled.items() if enabled}
-        self.assertEqual(enabled_items, {ninth_item})
 
-    def test_focus_swap_only_changes_visibility_for_initialized_pool(self):
+        # Every currently assigned scene item stays enabled so OBS keeps the WGC
+        # sessions initialized; opacity decides which client reaches the output.
+        enabled_items = {
+            item_id for item_id, enabled in _FakeReqClient.enabled.items() if enabled
+        }
+        self.assertEqual(enabled_items, set(_FakeReqClient.scene_items.values()))
+
+        for slot in range(1, 9):
+            self.assertEqual(_opacity(f"[DWM] Dofus Capture {slot:02d}"), 0.0)
+        self.assertEqual(_opacity("[DWM] Dofus Capture 09"), 1.0)
+
+    def test_focus_swap_only_changes_opacity_for_initialized_pool(self):
         fake_obs = SimpleNamespace(ReqClient=_FakeReqClient)
         windows = [_window(index) for index in range(1, 4)]
 
@@ -195,6 +245,7 @@ class OBSActiveCaptureTests(unittest.TestCase):
                             [call for call in _FakeReqClient.calls if call[0] == "CreateInput"]
                         )
                         == 3
+                        and len(_FakeReqClient.filters) == 3
                     )
                 )
                 _FakeReqClient.calls = []
@@ -206,7 +257,7 @@ class OBSActiveCaptureTests(unittest.TestCase):
                             [
                                 call
                                 for call in _FakeReqClient.calls
-                                if call[0] == "SetSceneItemEnabled"
+                                if call[0] == "SetSourceFilterSettings"
                             ]
                         )
                         >= 2
@@ -218,15 +269,38 @@ class OBSActiveCaptureTests(unittest.TestCase):
         requests = [call[0] for call in _FakeReqClient.calls]
         self.assertNotIn("CreateInput", requests)
         self.assertNotIn("SetInputSettings", requests)
+        self.assertNotIn("SetSceneItemEnabled", requests)
+        self.assertEqual(_opacity("[DWM] Dofus Capture 01"), 1.0)
+        self.assertEqual(_opacity("[DWM] Dofus Capture 03"), 0.0)
 
-        first_item = _FakeReqClient.scene_items[
-            ("[DWM] Dofus Active", "[DWM] Dofus Capture 01")
-        ]
-        third_item = _FakeReqClient.scene_items[
-            ("[DWM] Dofus Active", "[DWM] Dofus Capture 03")
-        ]
-        self.assertTrue(_FakeReqClient.enabled[first_item])
-        self.assertFalse(_FakeReqClient.enabled[third_item])
+        # All three captures are still active/showing after the swap.
+        enabled_items = {
+            item_id for item_id, enabled in _FakeReqClient.enabled.items() if enabled
+        }
+        self.assertEqual(enabled_items, set(_FakeReqClient.scene_items.values()))
+
+    def test_closed_client_is_made_transparent_then_deactivated(self):
+        fake_obs = SimpleNamespace(ReqClient=_FakeReqClient)
+        windows = [_window(index) for index in range(1, 3)]
+
+        with patch("dwm.services.obs_active_capture._obs", fake_obs):
+            bridge = OBSActiveCaptureBridge(OBSActiveCaptureConfig(enabled=True))
+            try:
+                bridge.sync_windows(windows, active_hwnd=102)
+                self.assertTrue(
+                    _wait_until(lambda: len(_FakeReqClient.filters) == 2)
+                )
+                bridge.sync_windows([windows[0]], active_hwnd=101)
+                second_item = _FakeReqClient.scene_items[
+                    ("[DWM] Dofus Active", "[DWM] Dofus Capture 02")
+                ]
+                self.assertTrue(
+                    _wait_until(lambda: not _FakeReqClient.enabled[second_item])
+                )
+            finally:
+                bridge.stop()
+
+        self.assertEqual(_opacity("[DWM] Dofus Capture 02"), 0.0)
 
     def test_disabled_bridge_does_not_touch_obs(self):
         fake_obs = SimpleNamespace(ReqClient=_FakeReqClient)
