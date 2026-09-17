@@ -203,6 +203,12 @@ class Settings:
     accessibility_reduce_motion: bool = False
     accessibility_ui_scale_percent: int = 100
 
+    # OBS active Dofus capture
+    obs_capture_sync_enabled: bool = False
+    obs_websocket_port: int = 4455
+    obs_websocket_password: str = ""
+    obs_game_capture_source: str = "[Dofus] Client actif"
+
     # Refresh
     auto_refresh: bool = True
     refresh_seconds: int = 10
@@ -387,6 +393,15 @@ class Settings:
             self.accessibility_ui_scale_percent
         )
         try:
+            self.obs_websocket_port = max(1, min(65535, int(self.obs_websocket_port)))
+        except (TypeError, ValueError, OverflowError):
+            self.obs_websocket_port = 4455
+        self.obs_websocket_password = str(self.obs_websocket_password or "")
+        self.obs_game_capture_source = (
+            str(self.obs_game_capture_source or "[Dofus] Client actif").strip()
+            or "[Dofus] Client actif"
+        )[:256]
+        try:
             self.rotation_overlay_x = int(self.rotation_overlay_x)
             self.rotation_overlay_y = int(self.rotation_overlay_y)
         except (TypeError, ValueError):
@@ -467,6 +482,10 @@ class Settings:
             "accessibility_high_contrast": bool(self.accessibility_high_contrast),
             "accessibility_reduce_motion": bool(self.accessibility_reduce_motion),
             "accessibility_ui_scale_percent": int(self.accessibility_ui_scale_percent),
+            "obs_capture_sync_enabled": bool(self.obs_capture_sync_enabled),
+            "obs_websocket_port": int(self.obs_websocket_port),
+            "obs_websocket_password": self.obs_websocket_password,
+            "obs_game_capture_source": self.obs_game_capture_source,
             "auto_refresh": self.auto_refresh,
             "refresh_seconds": int(self.refresh_seconds),
             "adaptive_performance_enabled": bool(self.adaptive_performance_enabled),
@@ -573,6 +592,12 @@ class Settings:
             ),
             accessibility_ui_scale_percent=int(
                 d.get("accessibility_ui_scale_percent", 100)
+            ),
+            obs_capture_sync_enabled=bool(d.get("obs_capture_sync_enabled", False)),
+            obs_websocket_port=int(d.get("obs_websocket_port", 4455)),
+            obs_websocket_password=str(d.get("obs_websocket_password") or ""),
+            obs_game_capture_source=str(
+                d.get("obs_game_capture_source") or "[Dofus] Client actif"
             ),
             auto_refresh=bool(d.get("auto_refresh", True)),
             refresh_seconds=int(d.get("refresh_seconds", 10)),
