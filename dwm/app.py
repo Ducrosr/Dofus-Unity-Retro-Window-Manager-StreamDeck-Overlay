@@ -4269,7 +4269,13 @@ class WindowManagerApp:
                 return
 
         if not self._stop_event.is_set():
-            self._sync_tray_state()
+            try:
+                self._sync_tray_state()
+            except Exception:
+                # A tray/UI-state issue must never stop the main Tk queue.
+                # WinEvent notifications also pass through this queue, so losing
+                # the recurring callback would stop automatic Dofus window updates.
+                pass
             self.root.after(100, self._process_queue)
 
     # ---------------------------- Stream Deck bridge ----------------------------
@@ -4376,6 +4382,24 @@ class WindowManagerApp:
 
         return {"ok": False, "error": "Commande inconnue.", "_status": 404}
 
+    def _modal_grab_active(self) -> bool:
+        """Return whether Tk currently owns a grab without resolving internal widgets.
+
+        ttk Combobox popdowns are Tcl/Tk internal windows. grab_current() tries
+        to convert the Tcl widget path back to a Python widget and can raise a
+        KeyError for "popdown" while such a dropdown is open. Query Tcl directly
+        as a fallback so transient combobox grabs cannot break the UI queue.
+        """
+        try:
+            return self.root.grab_current() is not None
+        except KeyError:
+            try:
+                return bool(self.root.tk.call("grab", "current"))
+            except Exception:
+                return False
+        except Exception:
+            return False
+
     def _sync_tray_state(self) -> None:
         tray = getattr(self, "tray", None)
         if tray is None:
@@ -4386,13 +4410,13 @@ class WindowManagerApp:
             game_mode=self.game_mode,
             overlay_enabled=self.settings.rotation_overlay_enabled,
             hotkeys_paused=self._hotkeys_paused,
-            enabled=self.root.grab_current() is None,
+            enabled=not self._modal_grab_active(),
             language=self.settings.language,
         ))
 
     def _handle_tray_action(self, action: str, value: str = "") -> None:
         """Run tray requests on the Tk thread, rechecking modal state and profiles."""
-        if action in {"profile", "mode", "overlay", "hotkeys"} and self.root.grab_current() is not None:
+        if action in {"profile", "mode", "overlay", "hotkeys"} and self._modal_grab_active():
             return
         if action == "show":
             self._show_main_window()
