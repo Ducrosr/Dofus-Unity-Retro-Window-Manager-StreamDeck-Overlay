@@ -18,6 +18,11 @@ DWMWA_CLOAKED = 14
 GWL_STYLE = -16
 GWL_EXSTYLE = -20
 WS_EX_TOPMOST = 0x00000008
+GW_OWNER = 4
+GW_HWNDNEXT = 2
+GA_ROOT = 2
+MONITORINFOF_PRIMARY = 0x00000001
+WDA_EXCLUDEFROMCAPTURE = 0x00000011
 
 
 @dataclass(frozen=True)
@@ -51,18 +56,28 @@ class WindowTelemetry:
     process_name: str = ""
     process_created_100ns: int = 0
     process_elevated: bool | None = None
+    process_session_id: int = 0
+    process_architecture: str = ""
+    owner_hwnd: int = 0
+    root_hwnd: int = 0
+    z_order_index: int = -1
     window_rect: RectSnapshot = RectSnapshot()
     client_rect_screen: RectSnapshot = RectSnapshot()
     visible: bool = False
+    enabled: bool = False
     minimized: bool = False
     maximized: bool = False
     foreground: bool = False
+    hung: bool = False
     cloaked: bool = False
     topmost: bool = False
+    display_affinity: int = 0
+    capture_excluded: bool = False
     style: int = 0
     ex_style: int = 0
     dpi: int = 96
     monitor_device: str = ""
+    monitor_primary: bool = False
     monitor_rect: RectSnapshot = RectSnapshot()
     monitor_work_rect: RectSnapshot = RectSnapshot()
 
@@ -121,9 +136,9 @@ def _filetime_value(value) -> int:
     return (int(value.dwHighDateTime) << 32) | int(value.dwLowDateTime)
 
 
-def _collect_process_details(pid: int) -> tuple[str, int, bool | None]:
+def _collect_process_details(pid: int) -> tuple[str, int, bool | None, int, str]:
     if os.name != "nt" or not pid:
-        return "", 0, None
+        return "", 0, None, 0, ""
 
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
@@ -154,11 +169,13 @@ def _collect_process_details(pid: int) -> tuple[str, int, bool | None]:
 
     process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
     if not process:
-        return "", 0, None
+        return "", 0, None, 0, ""
 
     path = ""
     created = 0
     elevated: bool | None = None
+    process_session_id = 0
+    process_architecture = ""
     try:
         size = wintypes.DWORD(32768)
         buffer = ctypes.create_unicode_buffer(size.value)
@@ -212,10 +229,42 @@ def _collect_process_details(pid: int) -> tuple[str, int, bool | None]:
                     elevated = bool(value.TokenIsElevated)
             finally:
                 CloseHandle(token)
+
+        session_value = wintypes.DWORD()
+        ProcessIdToSessionId = kernel32.ProcessIdToSessionId
+        ProcessIdToSessionId.argtypes = (
+            wintypes.DWORD,
+            ctypes.POINTER(wintypes.DWORD),
+        )
+        ProcessIdToSessionId.restype = wintypes.BOOL
+        if ProcessIdToSessionId(pid, ctypes.byref(session_value)):
+            process_session_id = int(session_value.value)
+
+        IsWow64Process2 = getattr(kernel32, "IsWow64Process2", None)
+        if IsWow64Process2 is not None:
+            process_machine = wintypes.USHORT()
+            native_machine = wintypes.USHORT()
+            IsWow64Process2.argtypes = (
+                wintypes.HANDLE,
+                ctypes.POINTER(wintypes.USHORT),
+                ctypes.POINTER(wintypes.USHORT),
+            )
+            IsWow64Process2.restype = wintypes.BOOL
+            if IsWow64Process2(
+                process,
+                ctypes.byref(process_machine),
+                ctypes.byref(native_machine),
+            ):
+                machine = int(process_machine.value or native_machine.value)
+                process_architecture = {
+                    0x014C: "x86",
+                    0x8664: "x64",
+                    0xAA64: "arm64",
+                }.get(machine, f"0x{machine:04X}" if machine else "")
     finally:
         CloseHandle(process)
 
-    return path, created, elevated
+    return path, created, elevated, process_session_id, process_architecture
 
 
 def collect_window_telemetry(window: GameWindow, game_mode: str) -> WindowTelemetry:
@@ -248,11 +297,43 @@ def collect_window_telemetry(window: GameWindow, game_mode: str) -> WindowTeleme
     )
     pid = int(pid_value.value)
 
+    GetForegroundWindow = user32.GetForegroundWindow
+    GetForegroundWindow.argtypes = ()
+    GetForegroundWindow.restype = wintypes.HWND
+    GetWindow = user32.GetWindow
+    GetWindow.argtypes = (wintypes.HWND, wintypes.UINT)
+    GetWindow.restype = wintypes.HWND
+    GetAncestor = user32.GetAncestor
+    GetAncestor.argtypes = (wintypes.HWND, wintypes.UINT)
+    GetAncestor.restype = wintypes.HWND
+
     class_buffer = ctypes.create_unicode_buffer(512)
     user32.GetClassNameW(wintypes.HWND(hwnd), class_buffer, len(class_buffer))
     window_class = class_buffer.value or ""
 
-    process_path, process_created, process_elevated = _collect_process_details(pid)
+    owner_hwnd = int(GetWindow(wintypes.HWND(hwnd), GW_OWNER) or 0)
+    root_hwnd = int(GetAncestor(wintypes.HWND(hwnd), GA_ROOT) or 0)
+
+    z_order_index = -1
+    top_window = user32.GetTopWindow(None)
+    user32.GetTopWindow.argtypes = (wintypes.HWND,)
+    user32.GetTopWindow.restype = wintypes.HWND
+    current = int(top_window or 0)
+    for index in range(4096):
+        if not current:
+            break
+        if current == hwnd:
+            z_order_index = index
+            break
+        current = int(GetWindow(wintypes.HWND(current), GW_HWNDNEXT) or 0)
+
+    (
+        process_path,
+        process_created,
+        process_elevated,
+        process_session_id,
+        process_architecture,
+    ) = _collect_process_details(pid)
     process_name = Path(process_path).name if process_path else ""
 
     window_rect_value = wintypes.RECT()
@@ -314,17 +395,38 @@ def collect_window_telemetry(window: GameWindow, game_mode: str) -> WindowTeleme
             ("szDevice", wintypes.WCHAR * 32),
         ]
 
-    monitor = user32.MonitorFromWindow(
+    MonitorFromWindow = user32.MonitorFromWindow
+    MonitorFromWindow.argtypes = (wintypes.HWND, wintypes.DWORD)
+    MonitorFromWindow.restype = wintypes.HANDLE
+    GetMonitorInfoW = user32.GetMonitorInfoW
+    GetMonitorInfoW.argtypes = (wintypes.HANDLE, ctypes.c_void_p)
+    GetMonitorInfoW.restype = wintypes.BOOL
+
+    monitor_primary = False
+    monitor = MonitorFromWindow(
         wintypes.HWND(hwnd),
         MONITOR_DEFAULTTONEAREST,
     )
     if monitor:
         info = MONITORINFOEXW()
         info.cbSize = ctypes.sizeof(info)
-        if user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+        if GetMonitorInfoW(monitor, ctypes.byref(info)):
             monitor_device = info.szDevice
+            monitor_primary = bool(info.dwFlags & MONITORINFOF_PRIMARY)
             monitor_rect = _rect(info.rcMonitor)
             monitor_work_rect = _rect(info.rcWork)
+
+    display_affinity = wintypes.DWORD()
+    affinity_value = 0
+    get_affinity = getattr(user32, "GetWindowDisplayAffinity", None)
+    if get_affinity is not None:
+        get_affinity.argtypes = (
+            wintypes.HWND,
+            ctypes.POINTER(wintypes.DWORD),
+        )
+        get_affinity.restype = wintypes.BOOL
+        if get_affinity(wintypes.HWND(hwnd), ctypes.byref(display_affinity)):
+            affinity_value = int(display_affinity.value)
 
     session_id = f"{pid}:{process_created}:{hwnd}"
     return WindowTelemetry(
@@ -341,18 +443,28 @@ def collect_window_telemetry(window: GameWindow, game_mode: str) -> WindowTeleme
         process_name=process_name,
         process_created_100ns=process_created,
         process_elevated=process_elevated,
+        process_session_id=process_session_id,
+        process_architecture=process_architecture,
+        owner_hwnd=owner_hwnd,
+        root_hwnd=root_hwnd,
+        z_order_index=z_order_index,
         window_rect=_rect(window_rect_value),
         client_rect_screen=client_screen,
         visible=bool(user32.IsWindowVisible(wintypes.HWND(hwnd))),
+        enabled=bool(user32.IsWindowEnabled(wintypes.HWND(hwnd))),
         minimized=bool(user32.IsIconic(wintypes.HWND(hwnd))),
         maximized=bool(user32.IsZoomed(wintypes.HWND(hwnd))),
-        foreground=int(user32.GetForegroundWindow() or 0) == hwnd,
+        foreground=int(GetForegroundWindow() or 0) == hwnd,
+        hung=bool(user32.IsHungAppWindow(wintypes.HWND(hwnd))),
         cloaked=cloaked,
         topmost=bool(ex_style & WS_EX_TOPMOST),
+        display_affinity=affinity_value,
+        capture_excluded=affinity_value == WDA_EXCLUDEFROMCAPTURE,
         style=style,
         ex_style=ex_style,
         dpi=dpi,
         monitor_device=monitor_device,
+        monitor_primary=monitor_primary,
         monitor_rect=monitor_rect,
         monitor_work_rect=monitor_work_rect,
     )
