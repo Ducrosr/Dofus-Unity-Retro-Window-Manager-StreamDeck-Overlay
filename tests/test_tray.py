@@ -99,6 +99,22 @@ assert items[1].enabled is False
         app.toggle_rotation_overlay.assert_not_called()
         app.toggle_hotkeys_paused.assert_not_called()
 
+    def test_ttk_popdown_grab_falls_back_to_tcl_without_breaking_tray_state(self):
+        app = self.make_app()
+        app.tray = Mock()
+        app.settings = Settings(rotation_overlay_enabled=True)
+        app._hotkeys_paused = False
+        app._active_profile_name = ""
+        app._tray_profile_names = ()
+        app.root.grab_current.side_effect = KeyError("popdown")
+        app.root.tk.call.return_value = ".!combobox.popdown"
+
+        test_app_order_sync.WindowManagerApp._sync_tray_state(app)
+
+        state = app.tray.set_state.call_args.args[0]
+        self.assertFalse(state.enabled)
+        app.root.tk.call.assert_called_with("grab", "current")
+
     def test_toggles_use_existing_actions_and_quit_does_not_touch_destroyed_ui(self):
         app = self.make_app()
         app._handle_tray_action("overlay")
