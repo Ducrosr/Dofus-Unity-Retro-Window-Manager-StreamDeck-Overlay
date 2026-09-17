@@ -1,5 +1,19 @@
 # Historique
 
+## 2.20.0-beta.6 — 2026-09-17
+
+### OBS et overlay
+
+- Overlay persistant et popup de changement de focus exposés comme fenêtres capturables séparément dans OBS.
+- Popup conservée ouverte avec un HWND stable pour éviter le délai de réacquisition ; surface magenta lorsqu’elle est inactive pour un Color Key OBS.
+- Repères OBS en lecture seule dans les paramètres : position X/Y relative à l’écran et dimensions réelles de l’overlay et de la popup.
+- Option restaurée pour adapter automatiquement l’overlay en largeur et en hauteur au contenu.
+
+### Fiabilité
+
+- Correction du `KeyError: 'popdown'` de Tkinter lors de l’utilisation des listes déroulantes.
+- La boucle principale de traitement reste active après une erreur de synchronisation de la zone de notification, ce qui préserve l’actualisation automatique lors de l’ouverture ou fermeture de fenêtres Dofus.
+
 ## 2.20.0-beta.5 — 2026-09-07
 
 ### Mise à jour guidée

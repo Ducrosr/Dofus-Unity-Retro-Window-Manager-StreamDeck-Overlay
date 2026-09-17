@@ -11,7 +11,7 @@ Ce guide installe le code source ou l’exécutable public 2.20.0 depuis le dép
 
 Cette méthode ne nécessite ni Python, ni Git, ni compilation.
 
-1. Ouvrez la [préversion officielle v2.20.0-beta.4](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.4) puis téléchargez `DofusWindowManager.exe`.
+1. Ouvrez la [préversion officielle v2.20.0-beta.6](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.6) puis téléchargez `DofusWindowManager.exe`.
 2. Vérifiez si possible son empreinte avec la commande PowerShell suivante :
 
 ~~~powershell

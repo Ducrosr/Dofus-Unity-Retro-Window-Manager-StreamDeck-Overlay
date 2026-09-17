@@ -124,6 +124,7 @@ def main() -> None:
         mode = settings.game_mode
 
     from dwm.services.session_recovery import SessionRecovery
+    from dwm.services.obs_overlay_capture import enable_obs_overlay_capture
 
     recovery = SessionRecovery(dirs["root"])
     try:
@@ -131,6 +132,7 @@ def main() -> None:
     except OSError as exc:
         logger.warn(f"Session recovery unavailable: {exc}")
     try:
+        enable_obs_overlay_capture()
         from dwm.app import run
 
         run(game_mode=mode, start_minimized=args.minimized,

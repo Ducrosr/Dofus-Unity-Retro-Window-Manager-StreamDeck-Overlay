@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.5"><strong>⬇ Descargar para Windows</strong></a>
+  <a href="https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.6"><strong>⬇ Descargar para Windows</strong></a>
   ·
   <a href="docs/INSTALLATION.md">Guía de instalación</a>
   ·
@@ -43,7 +43,7 @@ Gestor local de ventanas para Windows compatible con **Dofus Unity** y **Dofus R
 >
 > Consulta también la guía oficial de Ankama: **[Reconocer el phishing y protegerse](https://support.ankama.com/hc/fr/articles/201376953-Reconna%C3%AEtre-le-phishing-et-s-en-prot%C3%A9ger)**.
 
-La versión 2.20.0 es la beta pública actual. Reúne la interfaz multilingüe, los overlays, las solicitudes de atención, los retratos, los iconos oficiales y los temas Unity/Retro. El ejecutable de Windows correspondiente está disponible en la [Release oficial v2.20.0-beta.5](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.5).
+La versión 2.20.0 es la beta pública actual. Reúne la interfaz multilingüe, los overlays, las solicitudes de atención, los retratos, los iconos oficiales y los temas Unity/Retro. El ejecutable de Windows correspondiente está disponible en la [Release oficial v2.20.0-beta.6](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.6).
 
 ## Novedades de la beta 5 — perfiles y atajos
 

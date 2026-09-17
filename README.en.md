@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.5"><strong>⬇ Download for Windows</strong></a>
+  <a href="https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.6"><strong>⬇ Download for Windows</strong></a>
   ·
   <a href="docs/INSTALLATION.md">Installation guide</a>
   ·
@@ -43,7 +43,7 @@ A local Windows window manager for **Dofus Unity** and **Dofus Retro**, designed
 >
 > Also read Ankama’s official guidance: **[Recognizing and protecting yourself from phishing](https://support.ankama.com/hc/en-us/articles/201376953-Recognizing-and-Protecting-Yourself-from-Phishing)**.
 
-Version 2.20.0 is the current public beta. It brings together the multilingual interface, overlays, attention requests, portraits, official icons and Unity/Retro themes. The matching Windows executable is available from the [official v2.20.0-beta.5 Release](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.5).
+Version 2.20.0 is the current public beta. It brings together the multilingual interface, overlays, attention requests, portraits, official icons and Unity/Retro themes. The matching Windows executable is available from the [official v2.20.0-beta.6 Release](https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay/releases/tag/v2.20.0-beta.6).
 
 ## New in beta 5 — profiles and shortcuts
 
