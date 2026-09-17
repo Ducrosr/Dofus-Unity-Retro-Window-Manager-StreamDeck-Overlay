@@ -242,12 +242,12 @@ def _collect_process_details(pid: int) -> tuple[str, int, bool | None, int, str]
 
         IsWow64Process2 = getattr(kernel32, "IsWow64Process2", None)
         if IsWow64Process2 is not None:
-            process_machine = wintypes.USHORT()
-            native_machine = wintypes.USHORT()
+            process_machine = ctypes.c_ushort()
+            native_machine = ctypes.c_ushort()
             IsWow64Process2.argtypes = (
                 wintypes.HANDLE,
-                ctypes.POINTER(wintypes.USHORT),
-                ctypes.POINTER(wintypes.USHORT),
+                ctypes.POINTER(ctypes.c_ushort),
+                ctypes.POINTER(ctypes.c_ushort),
             )
             IsWow64Process2.restype = wintypes.BOOL
             if IsWow64Process2(
