@@ -6159,7 +6159,8 @@ class WindowManagerApp:
             text=tr(
                 "DWM crée automatiquement une Capture de fenêtre persistante par client détecté dans cette scène, "
                 "sans limite fixe de 8 clients. Les captures des clients ouverts restent actives en permanence ; "
-                "pendant les rotations, DWM ne change que leur opacité afin d’éviter une réacquisition WGC."
+                "pendant les rotations, DWM ne change que leur opacité afin d’éviter une réacquisition WGC. "
+                "L’overlay et la popup DWM sont aussi capturés automatiquement et maintenus au-dessus des fenêtres Dofus."
             ),
             style="Muted.TLabel",
             wraplength=560,
