@@ -8,6 +8,7 @@ from ctypes import wintypes
 OVERLAY_WINDOW_TITLE = "Dofus Window Manager — Overlay"
 POPUP_WINDOW_TITLE = "Dofus Window Manager — Focus Popup"
 POPUP_IDLE_GEOMETRY = "320x100+0+0"
+POPUP_IDLE_COLOR = "#ff00ff"
 
 
 def _set_window_title(window, title: str) -> None:
@@ -75,8 +76,32 @@ def _clear_toolwindow_style(window) -> None:
         return
 
 
+def _set_popup_idle(window) -> None:
+    """Keep the popup HWND alive while rendering an OBS-keyable idle surface."""
+    try:
+        for child in tuple(window.winfo_children()):
+            try:
+                child.destroy()
+            except Exception:
+                pass
+        window.configure(background=POPUP_IDLE_COLOR)
+        # Tk exposes a native color-key transparency attribute on Windows. Some
+        # OBS capture methods preserve it, while others render the transparent
+        # pixels as black. In that latter case the same magenta surface can be
+        # removed reliably with an OBS Color Key / Chroma Key filter.
+        try:
+            window.attributes("-transparentcolor", POPUP_IDLE_COLOR)
+        except Exception:
+            pass
+        window.attributes("-alpha", 1.0)
+        _set_window_title(window, POPUP_WINDOW_TITLE)
+        window.deiconify()
+    except Exception:
+        pass
+
+
 def _ensure_obs_popup_window(overlay, ui_overlays):
-    """Create one permanent, transparent popup HWND for OBS to keep attached to."""
+    """Create one permanent popup HWND for OBS to keep attached to."""
     window = overlay.toast_window
     if window is not None:
         try:
@@ -91,13 +116,12 @@ def _ensure_obs_popup_window(overlay, ui_overlays):
     _set_window_title(window, POPUP_WINDOW_TITLE)
     window.overrideredirect(True)
     window.attributes("-topmost", True)
-    window.attributes("-alpha", 0.0)
-    window.configure(background=overlay.palette["accent"])
+    window.configure(background=POPUP_IDLE_COLOR)
     window.geometry(POPUP_IDLE_GEOMETRY)
     window.update_idletasks()
     ui_overlays._apply_non_activating_style(window, click_through=True)
     _clear_toolwindow_style(window)
-    window.deiconify()
+    _set_popup_idle(window)
     return window
 
 
@@ -106,9 +130,9 @@ def enable_obs_overlay_capture() -> None:
 
     The regular character list and the focus notification are distinct Tk/Win32
     windows. OBS therefore captures them separately. The focus notification is
-    kept alive for the whole application session with alpha 0 while idle, so
-    OBS keeps the same HWND instead of having to reacquire a newly created
-    window after every character switch.
+    kept alive for the whole application session. While idle it becomes a pure
+    magenta color-key surface instead of using alpha 0, avoiding the black frame
+    produced by some OBS Window Capture paths while retaining the same HWND.
     """
     from dwm import ui_overlays
 
@@ -157,13 +181,8 @@ def enable_obs_overlay_capture() -> None:
                 self.toast_job = None
 
             window = _ensure_obs_popup_window(self, ui_overlays)
-            try:
-                window.attributes("-alpha", 0.0)
-                _set_window_title(window, POPUP_WINDOW_TITLE)
-                _clear_toolwindow_style(window)
-                window.deiconify()
-            except Exception:
-                pass
+            _set_popup_idle(window)
+            _clear_toolwindow_style(window)
             self._toast_images.clear()
 
         hide_obs_focus_popup._dwm_obs_capture_wrapper = True
