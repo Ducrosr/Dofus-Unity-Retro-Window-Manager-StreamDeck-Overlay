@@ -314,10 +314,12 @@ def collect_window_telemetry(window: GameWindow, game_mode: str) -> WindowTeleme
     owner_hwnd = int(GetWindow(wintypes.HWND(hwnd), GW_OWNER) or 0)
     root_hwnd = int(GetAncestor(wintypes.HWND(hwnd), GA_ROOT) or 0)
 
+    GetTopWindow = user32.GetTopWindow
+    GetTopWindow.argtypes = (wintypes.HWND,)
+    GetTopWindow.restype = wintypes.HWND
+
     z_order_index = -1
-    top_window = user32.GetTopWindow(None)
-    user32.GetTopWindow.argtypes = (wintypes.HWND,)
-    user32.GetTopWindow.restype = wintypes.HWND
+    top_window = GetTopWindow(None)
     current = int(top_window or 0)
     for index in range(4096):
         if not current:
