@@ -2079,6 +2079,7 @@ class WindowManagerApp:
             tr("Masquer l’overlay") if self.settings.rotation_overlay_enabled else tr("Afficher l’overlay")
         )
         self._refresh_auxiliary_displays()
+        self._request_obs_interface_refresh(40)
 
     def _apply_accessibility_preferences(self) -> None:
         self.settings.accessibility_ui_scale_percent = clamp_ui_scale_percent(
@@ -2281,12 +2282,30 @@ class WindowManagerApp:
         win.protocol("WM_DELETE_WINDOW", close_simulation)
         render()
 
+    def _request_obs_interface_refresh(self, delay_ms: int = 0) -> None:
+        bridge = getattr(self, "obs_capture_bridge", None)
+        root = getattr(self, "root", None)
+        if bridge is None or root is None:
+            return
+
+        def request() -> None:
+            try:
+                bridge.request_refresh()
+            except Exception:
+                pass
+
+        if delay_ms > 0:
+            root.after(delay_ms, request)
+        else:
+            request()
+
     def _save_overlay_position(self, x: int, y: int) -> None:
         if (x, y) == (self.settings.rotation_overlay_x, self.settings.rotation_overlay_y):
             return
         self.settings.rotation_overlay_x = int(x)
         self.settings.rotation_overlay_y = int(y)
         save_settings(self.settings_path, self.settings)
+        self._request_obs_interface_refresh()
 
     def _save_overlay_size(self, width: int, height: int, *, auto_width: bool = False) -> None:
         normalized = (max(80, min(1800, int(width))), max(80, min(1600, int(height))))
@@ -2299,6 +2318,7 @@ class WindowManagerApp:
         self.settings.rotation_overlay_width, self.settings.rotation_overlay_height = normalized
         self.settings.rotation_overlay_auto_width = bool(auto_width)
         save_settings(self.settings_path, self.settings)
+        self._request_obs_interface_refresh()
 
     def _reorder_from_overlay(self, hwnd: int, destination: str | int) -> None:
         if hwnd not in self._managed_order:
@@ -2372,6 +2392,11 @@ class WindowManagerApp:
             show_portrait=self.settings.show_popup_portraits,
             show_badge=self.settings.show_popup_badges,
         )
+        # The popup reuses one stable HWND but changes geometry when shown.
+        # Refresh shortly after Tk has applied that geometry so OBS receives the
+        # projected position while the notification is still visible.
+        self._request_obs_interface_refresh(40)
+        self._request_obs_interface_refresh(120)
 
     def _sync_obs_window_pool(
         self,
