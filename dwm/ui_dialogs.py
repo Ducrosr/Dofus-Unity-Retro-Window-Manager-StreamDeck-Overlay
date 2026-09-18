@@ -4,6 +4,7 @@ import tkinter as tk
 from tkinter import StringVar, Toplevel, messagebox as native_messagebox
 from tkinter.ttk import Button, Entry, Frame, Label
 
+from .services.i18n import tr
 from .ui_design import (
     DANGER_BUTTON_STYLE,
     PRIMARY_BUTTON_STYLE,
@@ -248,6 +249,6 @@ def ask_yes_no(title: str, message: str, *, parent=None, **_kwargs) -> bool:
         str(title),
         str(message),
         heading=str(title),
-        confirm_text="Oui",
-        cancel_text="Non",
+        confirm_text=tr("Oui"),
+        cancel_text=tr("Non"),
     )
