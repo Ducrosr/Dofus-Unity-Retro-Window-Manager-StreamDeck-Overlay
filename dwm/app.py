@@ -7154,15 +7154,10 @@ class WindowManagerApp:
         except Exception:
             pass
 
-        # Tk-owned windows must be closed on this thread. Service stop methods
-        # may wait for other threads, which themselves need the Tk event loop.
+        # Service stop methods may wait for other threads, so keep the Tk event
+        # loop alive while they finish. Tk-owned windows are closed later from
+        # finish_close(), after OBS has had a chance to hide its DWM-only layers.
         simulation_ui = getattr(self, "_display_simulation_ui", None)
-        for ui in (simulation_ui, self.overlay_ui):
-            if ui is not None:
-                try:
-                    ui.close_all()
-                except Exception:
-                    pass
 
         services = [
             (getattr(self, "obs_capture_bridge", None), "stop"),
@@ -7192,6 +7187,12 @@ class WindowManagerApp:
 
         def finish_close() -> None:
             if finished.is_set():
+                for ui in (simulation_ui, getattr(self, "overlay_ui", None)):
+                    if ui is not None:
+                        try:
+                            ui.close_all()
+                        except Exception:
+                            pass
                 self.root.destroy()
             else:
                 self.root.after(50, finish_close)
