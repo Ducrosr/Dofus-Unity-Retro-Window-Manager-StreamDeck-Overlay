@@ -6720,8 +6720,8 @@ class WindowManagerApp:
             text=tr(
                 "DWM crée automatiquement une Capture de fenêtre persistante par client détecté dans cette scène, "
                 "sans limite fixe de 8 clients. Seule la capture du client actif reste affichée dans OBS ; "
-                "lors d’un changement, DWM affiche immédiatement la nouvelle source puis masque la précédente afin de "
-                "libérer le travail WGC/GPU des clients inactifs. "
+                "lors d’un changement, DWM active la nouvelle source, conserve l’ancienne environ 33 ms, puis la masque "
+                "afin de laisser à WGC le temps de fournir sa première image tout en libérant ensuite le travail GPU des clients inactifs. "
                 "L’overlay et la popup DWM sont aussi capturés automatiquement et maintenus au-dessus des fenêtres Dofus."
             ),
             style="Muted.TLabel",
