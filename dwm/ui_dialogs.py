@@ -6,17 +6,25 @@ from tkinter.ttk import Button, Entry, Frame, Label
 from .ui_windowing import schedule_center_window
 
 
-def _prepare_dialog(parent, title: str, *, width: int = 480) -> tuple[Toplevel, Frame]:
+def _prepare_dialog(parent, title: str) -> tuple[Toplevel, Frame]:
     win = Toplevel(parent)
     win.title(title)
     win.transient(parent)
     win.resizable(False, False)
-    win.geometry(f"{width}x1")
-    schedule_center_window(win, parent)
 
     body = Frame(win, padding=20)
     body.pack(fill="both", expand=True)
     return win, body
+
+
+def _finish_dialog_layout(win: Toplevel, parent, width: int) -> None:
+    try:
+        win.update_idletasks()
+        height = max(1, int(win.winfo_reqheight()))
+        win.geometry(f"{width}x{height}")
+    except Exception:
+        pass
+    schedule_center_window(win, parent)
 
 
 def _run_modal(win: Toplevel, parent) -> None:
@@ -43,7 +51,7 @@ def show_message(
     heading: str | None = None,
     button_text: str = "OK",
 ) -> None:
-    win, body = _prepare_dialog(parent, title, width=500)
+    win, body = _prepare_dialog(parent, title)
     Label(
         body,
         text=heading or title,
@@ -68,6 +76,7 @@ def show_message(
 
     win.bind("<Return>", lambda _event: win.destroy())
     win.bind("<Escape>", lambda _event: win.destroy())
+    _finish_dialog_layout(win, parent, 500)
     _run_modal(win, parent)
 
 
@@ -81,7 +90,7 @@ def ask_confirmation(
     cancel_text: str = "Annuler",
     danger: bool = False,
 ) -> bool:
-    win, body = _prepare_dialog(parent, title, width=520)
+    win, body = _prepare_dialog(parent, title)
     result = {"accepted": False}
 
     Label(
@@ -118,6 +127,7 @@ def ask_confirmation(
 
     win.bind("<Return>", lambda _event: accept())
     win.bind("<Escape>", lambda _event: win.destroy())
+    _finish_dialog_layout(win, parent, 520)
     _run_modal(win, parent)
     return bool(result["accepted"])
 
@@ -131,7 +141,7 @@ def ask_text(
     confirm_text: str = "Enregistrer",
     cancel_text: str = "Annuler",
 ) -> str | None:
-    win, body = _prepare_dialog(parent, title, width=500)
+    win, body = _prepare_dialog(parent, title)
     value = StringVar(value=initial)
     result: dict[str, str | None] = {"value": None}
 
@@ -180,5 +190,6 @@ def ask_text(
         entry.focus_set()
     except Exception:
         pass
+    _finish_dialog_layout(win, parent, 500)
     _run_modal(win, parent)
     return result["value"]
