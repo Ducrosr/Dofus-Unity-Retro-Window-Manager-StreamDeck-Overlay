@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import threading
+import time
 from dataclasses import dataclass
 
 from ..models import GameWindow
@@ -34,6 +35,10 @@ POPUP_COLOR_KEY_FILTER_NAME = "[DWM] Popup Color Key"
 POPUP_OPACITY_FILTER_NAME = "[DWM] Popup Opacity"
 POPUP_COLOR_KEY_FILTER_KIND = "color_key_filter_v2"
 POPUP_OPACITY_FILTER_KIND = "color_filter_v2"
+ADVSS_VENDOR_NAME = "AdvancedSceneSwitcher"
+ADVSS_SET_VARIABLES_REQUEST = "AdvancedSceneSwitcherSetVariables"
+ADVSS_GAME_VARIABLE_NAME = "Game"
+ADVSS_RETRY_SECONDS = 30.0
 
 
 @dataclass(frozen=True)
@@ -113,6 +118,10 @@ def _input_settings(
 
 def _slot_name(prefix: str, slot: int) -> str:
     return f"{prefix} {slot:02d}"
+
+
+def advanced_scene_switcher_game_value(game_mode: str | None) -> str:
+    return "Dofus Retro" if str(game_mode or "").strip().lower() == "retro" else "Dofus Unity"
 
 
 @dataclass(frozen=True)
@@ -203,6 +212,9 @@ class OBSActiveCaptureBridge:
         self._config = config.normalized()
         self._windows: dict[int, WindowTelemetry] = {}
         self._active_hwnd: int | None = None
+        self._game_mode = "unity"
+        self._advss_game_value_sent: str | None = None
+        self._advss_retry_after = 0.0
 
         self._stop = threading.Event()
         self._wake = threading.Event()
@@ -268,6 +280,8 @@ class OBSActiveCaptureBridge:
             self._config = normalized
             if connection_changed:
                 self._client = None
+                self._advss_game_value_sent = None
+                self._advss_retry_after = 0.0
             if connection_changed or layout_changed:
                 self._reset_obs_state_locked()
             elif capture_settings_changed:
@@ -287,6 +301,15 @@ class OBSActiveCaptureBridge:
     def set_active_window(self, hwnd: int | None) -> None:
         with self._lock:
             self._active_hwnd = int(hwnd) if hwnd else None
+        self._wake.set()
+
+    def set_game_mode(self, game_mode: str) -> None:
+        normalized = "retro" if str(game_mode or "").strip().lower() == "retro" else "unity"
+        with self._lock:
+            if normalized != self._game_mode:
+                self._game_mode = normalized
+                self._advss_game_value_sent = None
+                self._advss_retry_after = 0.0
         self._wake.set()
 
     def request_refresh(self) -> None:
@@ -365,9 +388,16 @@ class OBSActiveCaptureBridge:
         self._transform_signatures.clear()
         self._obs_layout_ready = False
 
-    def _snapshot(self) -> tuple[OBSActiveCaptureConfig, dict[int, WindowTelemetry], int | None]:
+    def _snapshot(
+        self,
+    ) -> tuple[OBSActiveCaptureConfig, dict[int, WindowTelemetry], int | None, str]:
         with self._lock:
-            return self._config, dict(self._windows), self._active_hwnd
+            return (
+                self._config,
+                dict(self._windows),
+                self._active_hwnd,
+                self._game_mode,
+            )
 
     def _ensure_client(self, config: OBSActiveCaptureConfig):
         if _obs is None:
@@ -379,6 +409,8 @@ class OBSActiveCaptureBridge:
                 password=config.password,
                 timeout=2,
             )
+            self._advss_game_value_sent = None
+            self._advss_retry_after = 0.0
         return self._client
 
     @staticmethod
@@ -388,6 +420,41 @@ class OBSActiveCaptureBridge:
         else:
             response = client.send(request, data, raw=True)
         return response if isinstance(response, dict) else {}
+
+    def _sync_advanced_scene_switcher_game(
+        self,
+        client,
+        game_mode: str,
+    ) -> None:
+        desired = advanced_scene_switcher_game_value(game_mode)
+        if self._advss_game_value_sent == desired:
+            return
+        now = time.monotonic()
+        if now < self._advss_retry_after:
+            return
+        try:
+            self._send(
+                client,
+                "CallVendorRequest",
+                {
+                    "vendorName": ADVSS_VENDOR_NAME,
+                    "requestType": ADVSS_SET_VARIABLES_REQUEST,
+                    "requestData": {
+                        "variables": [
+                            {
+                                "name": ADVSS_GAME_VARIABLE_NAME,
+                                "value": desired,
+                            }
+                        ]
+                    },
+                },
+            )
+            self._advss_game_value_sent = desired
+            self._advss_retry_after = 0.0
+        except Exception:
+            # Advanced Scene Switcher is optional. Its absence must never break
+            # DWM's native OBS capture integration.
+            self._advss_retry_after = now + ADVSS_RETRY_SECONDS
 
     def _get_canvas_size(self, client) -> tuple[int, int] | None:
         if self._canvas_size is not None:
@@ -1136,12 +1203,13 @@ class OBSActiveCaptureBridge:
             )
 
     def _reconcile_once(self) -> None:
-        config, windows, active_hwnd = self._snapshot()
+        config, windows, active_hwnd, game_mode = self._snapshot()
         if not config.enabled:
             return
 
         try:
             client = self._ensure_client(config)
+            self._sync_advanced_scene_switcher_game(client, game_mode)
             self._prepare_obs_layout(client, config)
             self._reconcile_assignments(windows)
 
@@ -1190,6 +1258,8 @@ class OBSActiveCaptureBridge:
         except Exception as exc:
             self.last_error = str(exc)
             self._client = None
+            self._advss_game_value_sent = None
+            self._advss_retry_after = 0.0
             self._obs_layout_ready = False
             self._item_id_by_slot.clear()
             self._selector_by_slot.clear()
