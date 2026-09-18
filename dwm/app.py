@@ -402,14 +402,14 @@ def apply_dark_theme(root, theme_name: str = MODERN_DARK_THEME) -> None:
         "TLabelframe",
         background=C["bg"],
         foreground=C["fg"],
-        bordercolor=line_soft,
-        borderwidth=1,
+        bordercolor=C["bg"],
+        borderwidth=0,
         relief="flat",
     )
     style.configure(
         "TLabelframe.Label",
         background=C["bg"],
-        foreground=C["muted"] if t != RETRO_THEME else C["on_dark"],
+        foreground=C["header"],
         font=("Segoe UI", 10, "bold"),
         padding=(5, 2),
     )
@@ -1998,7 +1998,7 @@ class WindowManagerApp:
 
         win.bind("<Destroy>", clear_reference, add="+")
 
-        body = TtkFrame(win, padding=18)
+        body = TtkFrame(win, padding=UI.window_padding)
         body.pack(fill="both", expand=True)
 
         TtkLabel(
@@ -2016,15 +2016,17 @@ class WindowManagerApp:
             justify="left",
         ).pack(anchor="w", pady=(2, 16))
 
-        stream_tools = TtkLabelFrame(
-            body,
-            text=tr("Affichage et stream"),
-            padding=12,
-            style="Card.TLabelframe",
-        )
-        stream_tools.pack(fill="x", pady=(0, 8))
-        stream_tools.columnconfigure(0, weight=1)
-        stream_tools.columnconfigure(1, weight=1)
+        def action_group(title: str, *, gap: int = 12):
+            section = TtkFrame(body)
+            section.pack(fill="x", pady=(0, gap))
+            TtkLabel(section, text=title, style="Section.TLabel").pack(anchor="w")
+            panel = TtkFrame(section, padding=10, style="Surface.TFrame")
+            panel.pack(fill="x", pady=(6, 0))
+            panel.columnconfigure(0, weight=1)
+            panel.columnconfigure(1, weight=1)
+            return panel
+
+        stream_tools = action_group(tr("Affichage et stream"))
         TtkButton(
             stream_tools,
             text=tr("Aperçu Stream Deck…"),
@@ -2046,15 +2048,7 @@ class WindowManagerApp:
             command=self.reset_display_settings,
         ).grid(row=1, column=1, sticky="ew", padx=(3, 0), pady=2)
 
-        configuration = TtkLabelFrame(
-            body,
-            text=tr("Configuration"),
-            padding=12,
-            style="Card.TLabelframe",
-        )
-        configuration.pack(fill="x", pady=(0, 10))
-        configuration.columnconfigure(0, weight=1)
-        configuration.columnconfigure(1, weight=1)
+        configuration = action_group(tr("Configuration"))
         TtkButton(
             configuration,
             text=tr("Assistant de configuration…"),
@@ -2072,15 +2066,7 @@ class WindowManagerApp:
             style="Accent.TButton",
         ).grid(row=1, column=0, columnspan=2, sticky="ew", pady=2)
 
-        maintenance = TtkLabelFrame(
-            body,
-            text=tr("Maintenance et sécurité"),
-            padding=12,
-            style="Card.TLabelframe",
-        )
-        maintenance.pack(fill="x", pady=(0, 10))
-        maintenance.columnconfigure(0, weight=1)
-        maintenance.columnconfigure(1, weight=1)
+        maintenance = action_group(tr("Maintenance et sécurité"), gap=10)
         self.update_button = TtkButton(
             maintenance,
             text=tr("Rechercher une mise à jour…"),
