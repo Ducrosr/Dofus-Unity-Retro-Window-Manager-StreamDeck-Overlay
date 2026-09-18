@@ -36,6 +36,11 @@ def _finish_dialog_layout(win: Toplevel, parent, width: int) -> None:
 
 
 def _run_modal(win: Toplevel, parent) -> None:
+    previous_grab = None
+    try:
+        previous_grab = parent.grab_current()
+    except Exception:
+        pass
     try:
         win.wait_visibility()
     except Exception:
@@ -49,6 +54,13 @@ def _run_modal(win: Toplevel, parent) -> None:
     except Exception:
         pass
     parent.wait_window(win)
+    if previous_grab is not None and previous_grab is not win:
+        try:
+            exists = getattr(previous_grab, "winfo_exists", None)
+            if not callable(exists) or exists():
+                previous_grab.grab_set()
+        except Exception:
+            pass
 
 
 def show_message(
