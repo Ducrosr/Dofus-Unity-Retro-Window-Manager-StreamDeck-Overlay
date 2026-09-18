@@ -107,7 +107,21 @@ from .services.configuration_diff import compare_configuration, compare_profiles
 from .ui_configuration_preview import confirm_configuration_changes
 from .ui_settings_search import SettingsSearch
 from .ui_update_download import UpdateDownloadDialog
-from .ui_dialogs import ask_confirmation, ask_text, show_message
+from .ui_dialogs import (
+    ask_confirmation,
+    ask_text,
+    ask_yes_no,
+    show_error,
+    show_info,
+    show_message,
+    show_warning,
+)
+from .ui_design import (
+    PRIMARY_BUTTON_STYLE,
+    SECONDARY_BUTTON_STYLE,
+    TERTIARY_BUTTON_STYLE,
+    UI,
+)
 from .ui_windowing import (
     apply_windows_dark_titlebar,
     install_combobox_wheel_guard,
@@ -225,7 +239,7 @@ SWAP_POSITION_LABELS = {
     "bottom_right": "En bas à droite",
 }
 ROTATION_COALESCE_MS = 18
-MAIN_CONTENT_MAX_WIDTH = 1720
+MAIN_CONTENT_MAX_WIDTH = UI.main_content_max_width
 OFFICIAL_REPOSITORY_URL = (
     "https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay"
 )
@@ -370,6 +384,18 @@ def apply_dark_theme(root, theme_name: str = MODERN_DARK_THEME) -> None:
         font=("Segoe UI", 10),
     )
     style.configure("Muted.TLabel", background=C["bg"], foreground=C["muted"])
+    style.configure(
+        "Warning.TLabel",
+        background=C["bg"],
+        foreground=C["attention"],
+        font=("Segoe UI", 17, "bold"),
+    )
+    style.configure(
+        "DangerHeader.TLabel",
+        background=C["bg"],
+        foreground="#e58b91",
+        font=("Segoe UI", 17, "bold"),
+    )
 
     # Cards keep structure without the heavy nested-box look of classic Tk.
     style.configure(
@@ -415,6 +441,34 @@ def apply_dark_theme(root, theme_name: str = MODERN_DARK_THEME) -> None:
     style.map("TButton",
               background=[("active", C["button_hover"]), ("pressed", C["bg3"]), ("disabled", C["bg2"])],
               foreground=[("disabled", C["muted"])])
+    style.configure(
+        "Secondary.TButton",
+        background=C["bg3"],
+        foreground=C["on_dark"],
+        borderwidth=0,
+        focusthickness=0,
+        padding=(12, 8),
+        font=("Segoe UI", 10),
+    )
+    style.map(
+        "Secondary.TButton",
+        background=[("active", C["button_hover"]), ("pressed", C["bg3"]), ("disabled", C["bg2"])],
+        foreground=[("disabled", C["muted"])],
+    )
+    style.configure(
+        "Tertiary.TButton",
+        background=C["bg"],
+        foreground=C["muted"],
+        borderwidth=0,
+        focusthickness=0,
+        padding=(10, 8),
+        font=("Segoe UI", 10),
+    )
+    style.map(
+        "Tertiary.TButton",
+        background=[("active", surface), ("pressed", C["bg2"])],
+        foreground=[("active", C["fg"]), ("pressed", C["fg"]), ("disabled", C["muted"])],
+    )
     style.configure(
         "Accent.TButton",
         background=C["accent"],
@@ -543,9 +597,12 @@ def apply_dark_theme(root, theme_name: str = MODERN_DARK_THEME) -> None:
         padding=5,
         bordercolor=line_soft,
     )
+    style.map("TEntry", bordercolor=[("focus", C["header"])])
+    style.map("TSpinbox", bordercolor=[("focus", C["header"])])
     style.map("TCombobox",
               fieldbackground=[("readonly", C["bg2"])],
-              foreground=[("readonly", C["fg"])])
+              foreground=[("readonly", C["fg"])],
+              bordercolor=[("focus", C["header"])])
 
     style.configure("TNotebook", background=C["bg"], borderwidth=0)
     style.configure(
@@ -557,8 +614,8 @@ def apply_dark_theme(root, theme_name: str = MODERN_DARK_THEME) -> None:
         font=("Segoe UI", 10, "bold"),
     )
     style.map("TNotebook.Tab",
-              background=[("selected", C["bg2"]), ("active", C["bg2"])],
-              foreground=[("selected", C["fg"]), ("active", C["fg"])])
+              background=[("selected", C["header"]), ("active", surface_alt)],
+              foreground=[("selected", C["on_dark"]), ("active", C["fg"])])
 
     style.configure("Treeview",
                     background=C["bg2"],
@@ -567,8 +624,8 @@ def apply_dark_theme(root, theme_name: str = MODERN_DARK_THEME) -> None:
                     bordercolor=C["line"],
                     rowheight=28)
     style.map("Treeview",
-              background=[("selected", C["accent"])],
-              foreground=[("selected", C["on_accent"])])
+              background=[("selected", C["header"])],
+              foreground=[("selected", C["on_dark"])])
     style.configure(
         "Treeview.Heading",
         background=C["bg3"],
@@ -1010,7 +1067,7 @@ class WindowManagerApp:
                 save_settings(self.settings_path, self.settings)
             except OSError as exc:
                 self.settings.security_notice_accepted = False
-                messagebox.showerror(
+                show_error(
                     tr("Enregistrement impossible"),
                     str(exc),
                     parent=dialog,
@@ -1139,7 +1196,7 @@ class WindowManagerApp:
                 try:
                     save_settings(self.settings_path, self.settings)
                 except OSError as exc:
-                    messagebox.showerror(
+                    show_error(
                         tr("Enregistrement impossible"),
                         str(exc),
                         parent=dialog,
@@ -1598,7 +1655,7 @@ class WindowManagerApp:
         self._publish_streamdeck_state()
         if language in {"en", "es"}:
             title, notice = translation_notice(language)
-            messagebox.showwarning(title, notice, parent=self.root)
+            show_warning(title, notice, parent=self.root)
 
     def _load_language_flag_images(self) -> dict[str, ImageTk.PhotoImage]:
         images: dict[str, ImageTk.PhotoImage] = {}
@@ -1755,7 +1812,7 @@ class WindowManagerApp:
         )
         self.undo_order_button = TtkButton(navigation, text=tr("Annuler le déplacement"), command=self.undo_order_change, state="disabled")
         self.undo_order_button.grid(row=3, column=0, columnspan=2, sticky="ew", pady=2)
-        TtkButton(navigation, text=tr("Rétablir l’ordre du profil"), command=self.restore_profile_order).grid(row=6, column=0, columnspan=2, sticky="ew", pady=(8, 2))
+        TtkButton(navigation, text=tr("Rétablir l’ordre du profil"), command=self.restore_profile_order).grid(row=4, column=0, columnspan=2, sticky="ew", pady=(8, 2))
         TtkButton(navigation, text=tr("Équipe et emplacements…"), command=self.show_character_slots).grid(row=5, column=0, columnspan=2, sticky="ew", pady=2)
         TtkButton(navigation, textvariable=self.hotkey_pause_text, command=self.toggle_hotkeys_paused).grid(row=6, column=0, columnspan=2, sticky="ew", pady=2)
 
@@ -2063,7 +2120,7 @@ class WindowManagerApp:
             footer,
             text=tr("Fermer"),
             command=win.destroy,
-            style="Quiet.TButton",
+            style=SECONDARY_BUTTON_STYLE,
         ).pack(side="right")
 
         self._localize_widget_tree(win)
@@ -3059,7 +3116,7 @@ class WindowManagerApp:
         if opened:
             self._log(f"Ouverture : {label}")
             return
-        messagebox.showwarning(
+        show_warning(
             "Lien externe",
             tr(
                 "Le navigateur n’a pas pu être ouvert.\n\nAdresse à consulter :\n{url}",
@@ -3300,7 +3357,7 @@ class WindowManagerApp:
             refresh_job = self.root.after(750, render)
 
         def rebind() -> None:
-            if not messagebox.askyesno(tr("Réattribuer les emplacements"), tr("Remplacer les emplacements fixes par l’ordre courant ?"), parent=win):
+            if not ask_yes_no(tr("Réattribuer les emplacements"), tr("Remplacer les emplacements fixes par l’ordre courant ?"), parent=win):
                 return
             roster = self._ensure_character_roster()
             roster.slots = list(roster.order)
@@ -3312,7 +3369,7 @@ class WindowManagerApp:
             roster = self._ensure_character_roster()
             present = {character_key(window.pseudo) for window in self._all_windows.values()}
             absent = [name for name in roster.order if character_key(name) not in present]
-            if not absent or not messagebox.askyesno(tr("Retirer les personnages absents"), tr("Retirer {names} de l’équipe ? Les emplacements suivants seront renumérotés. Enregistrez ensuite le profil.", names=", ".join(absent)), parent=win):
+            if not absent or not ask_yes_no(tr("Retirer les personnages absents"), tr("Retirer {names} de l’équipe ? Les emplacements suivants seront renumérotés. Enregistrez ensuite le profil.", names=", ".join(absent)), parent=win):
                 return
             roster.order = [name for name in roster.order if character_key(name) in present]
             roster.slots = [name for name in roster.slots if character_key(name) in present]
@@ -3394,7 +3451,7 @@ class WindowManagerApp:
             try:
                 overlays = dict(load_profile(self.dirs["profiles"], name).overlay_by_game_mode or {})
             except Exception as exc:
-                messagebox.showerror(tr("Erreur"), str(exc), parent=self.root)
+                show_error(tr("Erreur"), str(exc), parent=self.root)
                 return
         overlay_var = getattr(self, "profile_overlay_var", None)
         if overlay_var is None or overlay_var.get():
@@ -3431,12 +3488,12 @@ class WindowManagerApp:
     def load_profile_selected(self):
         name = self.selected_profile.get().strip()
         if not name:
-            messagebox.showwarning("Charger profil", "Sélectionne un profil.")
+            show_warning("Charger profil", "Sélectionne un profil.")
             return
         try:
             pr = load_profile(self.dirs["profiles"], name)
         except Exception as e:
-            messagebox.showerror("Erreur", f"Impossible de charger: {e}")
+            show_error("Erreur", f"Impossible de charger: {e}")
             return
 
         self._activate_profile(pr)
@@ -3448,7 +3505,14 @@ class WindowManagerApp:
         name = self.selected_profile.get().strip()
         if not name:
             return
-        if not messagebox.askyesno("Confirmer", f"Supprimer le profil '{name}' ?"):
+        if not ask_confirmation(
+            self.root,
+            tr("Supprimer le profil"),
+            tr("Supprimer définitivement le profil « {name} » ?", name=name),
+            confirm_text=tr("Supprimer"),
+            cancel_text=tr("Annuler"),
+            danger=True,
+        ):
             return
         try:
             self._create_configuration_snapshot("avant suppression profil")
@@ -3459,17 +3523,17 @@ class WindowManagerApp:
             self.selected_profile.set("")
             self._refresh_profile_combo()
         except Exception as e:
-            messagebox.showerror("Erreur", f"Suppression impossible: {e}")
+            show_error("Erreur", f"Suppression impossible: {e}")
 
     def export_profile_json(self):
         name = self.selected_profile.get().strip()
         if not name:
-            messagebox.showwarning("Exporter", "Sélectionne un profil.")
+            show_warning("Exporter", "Sélectionne un profil.")
             return
         try:
             pr = load_profile(self.dirs["profiles"], name)
         except Exception as e:
-            messagebox.showerror("Erreur", f"Impossible de charger: {e}")
+            show_error("Erreur", f"Impossible de charger: {e}")
             return
         path = filedialog.asksaveasfilename(
             title="Exporter le profil",
@@ -3496,14 +3560,14 @@ class WindowManagerApp:
             if not confirm_configuration_changes(self.root, changes, retained):
                 return
             if not self._create_configuration_snapshot("avant import profil"):
-                messagebox.showerror(tr("Import impossible"), tr("Le point de restauration n’a pas pu être créé. Aucun changement n’a été appliqué."), parent=self.root)
+                show_error(tr("Import impossible"), tr("Le point de restauration n’a pas pu être créé. Aucun changement n’a été appliqué."), parent=self.root)
                 return
             save_profile(self.dirs["profiles"], pr)
             self._log(f"Profil importé: '{pr.name}'")
             self._refresh_profile_combo()
             self.selected_profile.set(pr.name)
         except Exception as e:
-            messagebox.showerror("Erreur", f"Import impossible: {e}")
+            show_error("Erreur", f"Import impossible: {e}")
 
     def open_profile_manager(self) -> None:
         win = Toplevel(self.root)
@@ -3582,24 +3646,24 @@ class WindowManagerApp:
             content,
             text=tr("Fermer"),
             command=win.destroy,
-            style="Quiet.TButton",
+            style=SECONDARY_BUTTON_STYLE,
         ).grid(row=7, column=0, columnspan=2, sticky="e", pady=(14, 0))
 
     def install_streamdeck_plugin(self) -> bool:
         try:
             open_streamdeck_plugin()
         except FileNotFoundError as exc:
-            messagebox.showerror(
+            show_error(
                 "Plugin Stream Deck introuvable",
                 f"Le paquet d’installation n’est pas inclus dans cette copie de l’application.\n\n{exc}",
                 parent=self.root,
             )
             return False
         except OSError as exc:
-            messagebox.showerror("Installation impossible", str(exc), parent=self.root)
+            show_error("Installation impossible", str(exc), parent=self.root)
             return False
         except Exception as exc:
-            messagebox.showerror(
+            show_error(
                 "Installation impossible",
                 f"Impossible d’ouvrir le paquet Stream Deck : {exc}",
                 parent=self.root,
@@ -3624,7 +3688,7 @@ class WindowManagerApp:
     def open_streamdeck_plugin_repair(self) -> None:
         health = self._streamdeck_plugin_health()
         if health.status == "bundled_missing":
-            messagebox.showerror(
+            show_error(
                 tr("État du plugin Stream Deck"),
                 health.message,
                 parent=self.root,
@@ -3635,7 +3699,7 @@ class WindowManagerApp:
             if health.repair_recommended
             else tr("Réinstaller quand même le paquet fourni ?")
         )
-        if not messagebox.askyesno(
+        if not ask_yes_no(
             tr("État du plugin Stream Deck"),
             f"{health.message}\n\n{action}",
             parent=self.root,
@@ -3885,7 +3949,7 @@ class WindowManagerApp:
         except Exception as exc:
             result = {"ok": False, "error": str(exc)}
         if not result.get("ok"):
-            messagebox.showwarning(
+            show_warning(
                 "Action Stream Deck impossible",
                 str(result.get("error") or "La commande n’a pas pu être exécutée."),
                 parent=self.streamdeck_preview_window or self.root,
@@ -4032,7 +4096,7 @@ class WindowManagerApp:
             if callable(opener):
                 opener(str(self.dirs["logs"]))
                 return
-            messagebox.showinfo("Journaux", str(self.dirs["logs"]), parent=win)
+            show_info("Journaux", str(self.dirs["logs"]), parent=win)
 
         TtkButton(buttons, text="Copier le rapport", command=copy_report).pack(side="left")
         TtkButton(buttons, text="Ouvrir les journaux", command=open_logs).pack(side="left", padx=(6, 0))
@@ -4057,7 +4121,7 @@ class WindowManagerApp:
         if self._stop_event.is_set():
             return
         self._log("La session précédente s’est terminée anormalement.")
-        if messagebox.askyesno(
+        if ask_yes_no(
             tr("Fermeture anormale détectée"),
             tr("La session précédente ne s’est pas fermée normalement. Cela peut provenir d’un plantage ou d’un arrêt forcé. Voulez-vous enregistrer un paquet de support anonymisé ? Aucun rapport ne sera envoyé automatiquement."),
             parent=self.root,
@@ -4108,7 +4172,7 @@ class WindowManagerApp:
                 app_version=__version__,
             )
         except OSError as exc:
-            messagebox.showerror(
+            show_error(
                 tr("Paquet de support"),
                 tr("Impossible de créer le paquet : {error}", error=exc),
                 parent=parent or self.root,
@@ -4116,7 +4180,7 @@ class WindowManagerApp:
             return
 
         self._log(f"Paquet de support anonymisé créé : {created}")
-        messagebox.showinfo(
+        show_info(
             tr("Paquet de support"),
             tr(
                 "Le paquet anonymisé a été créé. Relisez son contenu avant de le publier : une anonymisation automatique ne peut pas garantir qu’un texte libre ne contient aucune donnée personnelle."
@@ -4174,7 +4238,7 @@ class WindowManagerApp:
             set_startup_enabled(restored_settings.start_with_windows)
         except OSError as exc:
             restored_settings.start_with_windows = False
-            messagebox.showwarning(
+            show_warning(
                 "Démarrage Windows",
                 f"Le démarrage automatique n’a pas pu être restauré : {exc}",
                 parent=parent,
@@ -4236,7 +4300,7 @@ class WindowManagerApp:
         self.update_listboxes()
         self._register_hotkeys()
         self._log(f"Configuration restaurée depuis {source}")
-        messagebox.showinfo(
+        show_info(
             "Configuration restaurée",
             "La configuration est restaurée. Redémarrez l’application pour appliquer complètement les options de détection.",
             parent=parent,
@@ -4258,12 +4322,12 @@ class WindowManagerApp:
             changes, retained = compare_configuration(self.settings.to_dict(), restored_settings.to_dict(),
                                                        current_profiles, profiles, current_session, session)
         except (OSError, ValueError, TypeError) as exc:
-            messagebox.showerror("Sauvegarde invalide", str(exc), parent=parent)
+            show_error("Sauvegarde invalide", str(exc), parent=parent)
             return False
         if not confirm_configuration_changes(parent, changes, retained):
             return False
         if not self._create_configuration_snapshot("avant restauration"):
-            messagebox.showerror(tr("Import impossible"), tr("Le point de restauration n’a pas pu être créé. Aucun changement n’a été appliqué."), parent=parent)
+            show_error(tr("Import impossible"), tr("Le point de restauration n’a pas pu être créé. Aucun changement n’a été appliqué."), parent=parent)
             return False
         self._apply_restored_configuration(
             restored_settings,
@@ -4333,7 +4397,7 @@ class WindowManagerApp:
         def restore_selected_snapshot() -> None:
             snapshot = snapshots_by_label.get(snapshot_var.get())
             if snapshot is None:
-                messagebox.showwarning(
+                show_warning(
                     tr("Points de restauration locaux"),
                     tr("Aucun point de restauration valide n’est sélectionné."),
                     parent=win,
@@ -4342,7 +4406,7 @@ class WindowManagerApp:
             try:
                 data = load_backup_snapshot(snapshot)
             except (OSError, ValueError, json.JSONDecodeError) as exc:
-                messagebox.showerror("Sauvegarde invalide", str(exc), parent=win)
+                show_error("Sauvegarde invalide", str(exc), parent=win)
                 return
             if self._restore_configuration_data(
                 data,
@@ -4400,13 +4464,13 @@ class WindowManagerApp:
         try:
             data = json_load(Path(path))
         except (OSError, ValueError, json.JSONDecodeError) as exc:
-            messagebox.showerror("Sauvegarde invalide", str(exc), parent=self.root)
+            show_error("Sauvegarde invalide", str(exc), parent=self.root)
             return
         self._restore_configuration_data(data, source=path, parent=self.root)
 
     def reset_display_settings(self, *, parent=None) -> bool:
         dialog_parent = parent or self.root
-        if not messagebox.askyesno(
+        if not ask_yes_no(
             "Réinitialiser l’affichage",
             (
                 "Rétablir le thème, les colonnes, la notification et l’overlay par défaut ?\n\n"
@@ -4431,7 +4495,7 @@ class WindowManagerApp:
             pass
         self._publish_streamdeck_state()
         self._log("Affichage réinitialisé")
-        messagebox.showinfo(
+        show_info(
             "Affichage réinitialisé",
             "L’affichage par défaut est restauré et l’overlay est activé à sa position initiale.",
             parent=dialog_parent,
@@ -4439,7 +4503,7 @@ class WindowManagerApp:
         return True
 
     def reset_settings(self) -> None:
-        if not messagebox.askyesno(
+        if not ask_yes_no(
             "Réinitialiser les réglages",
             "Revenir aux réglages par défaut ? Les profils et alias enregistrés ne seront pas supprimés.",
             parent=self.root,
@@ -4465,7 +4529,7 @@ class WindowManagerApp:
             pass
         self._publish_streamdeck_state()
         self._log("Réglages réinitialisés")
-        messagebox.showinfo(
+        show_info(
             "Réglages réinitialisés",
             "Les réglages par défaut seront entièrement appliqués au prochain démarrage.",
             parent=self.root,
@@ -4970,7 +5034,7 @@ class WindowManagerApp:
                 profile = load_profile(self.dirs["profiles"], value)
             except Exception as exc:
                 self._show_main_window()
-                messagebox.showerror(tr("Erreur"), str(exc), parent=self.root)
+                show_error(tr("Erreur"), str(exc), parent=self.root)
                 self._refresh_profile_combo()
                 return
             if profile.game_mode in {"unity", "retro"} and profile.game_mode != self.game_mode:
@@ -5688,7 +5752,7 @@ class WindowManagerApp:
         hwnd = self._selected_character_hwnd()
         window = self._all_windows.get(hwnd) if hwnd is not None else None
         if window is None:
-            messagebox.showwarning(
+            show_warning(
                 "Personnaliser le personnage",
                 "Sélectionnez d’abord une fenêtre Dofus.",
                 parent=self.root,
@@ -5766,7 +5830,7 @@ class WindowManagerApp:
             try:
                 portrait_data = encode_portrait_file(path)
             except ValueError as exc:
-                messagebox.showerror("Portrait incompatible", str(exc), parent=win)
+                show_error("Portrait incompatible", str(exc), parent=win)
                 return
             refresh_preview()
 
@@ -5803,7 +5867,7 @@ class WindowManagerApp:
             try:
                 portrait_data = encode_portrait_file(path)
             except ValueError as exc:
-                messagebox.showerror("Portrait incompatible", str(exc), parent=win)
+                show_error("Portrait incompatible", str(exc), parent=win)
                 return
             refresh_preview()
 
@@ -7028,7 +7092,7 @@ class WindowManagerApp:
                 if not 1 <= obs_port_value <= 65535:
                     raise ValueError
             except (TypeError, ValueError):
-                messagebox.showerror(
+                show_error(
                     tr("OBS"),
                     tr("Le port WebSocket OBS doit être compris entre 1 et 65535."),
                     parent=win,
@@ -7037,7 +7101,7 @@ class WindowManagerApp:
             obs_scene_value = obs_capture_scene.get().strip()
             obs_prefix_value = obs_capture_source_prefix.get().strip()
             if obs_capture_sync.get() and (not obs_scene_value or not obs_prefix_value):
-                messagebox.showerror(
+                show_error(
                     tr("OBS"),
                     tr("Indiquez un nom de scène OBS et un préfixe de capture."),
                     parent=win,
@@ -7052,7 +7116,7 @@ class WindowManagerApp:
             ref = hk_ref.get().strip() or "Ctrl+Alt+R"
             direct_specs = [variable.get().strip() for variable in direct_hotkeys]
             if not validate_hotkey_form():
-                messagebox.showerror(
+                show_error(
                     "Hotkeys",
                     hotkey_validation_status.get(),
                     parent=win,
@@ -7084,7 +7148,7 @@ class WindowManagerApp:
                 try:
                     set_startup_enabled(requested_startup)
                 except OSError as exc:
-                    messagebox.showerror("Démarrage Windows", str(exc), parent=win)
+                    show_error("Démarrage Windows", str(exc), parent=win)
                     return
             self.settings.start_with_windows = requested_startup
             self.settings.minimize_to_tray = bool(minimize_to_tray.get())
@@ -7184,7 +7248,7 @@ class WindowManagerApp:
                 # If Windows refuses a hotkey (already in use, etc.), show it quickly.
                 self.root.after(250, self._report_hotkey_error_popup)
             except Exception as e:
-                messagebox.showerror("Hotkeys", f"Impossible d'appliquer les hotkeys: {e}")
+                show_error("Hotkeys", f"Impossible d'appliquer les hotkeys: {e}")
                 return
 
             save_settings(self.settings_path, self.settings)
@@ -7215,15 +7279,15 @@ class WindowManagerApp:
             settings_footer,
             text=tr("Réinitialiser l’affichage…"),
             command=reset_display_from_settings,
-            style="Quiet.TButton",
+            style=TERTIARY_BUTTON_STYLE,
         ).pack(side="left")
         TtkButton(
             settings_footer,
             text=tr("Annuler"),
             command=win.destroy,
-            style="Quiet.TButton",
+            style=SECONDARY_BUTTON_STYLE,
         ).pack(side="right")
-        TtkButton(settings_footer, text="Appliquer", command=apply, style="Accent.TButton").pack(
+        TtkButton(settings_footer, text="Appliquer", command=apply, style=PRIMARY_BUTTON_STYLE).pack(
             side="right", padx=(0, 6)
         )
         self._localize_widget_tree(win)
@@ -7248,7 +7312,7 @@ class WindowManagerApp:
                         for position in range(1, 9)
                     },
                 }
-                messagebox.showwarning(
+                show_warning(
                     "Hotkeys",
                     tr(
                         "Windows n’a pas pu enregistrer certaines combinaisons :\n\n{details}\n\nChoisissez une autre combinaison puis réessayez.",
