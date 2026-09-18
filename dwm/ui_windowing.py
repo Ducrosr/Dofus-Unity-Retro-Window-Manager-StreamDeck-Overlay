@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+import ctypes
+import os
+
+from .services.monitor_layout import choose_monitor, list_monitors
+
+
+WINDOW_MARGIN = 24
+
 
 def centered_position(
     parent_x: int,
@@ -28,12 +36,85 @@ def _widget_is_visible(widget) -> bool:
         return False
 
 
-def center_window_on_parent(window, parent=None) -> None:
-    """Center a conventional dialog over its visible parent.
+def _monitor_for_window(window, parent=None):
+    monitors = list_monitors(window)
+    if not monitors:
+        return None
 
-    If the parent is hidden, center on the current Tk screen instead. Overlay,
-    popup and compact windows should not use this helper because their position
-    is part of their functionality.
+    if parent is not None and _widget_is_visible(parent):
+        try:
+            parent.update_idletasks()
+            point = (
+                int(parent.winfo_rootx()) + max(1, int(parent.winfo_width())) // 2,
+                int(parent.winfo_rooty()) + max(1, int(parent.winfo_height())) // 2,
+            )
+            return choose_monitor(monitors, "", point)
+        except Exception:
+            pass
+
+    try:
+        point = (
+            int(window.winfo_pointerx()),
+            int(window.winfo_pointery()),
+        )
+        return choose_monitor(monitors, "", point)
+    except Exception:
+        return next((item for item in monitors if item.primary), monitors[0])
+
+
+def _clamp_geometry_to_work_area(
+    x: int,
+    y: int,
+    width: int,
+    height: int,
+    area: tuple[int, int, int, int],
+    *,
+    margin: int = WINDOW_MARGIN,
+) -> tuple[int, int, int, int]:
+    left, top, right, bottom = area
+    usable_width = max(1, right - left - (margin * 2))
+    usable_height = max(1, bottom - top - (margin * 2))
+    width = min(max(1, width), usable_width)
+    height = min(max(1, height), usable_height)
+    min_x = left + margin
+    min_y = top + margin
+    max_x = max(min_x, right - margin - width)
+    max_y = max(min_y, bottom - margin - height)
+    return (
+        max(min_x, min(int(x), max_x)),
+        max(min_y, min(int(y), max_y)),
+        width,
+        height,
+    )
+
+
+def apply_windows_dark_titlebar(window) -> None:
+    """Ask Windows 10/11 to render the native caption using dark chrome."""
+    if os.name != "nt":
+        return
+    try:
+        window.update_idletasks()
+        hwnd = int(window.winfo_id())
+        dwmapi = ctypes.WinDLL("dwmapi", use_last_error=True)
+        value = ctypes.c_int(1)
+        for attribute in (20, 19):  # current + older immersive dark-mode ids
+            result = dwmapi.DwmSetWindowAttribute(
+                ctypes.c_void_p(hwnd),
+                ctypes.c_uint(attribute),
+                ctypes.byref(value),
+                ctypes.sizeof(value),
+            )
+            if result == 0:
+                break
+    except Exception:
+        return
+
+
+def center_window_on_parent(window, parent=None) -> None:
+    """Center a dialog and keep it fully inside the current monitor work area.
+
+    Overlay, popup and compact windows deliberately do not use this helper
+    because their desktop position is part of their functionality.
     """
     try:
         window.update_idletasks()
@@ -60,15 +141,25 @@ def center_window_on_parent(window, parent=None) -> None:
                 child_height,
             )
 
-        # Position-only geometry preserves a width/height already chosen by the
-        # caller while letting Tk place the window on the same desktop as DWM.
-        window.geometry(f"+{x}+{y}")
+        monitor = _monitor_for_window(window, parent)
+        if monitor is not None:
+            x, y, child_width, child_height = _clamp_geometry_to_work_area(
+                x,
+                y,
+                child_width,
+                child_height,
+                monitor.area,
+            )
+            window.geometry(f"{child_width}x{child_height}+{x}+{y}")
+        else:
+            window.geometry(f"+{x}+{y}")
+        apply_windows_dark_titlebar(window)
     except Exception:
         return
 
 
 def schedule_center_window(window, parent=None) -> None:
-    """Center after Tk has computed the dialog's requested dimensions."""
+    """Center/clamp after Tk has computed the dialog's requested dimensions."""
     try:
         window.after_idle(lambda: center_window_on_parent(window, parent))
     except Exception:
