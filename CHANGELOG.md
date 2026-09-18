@@ -4,6 +4,7 @@
 
 ### OBS et overlay
 
+- À la fermeture complète de DWM, les sources OBS `[DWM] Overlay` et `[DWM] Focus Popup` sont désactivées proprement avant destruction des fenêtres Tk ; les captures Dofus restent inchangées.
 - Intégration OBS WebSocket avec pool dynamique de Captures de fenêtre persistantes, sans limite fixe à huit clients.
 - Changement de personnage sans réacquisition WGC : les captures restent actives et seul leur filtre d’opacité est modifié.
 - Création automatique des captures de l’overlay et de la popup DWM, toujours maintenues au-dessus des fenêtres Dofus.
