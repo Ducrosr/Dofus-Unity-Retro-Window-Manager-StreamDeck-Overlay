@@ -17,6 +17,9 @@
 
 ### Fiabilité
 
+- Prévisualisation des préréglages d’affichage désormais interactive même lorsque la fenêtre Paramètres est ouverte : le verrou modal est suspendu pendant l’aperçu puis restauré à sa fermeture.
+- Application des paramètres regroupée pour éviter les rafraîchissements successifs de l’intégration OBS.
+- Mise à jour de palette et verrouillage de l’overlay effectués sans remplacer son HWND ; les réglages identiques ne provoquent plus de rendu inutile, ce qui réduit fortement les clignotements lors de l’application.
 - Correction du `KeyError: 'popdown'` de Tkinter lors de l’utilisation des listes déroulantes.
 - La boucle principale de traitement reste active après une erreur de synchronisation de la zone de notification, ce qui préserve l’actualisation automatique lors de l’ouverture ou fermeture de fenêtres Dofus.
 
