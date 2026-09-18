@@ -17,6 +17,8 @@
 
 ### Fiabilité
 
+- Les fenêtres secondaires et boîtes de dialogue DWM s’ouvrent centrées sur la fenêtre principale lorsqu’elle est visible ; les sous-dialogues restent centrés sur leur parent direct.
+- La molette ne change plus accidentellement la valeur d’une liste déroulante fermée ; l’événement continue vers le conteneur afin que le défilement de la page reste naturel.
 - Prévisualisation des préréglages d’affichage désormais interactive même lorsque la fenêtre Paramètres est ouverte : le verrou modal est suspendu pendant l’aperçu puis restauré à sa fermeture.
 - Application des paramètres regroupée pour éviter les rafraîchissements successifs de l’intégration OBS.
 - Mise à jour de palette et verrouillage de l’overlay effectués sans remplacer son HWND ; les réglages identiques ne provoquent plus de rendu inutile, ce qui réduit fortement les clignotements lors de l’application.
