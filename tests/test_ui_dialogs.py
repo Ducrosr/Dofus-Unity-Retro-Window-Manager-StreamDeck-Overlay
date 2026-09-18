@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from dwm.services.i18n import set_language
-from dwm.ui_dialogs import ask_yes_no, show_error, show_info, show_warning
+from dwm.ui_dialogs import _run_modal, ask_yes_no, show_error, show_info, show_warning
 
 
 class ThemedDialogAdapterTests(unittest.TestCase):
@@ -31,6 +31,19 @@ class ThemedDialogAdapterTests(unittest.TestCase):
                 heading="Titre",
                 kind=kind,
             )
+
+    def test_nested_modal_restores_previous_grab(self):
+        parent = Mock()
+        previous = Mock()
+        previous.winfo_exists.return_value = 1
+        parent.grab_current.return_value = previous
+        win = Mock()
+
+        _run_modal(win, parent)
+
+        win.grab_set.assert_called_once()
+        parent.wait_window.assert_called_once_with(win)
+        previous.grab_set.assert_called_once()
 
     def test_yes_no_uses_themed_confirmation_and_current_language(self):
         parent = object()
