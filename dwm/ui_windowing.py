@@ -76,23 +76,28 @@ def schedule_center_window(window, parent=None) -> None:
 
 
 def install_combobox_wheel_guard(root) -> None:
-    """Disable closed Combobox value changes caused by mouse-wheel scrolling.
+    """Prevent accidental value changes on closed choice/numeric controls.
 
-    The replacement class binding deliberately returns None: the event may keep
-    propagating to the containing window/canvas, so normal page scrolling still
-    works. An opened Combobox drop-down uses its listbox and remains scrollable.
+    ttk Combobox and ttk Spinbox both react to the mouse wheel by default.
+    Replacing their class bindings removes that value-changing behavior while
+    returning None so the event can continue to the containing window/canvas.
+    This keeps normal page scrolling intact.
+
+    An opened Combobox drop-down uses its own listbox, so the list itself
+    remains scrollable.
     """
 
-    def ignore_selection_change(_event):
+    def ignore_value_change(_event):
         return None
 
-    try:
-        root.bind_class("TCombobox", "<MouseWheel>", ignore_selection_change)
-    except Exception:
-        pass
-    # Kept for completeness on Tk builds that report wheel events this way.
-    for sequence in ("<Button-4>", "<Button-5>"):
+    for widget_class in ("TCombobox", "TSpinbox"):
         try:
-            root.bind_class("TCombobox", sequence, ignore_selection_change)
+            root.bind_class(widget_class, "<MouseWheel>", ignore_value_change)
         except Exception:
             pass
+        # Kept for completeness on Tk builds that report wheel events this way.
+        for sequence in ("<Button-4>", "<Button-5>"):
+            try:
+                root.bind_class(widget_class, sequence, ignore_value_change)
+            except Exception:
+                pass
