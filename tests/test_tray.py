@@ -130,7 +130,7 @@ assert items[1].enabled is False
 
     def test_deleted_profile_does_not_change_selection_or_mode(self):
         app = self.make_app()
-        with tempfile.TemporaryDirectory() as directory, patch("dwm.app.messagebox.showerror") as error:
+        with tempfile.TemporaryDirectory() as directory, patch("dwm.app.show_error") as error:
             app.dirs = {"profiles": Path(directory)}
             app._handle_tray_action("profile", "Deleted")
         error.assert_called_once()
