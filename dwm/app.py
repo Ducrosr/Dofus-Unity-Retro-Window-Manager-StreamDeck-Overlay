@@ -5662,7 +5662,7 @@ class WindowManagerApp:
         schedule_center_window(win, self.root)
         win.grab_set()
         win.resizable(False, False)
-        content = TtkFrame(win, padding=14)
+        content = TtkFrame(win, padding=20)
         content.pack(fill="both", expand=True)
         content.columnconfigure(1, weight=1)
 
