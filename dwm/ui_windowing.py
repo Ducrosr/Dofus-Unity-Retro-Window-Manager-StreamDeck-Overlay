@@ -4,9 +4,10 @@ import ctypes
 import os
 
 from .services.monitor_layout import choose_monitor, list_monitors
+from .ui_design import UI
 
 
-WINDOW_MARGIN = 24
+WINDOW_MARGIN = UI.work_area_margin
 
 
 def centered_position(
@@ -159,11 +160,28 @@ def center_window_on_parent(window, parent=None) -> None:
 
 
 def schedule_center_window(window, parent=None) -> None:
-    """Center/clamp after Tk has computed the dialog's requested dimensions."""
-    try:
-        window.after_idle(lambda: center_window_on_parent(window, parent))
-    except Exception:
+    """Center/clamp after Tk has computed and mapped the dialog geometry.
+
+    Tk can refine a Toplevel's requested size once native chrome and DPI scaling
+    are applied. A short second pass keeps the final rectangle inside the real
+    monitor work area without affecting overlays or the compact window, which
+    deliberately do not use this helper.
+    """
+
+    def place() -> None:
+        try:
+            exists = getattr(window, "winfo_exists", None)
+            if callable(exists) and not exists():
+                return
+        except Exception:
+            return
         center_window_on_parent(window, parent)
+
+    try:
+        window.after_idle(place)
+        window.after(60, place)
+    except Exception:
+        place()
 
 
 def install_combobox_wheel_guard(root) -> None:
