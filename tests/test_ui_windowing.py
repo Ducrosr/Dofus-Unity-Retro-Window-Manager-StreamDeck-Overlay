@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import Mock
 
 from dwm.ui_windowing import (
+    _clamp_geometry_to_work_area,
     center_window_on_parent,
     centered_position,
     install_combobox_wheel_guard,
@@ -85,7 +86,7 @@ class WindowPlacementTests(unittest.TestCase):
 
         center_window_on_parent(child, parent)
 
-        self.assertEqual(child.geometry_calls, ["+500+320"])
+        self.assertEqual(child.geometry_calls, ["400x300+500+320"])
 
     def test_hidden_parent_falls_back_to_screen_center(self):
         parent = _FakeWidget(visible=False)
@@ -98,7 +99,34 @@ class WindowPlacementTests(unittest.TestCase):
 
         center_window_on_parent(child, parent)
 
-        self.assertEqual(child.geometry_calls, ["+760+390"])
+        self.assertEqual(child.geometry_calls, ["400x300+760+390"])
+
+
+    def test_large_dialog_is_clamped_inside_work_area(self):
+        self.assertEqual(
+            _clamp_geometry_to_work_area(
+                1800,
+                900,
+                900,
+                800,
+                (0, 0, 1920, 1040),
+                margin=24,
+            ),
+            (996, 216, 900, 800),
+        )
+
+    def test_oversized_dialog_is_reduced_to_work_area(self):
+        self.assertEqual(
+            _clamp_geometry_to_work_area(
+                -500,
+                -500,
+                2500,
+                1500,
+                (0, 0, 1920, 1040),
+                margin=24,
+            ),
+            (24, 24, 1872, 992),
+        )
 
 
 class ComboboxWheelGuardTests(unittest.TestCase):
