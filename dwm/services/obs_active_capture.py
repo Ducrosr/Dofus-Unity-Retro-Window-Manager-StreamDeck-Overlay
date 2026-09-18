@@ -1147,6 +1147,10 @@ class OBSActiveCaptureBridge:
             return None
         return self._slot_by_session.get(active.session_id)
 
+    def _wait_capture_handoff(self) -> None:
+        """Wait briefly for a newly enabled WGC source to deliver its first frame."""
+        self._stop.wait(OBS_CAPTURE_HANDOFF_DELAY_SECONDS)
+
     def _set_visibility(
         self,
         client,
@@ -1188,7 +1192,7 @@ class OBSActiveCaptureBridge:
                 # handoff window so OBS has time to receive the first frame of
                 # the new capture. This delay only affects the stream-side
                 # capture bridge; Dofus focus itself has already changed.
-                self._stop.wait(OBS_CAPTURE_HANDOFF_DELAY_SECONDS)
+                self._wait_capture_handoff()
             self._set_scene_item_enabled(
                 client,
                 config,
