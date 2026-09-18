@@ -108,6 +108,19 @@ class WindowPlacementTests(unittest.TestCase):
         self.assertEqual(child.geometry_calls, ["400x300+760+390"])
 
 
+    def test_visible_parent_uses_its_secondary_monitor_work_area(self):
+        parent = _FakeWidget(x=1920, y=0, width=2560, height=1400)
+        child = _FakeWidget(width=900, height=800)
+        monitors = (
+            Monitor("primary", (0, 0, 1920, 1040), True),
+            Monitor("secondary", (1920, 0, 4480, 1360), False),
+        )
+
+        with patch("dwm.ui_windowing.list_monitors", return_value=monitors):
+            center_window_on_parent(child, parent)
+
+        self.assertEqual(child.geometry_calls, ["900x800+2750+300"])
+
     def test_large_dialog_is_clamped_inside_work_area(self):
         self.assertEqual(
             _clamp_geometry_to_work_area(
