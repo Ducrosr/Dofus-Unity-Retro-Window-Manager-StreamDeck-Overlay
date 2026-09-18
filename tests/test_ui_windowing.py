@@ -102,20 +102,24 @@ class WindowPlacementTests(unittest.TestCase):
 
 
 class ComboboxWheelGuardTests(unittest.TestCase):
-    def test_guard_replaces_closed_combobox_wheel_bindings_without_break(self):
+    def test_guard_replaces_combobox_and_spinbox_wheel_bindings_without_break(self):
         root = Mock()
 
         install_combobox_wheel_guard(root)
 
-        sequences = [call.args[1] for call in root.bind_class.call_args_list]
-        self.assertIn("<MouseWheel>", sequences)
-        self.assertIn("<Button-4>", sequences)
-        self.assertIn("<Button-5>", sequences)
+        bindings = [
+            (call.args[0], call.args[1])
+            for call in root.bind_class.call_args_list
+        ]
+        for widget_class in ("TCombobox", "TSpinbox"):
+            self.assertIn((widget_class, "<MouseWheel>"), bindings)
+            self.assertIn((widget_class, "<Button-4>"), bindings)
+            self.assertIn((widget_class, "<Button-5>"), bindings)
 
         mousewheel_call = next(
             call
             for call in root.bind_class.call_args_list
-            if call.args[1] == "<MouseWheel>"
+            if call.args[0] == "TSpinbox" and call.args[1] == "<MouseWheel>"
         )
         callback = mousewheel_call.args[2]
         self.assertIsNone(callback(Mock()))
