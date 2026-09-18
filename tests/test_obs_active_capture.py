@@ -354,7 +354,7 @@ class OBSActiveCaptureTests(unittest.TestCase):
         self.assertIn("OBS WebSocket connecté", message)
         self.assertEqual(_FakeReqClient.calls, [("GetVersion", None)])
 
-    def test_pool_grows_beyond_eight_clients_and_keeps_all_captures_warm(self):
+    def test_pool_grows_beyond_eight_clients_and_enables_only_active_capture(self):
         fake_obs = SimpleNamespace(ReqClient=_FakeReqClient)
         windows = [_window(index) for index in range(1, 10)]
 
@@ -386,18 +386,20 @@ class OBSActiveCaptureTests(unittest.TestCase):
         self.assertEqual(set(_FakeReqClient.inputs), expected_names)
         self.assertIn("[DWM] Dofus Active", _FakeReqClient.scenes)
 
-        # Every currently assigned scene item stays enabled so OBS keeps the WGC
-        # sessions initialized; opacity decides which client reaches the output.
+        # Only the focused Dofus capture stays enabled. The legacy opacity
+        # filters are kept neutral so scene-item visibility is the sole switch.
+        active_item = _FakeReqClient.scene_items[
+            ("[DWM] Dofus Active", "[DWM] Dofus Capture 09")
+        ]
         enabled_items = {
             item_id for item_id, enabled in _FakeReqClient.enabled.items() if enabled
         }
-        self.assertEqual(enabled_items, set(_FakeReqClient.scene_items.values()))
+        self.assertEqual(enabled_items, {active_item})
 
-        for slot in range(1, 9):
-            self.assertEqual(_opacity(f"[DWM] Dofus Capture {slot:02d}"), 0.0)
-        self.assertEqual(_opacity("[DWM] Dofus Capture 09"), 1.0)
+        for slot in range(1, 10):
+            self.assertEqual(_opacity(f"[DWM] Dofus Capture {slot:02d}"), 1.0)
 
-    def test_focus_swap_only_changes_opacity_for_initialized_pool(self):
+    def test_focus_swap_enables_target_then_disables_previous_without_delay(self):
         fake_obs = SimpleNamespace(ReqClient=_FakeReqClient)
         windows = [_window(index) for index in range(1, 4)]
 
@@ -423,7 +425,7 @@ class OBSActiveCaptureTests(unittest.TestCase):
                             [
                                 call
                                 for call in _FakeReqClient.calls
-                                if call[0] == "SetSourceFilterSettings"
+                                if call[0] == "SetSceneItemEnabled"
                             ]
                         )
                         >= 2
@@ -435,15 +437,42 @@ class OBSActiveCaptureTests(unittest.TestCase):
         requests = [call[0] for call in _FakeReqClient.calls]
         self.assertNotIn("CreateInput", requests)
         self.assertNotIn("SetInputSettings", requests)
-        self.assertNotIn("SetSceneItemEnabled", requests)
         self.assertEqual(_opacity("[DWM] Dofus Capture 01"), 1.0)
-        self.assertEqual(_opacity("[DWM] Dofus Capture 03"), 0.0)
+        self.assertEqual(_opacity("[DWM] Dofus Capture 03"), 1.0)
 
-        # All three captures are still active/showing after the swap.
+        target_item = _FakeReqClient.scene_items[
+            ("[DWM] Dofus Active", "[DWM] Dofus Capture 01")
+        ]
+        previous_item = _FakeReqClient.scene_items[
+            ("[DWM] Dofus Active", "[DWM] Dofus Capture 03")
+        ]
+        visibility_calls = [
+            payload
+            for request, payload in _FakeReqClient.calls
+            if request == "SetSceneItemEnabled"
+        ]
+        self.assertGreaterEqual(len(visibility_calls), 2)
+        self.assertEqual(
+            visibility_calls[0],
+            {
+                "sceneName": "[DWM] Dofus Active",
+                "sceneItemId": target_item,
+                "sceneItemEnabled": True,
+            },
+        )
+        self.assertEqual(
+            visibility_calls[1],
+            {
+                "sceneName": "[DWM] Dofus Active",
+                "sceneItemId": previous_item,
+                "sceneItemEnabled": False,
+            },
+        )
+
         enabled_items = {
             item_id for item_id, enabled in _FakeReqClient.enabled.items() if enabled
         }
-        self.assertEqual(enabled_items, set(_FakeReqClient.scene_items.values()))
+        self.assertEqual(enabled_items, {target_item})
 
     def test_overlay_and_popup_are_created_above_dynamic_dofus_captures(self):
         fake_obs = SimpleNamespace(ReqClient=_FakeReqClient)
@@ -621,7 +650,7 @@ class OBSActiveCaptureTests(unittest.TestCase):
         self.assertFalse(_FakeReqClient.enabled[overlay_item])
         self.assertFalse(_FakeReqClient.enabled[popup_item])
 
-    def test_closed_client_is_made_transparent_then_deactivated(self):
+    def test_closed_client_is_deactivated(self):
         fake_obs = SimpleNamespace(ReqClient=_FakeReqClient)
         windows = [_window(index) for index in range(1, 3)]
 
@@ -642,7 +671,7 @@ class OBSActiveCaptureTests(unittest.TestCase):
             finally:
                 bridge.stop()
 
-        self.assertEqual(_opacity("[DWM] Dofus Capture 02"), 0.0)
+        self.assertEqual(_opacity("[DWM] Dofus Capture 02"), 1.0)
 
     def test_disabled_bridge_does_not_touch_obs(self):
         fake_obs = SimpleNamespace(ReqClient=_FakeReqClient)
