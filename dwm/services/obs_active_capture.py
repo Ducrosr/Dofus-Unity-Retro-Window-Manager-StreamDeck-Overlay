@@ -297,6 +297,53 @@ class OBSActiveCaptureBridge:
         self._wake.set()
         if self._thread.is_alive():
             self._thread.join(timeout=2.0)
+        self._hide_interface_sources_on_shutdown()
+
+    def _hide_interface_sources_on_shutdown(self) -> None:
+        """Best-effort cleanup of DWM-only OBS layers before Tk destroys them.
+
+        Dofus capture slots deliberately remain untouched so the last active
+        game can stay visible in OBS after DWM exits. Only the DWM overlay and
+        focus popup are disabled.
+        """
+        with self._lock:
+            config = self._config
+            client = self._client
+            item_ids = dict(self._interface_item_ids)
+
+        if client is None:
+            return
+
+        for source_name in (OVERLAY_SOURCE_NAME, POPUP_SOURCE_NAME):
+            item_id = item_ids.get(source_name)
+            if not item_id:
+                try:
+                    response = self._send(
+                        client,
+                        "GetSceneItemId",
+                        {
+                            "sceneName": config.scene_name,
+                            "sourceName": source_name,
+                        },
+                    )
+                    item_id = int(response.get("sceneItemId") or 0)
+                except Exception:
+                    item_id = 0
+            if not item_id:
+                continue
+            try:
+                self._send(
+                    client,
+                    "SetSceneItemEnabled",
+                    {
+                        "sceneName": config.scene_name,
+                        "sceneItemId": item_id,
+                        "sceneItemEnabled": False,
+                    },
+                )
+            except Exception:
+                # OBS may already be closed. Shutdown must stay reliable.
+                continue
 
     def _reset_obs_state_locked(self) -> None:
         self._slot_by_session.clear()
