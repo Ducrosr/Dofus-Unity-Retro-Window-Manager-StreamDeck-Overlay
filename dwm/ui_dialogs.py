@@ -4,7 +4,7 @@ import tkinter as tk
 from tkinter import StringVar, Toplevel, messagebox as native_messagebox
 from tkinter.ttk import Button, Entry, Frame, Label
 
-from .services.i18n import tr
+from .services.i18n import tr, translation_source
 from .ui_design import (
     DANGER_BUTTON_STYLE,
     PRIMARY_BUTTON_STYLE,
@@ -225,12 +225,26 @@ def _resolve_parent(parent):
     return parent or getattr(tk, "_default_root", None)
 
 
+def _localized_text(value: object) -> str:
+    text = str(value)
+    source = translation_source(text)
+    return tr(source) if source else text
+
+
 def show_info(title: str, message: str, *, parent=None, **_kwargs):
     """Theme-aware drop-in replacement for messagebox.showinfo."""
     resolved = _resolve_parent(parent)
     if resolved is None:
         return native_messagebox.showinfo(title, message, parent=parent)
-    show_message(resolved, str(title), str(message), heading=str(title), kind="info")
+    localized_title = _localized_text(title)
+    localized_message = _localized_text(message)
+    show_message(
+        resolved,
+        localized_title,
+        localized_message,
+        heading=localized_title,
+        kind="info",
+    )
     return "ok"
 
 
@@ -239,7 +253,15 @@ def show_warning(title: str, message: str, *, parent=None, **_kwargs):
     resolved = _resolve_parent(parent)
     if resolved is None:
         return native_messagebox.showwarning(title, message, parent=parent)
-    show_message(resolved, str(title), str(message), heading=str(title), kind="warning")
+    localized_title = _localized_text(title)
+    localized_message = _localized_text(message)
+    show_message(
+        resolved,
+        localized_title,
+        localized_message,
+        heading=localized_title,
+        kind="warning",
+    )
     return "ok"
 
 
@@ -248,7 +270,15 @@ def show_error(title: str, message: str, *, parent=None, **_kwargs):
     resolved = _resolve_parent(parent)
     if resolved is None:
         return native_messagebox.showerror(title, message, parent=parent)
-    show_message(resolved, str(title), str(message), heading=str(title), kind="error")
+    localized_title = _localized_text(title)
+    localized_message = _localized_text(message)
+    show_message(
+        resolved,
+        localized_title,
+        localized_message,
+        heading=localized_title,
+        kind="error",
+    )
     return "ok"
 
 
@@ -257,11 +287,13 @@ def ask_yes_no(title: str, message: str, *, parent=None, **_kwargs) -> bool:
     resolved = _resolve_parent(parent)
     if resolved is None:
         return bool(native_messagebox.askyesno(title, message, parent=parent))
+    localized_title = _localized_text(title)
+    localized_message = _localized_text(message)
     return ask_confirmation(
         resolved,
-        str(title),
-        str(message),
-        heading=str(title),
+        localized_title,
+        localized_message,
+        heading=localized_title,
         confirm_text=tr("Oui"),
         cancel_text=tr("Non"),
     )
