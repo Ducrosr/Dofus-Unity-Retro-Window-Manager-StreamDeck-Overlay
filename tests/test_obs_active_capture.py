@@ -505,6 +505,51 @@ class OBSActiveCaptureTests(unittest.TestCase):
         self.assertEqual(order_calls[-2]["sceneItemId"], overlay_item)
         self.assertEqual(order_calls[-1]["sceneItemId"], popup_item)
 
+    def test_shutdown_hides_overlay_and_popup_but_keeps_game_capture_enabled(self):
+        fake_obs = SimpleNamespace(ReqClient=_FakeReqClient)
+        overlay = _interface_window(1, "Dofus Window Manager — Overlay")
+        popup = _interface_window(2, "Dofus Window Manager — Focus Popup")
+
+        def interface_lookup(title: str):
+            if title.endswith("Overlay"):
+                return overlay
+            if title.endswith("Focus Popup"):
+                return popup
+            return None
+
+        with (
+            patch("dwm.services.obs_active_capture._obs", fake_obs),
+            patch.object(
+                OBSActiveCaptureBridge,
+                "_find_interface_window",
+                side_effect=interface_lookup,
+            ),
+        ):
+            bridge = OBSActiveCaptureBridge(OBSActiveCaptureConfig(enabled=True))
+            bridge.sync_windows([_window(1)], active_hwnd=101)
+            self.assertTrue(
+                _wait_until(
+                    lambda: OVERLAY_SOURCE_NAME in _FakeReqClient.inputs
+                    and POPUP_SOURCE_NAME in _FakeReqClient.inputs
+                )
+            )
+
+            game_item = _FakeReqClient.scene_items[
+                ("[DWM] Dofus Active", "[DWM] Dofus Capture 01")
+            ]
+            overlay_item = _FakeReqClient.scene_items[
+                ("[DWM] Dofus Active", OVERLAY_SOURCE_NAME)
+            ]
+            popup_item = _FakeReqClient.scene_items[
+                ("[DWM] Dofus Active", POPUP_SOURCE_NAME)
+            ]
+
+            bridge.stop()
+
+        self.assertTrue(_FakeReqClient.enabled[game_item])
+        self.assertFalse(_FakeReqClient.enabled[overlay_item])
+        self.assertFalse(_FakeReqClient.enabled[popup_item])
+
     def test_closed_client_is_made_transparent_then_deactivated(self):
         fake_obs = SimpleNamespace(ReqClient=_FakeReqClient)
         windows = [_window(index) for index in range(1, 3)]
