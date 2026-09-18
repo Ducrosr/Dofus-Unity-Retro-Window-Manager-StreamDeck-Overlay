@@ -351,6 +351,24 @@ def apply_dark_theme(root, theme_name: str = MODERN_DARK_THEME) -> None:
         foreground=C["muted"],
         font=("Segoe UI", 9, "bold"),
     )
+    style.configure(
+        "StepActive.TLabel",
+        background=C["bg"],
+        foreground=C["accent"],
+        font=("Segoe UI", 10, "bold"),
+    )
+    style.configure(
+        "StepDone.TLabel",
+        background=C["bg"],
+        foreground=C["fg"],
+        font=("Segoe UI", 10, "bold"),
+    )
+    style.configure(
+        "StepIdle.TLabel",
+        background=C["bg"],
+        foreground=C["muted"],
+        font=("Segoe UI", 10),
+    )
     style.configure("Muted.TLabel", background=C["bg"], foreground=C["muted"])
 
     # Cards keep structure without the heavy nested-box look of classic Tk.
@@ -1049,25 +1067,41 @@ class WindowManagerApp:
         except Exception:
             pass
 
-        shell = TtkFrame(dialog, padding=18)
+        shell = TtkFrame(dialog, padding=22)
         shell.pack(fill="both", expand=True)
         title_var = StringVar()
         progress_var = StringVar()
         TtkLabel(shell, textvariable=title_var, style="Header.TLabel").pack(anchor="w")
         TtkLabel(shell, textvariable=progress_var, style="Muted.TLabel").pack(
-            anchor="w", pady=(2, 12)
+            anchor="w", pady=(2, 8)
         )
+        stepper = TtkFrame(shell)
+        stepper.pack(fill="x", pady=(0, 16))
+        step_labels = []
+        for step_index in range(6):
+            if step_index:
+                TtkLabel(stepper, text="—", style="StepIdle.TLabel").pack(
+                    side="left", padx=4
+                )
+            label = TtkLabel(
+                stepper,
+                text=str(step_index + 1),
+                style="StepIdle.TLabel",
+            )
+            label.pack(side="left")
+            step_labels.append(label)
+
         page = TtkFrame(shell, width=660, height=330)
         page.pack(fill="both", expand=True)
         page.pack_propagate(False)
         footer = TtkFrame(shell)
         footer.pack(fill="x", pady=(14, 0))
 
-        later_button = TtkButton(footer)
+        later_button = TtkButton(footer, style="Quiet.TButton")
         later_button.pack(side="left")
         next_button = TtkButton(footer, style="Accent.TButton")
         next_button.pack(side="right")
-        previous_button = TtkButton(footer)
+        previous_button = TtkButton(footer, style="Quiet.TButton")
         previous_button.pack(side="right", padx=(0, 8))
 
         def choices() -> OnboardingChoices:
@@ -1214,6 +1248,16 @@ class WindowManagerApp:
             progress_var.set(
                 tr("Étape {current} sur {total}", current=current_step + 1, total=len(step_titles))
             )
+            for index, label in enumerate(step_labels):
+                label.configure(
+                    style=(
+                        "StepActive.TLabel"
+                        if index == current_step
+                        else "StepDone.TLabel"
+                        if index < current_step
+                        else "StepIdle.TLabel"
+                    )
+                )
             later_button.configure(text=tr("Configurer plus tard"))
             previous_button.configure(
                 text=tr("← Précédent"),
@@ -1227,7 +1271,12 @@ class WindowManagerApp:
                 add_text(
                     "Bienvenue dans Dofus Window Manager. Cet assistant configure les éléments essentiels sans modifier vos profils de personnages."
                 )
-                language_box = TtkLabelFrame(page, text=tr("Langue"), padding=10)
+                language_box = TtkLabelFrame(
+                    page,
+                    text=tr("Langue"),
+                    padding=12,
+                    style="Card.TLabelframe",
+                )
                 language_box.pack(fill="x", pady=(5, 0))
                 for language in LANGUAGES:
                     flag_image = self._language_flag_images.get(language)
