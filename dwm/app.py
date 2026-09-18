@@ -42,7 +42,6 @@ from .services.focus import FocusError, focus_hwnd, get_foreground_hwnd, is_wind
 from .services.game_mode import game_mode_label, normalize_game_mode, win_event_filter
 from .services.themes import (
     THEME_LABELS,
-    RETRO_THEME,
     default_theme_for_mode,
     normalize_theme,
     theme_ids_for_mode,
