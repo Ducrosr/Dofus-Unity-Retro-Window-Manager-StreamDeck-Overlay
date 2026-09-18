@@ -165,6 +165,7 @@ def ask_text(
     initial: str = "",
     confirm_text: str = "Enregistrer",
     cancel_text: str = "Annuler",
+    allow_empty: bool = False,
 ) -> str | None:
     win, body = _prepare_dialog(parent, title)
     value = StringVar(value=initial)
@@ -184,7 +185,7 @@ def ask_text(
 
     def accept() -> None:
         candidate = value.get().strip()
-        if not candidate:
+        if not candidate and not allow_empty:
             try:
                 entry.focus_set()
             except Exception:
