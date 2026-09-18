@@ -27,6 +27,8 @@ def get_language() -> str:
 
 
 _EN: dict[str, str] = {
+    "Oui": "Yes",
+    "Non": "No",
     "Fermeture en cours…": "Closing…",
     'Simuler le préréglage sélectionné…': 'Preview selected preset…',
     'Cet aperçu ne modifie pas les réglages enregistrés et n’active aucune fenêtre Dofus.': 'This preview does not change saved settings or activate any Dofus window.',
@@ -508,6 +510,8 @@ _EN: dict[str, str] = {
 }
 
 _ES: dict[str, str] = {
+    "Oui": "Sí",
+    "Non": "No",
     "Fermeture en cours…": "Cerrando…",
     'Simuler le préréglage sélectionné…': 'Simular el ajuste seleccionado…',
     'Cet aperçu ne modifie pas les réglages enregistrés et n’active aucune fenêtre Dofus.': 'Esta vista previa no modifica los ajustes guardados ni activa ventanas de Dofus.',
