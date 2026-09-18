@@ -35,6 +35,11 @@
 - Paramètres modernisés : recherche plus discrète, onglets plus lisibles, marges augmentées et barre d’actions inférieure cohérente.
 - Assistant de configuration enrichi d’un repère visuel des six étapes sans modifier son parcours.
 - Simulation d’affichage repositionnée pour présenter son overlay d’aperçu à côté de la fenêtre de contrôle au lieu de la recouvrir.
+- Ajout de jetons UI partagés pour les espacements, la largeur maximale du contenu, la marge écran et les rôles de boutons, afin d’éviter les réglages visuels dispersés.
+- Les informations, avertissements, erreurs et confirmations restantes de l’application passent désormais par les modales sombres DWM au lieu des boîtes Windows blanches ; les boutons Oui/Non suivent aussi la langue active.
+- Onglets, sélection des tableaux et focus des champs utilisent davantage la couleur structurelle du thème, tandis que l’accent sable/or reste réservé aux actions principales.
+- Le placement des fenêtres secondaires est revérifié après leur mappage natif/DPI, avec contrainte à la zone de travail réelle du moniteur ; un test couvre explicitement le centrage sur un écran secondaire.
+- Correction d’un chevauchement visuel dans le bloc Navigation de la fenêtre principale entre « Rétablir l’ordre du profil » et la suspension des raccourcis.
 
 ## 2.20.0-beta.6 — 2026-09-17
 
