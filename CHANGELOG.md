@@ -7,7 +7,7 @@
 - Synchronisation automatique de la variable Advanced Scene Switcher `Game` : `Dofus Unity` en mode Unity et `Dofus Retro` en mode Retro, via le VendorRequest officiel lorsque le plugin est disponible.
 - À la fermeture complète de DWM, les sources OBS `[DWM] Overlay` et `[DWM] Focus Popup` sont désactivées proprement avant destruction des fenêtres Tk ; les captures Dofus restent inchangées.
 - Intégration OBS WebSocket avec pool dynamique de Captures de fenêtre persistantes, sans limite fixe à huit clients.
-- Changement de personnage sans réacquisition WGC : les captures restent actives et seul leur filtre d’opacité est modifié.
+- Test de commutation OBS orientée performances : seule la capture Dofus active reste affichée ; lors d’un changement, la nouvelle source est activée immédiatement puis l’ancienne est masquée sans délai artificiel, afin de permettre à WGC/OBS de relâcher le travail GPU des clients inactifs. Le filtre d’opacité DWM est conservé à 100 % uniquement pour compatibilité avec les scènes créées par les builds précédents.
 - Création automatique des captures de l’overlay et de la popup DWM, toujours maintenues au-dessus des fenêtres Dofus.
 - Projection automatique de la position et de l’échelle de l’overlay et de la popup dans le canvas OBS.
 - Nouvel onglet **OBS** dans les paramètres, séparant connexion WebSocket, captures automatiques et repères de géométrie.
