@@ -399,11 +399,35 @@ class OBSActiveCaptureTests(unittest.TestCase):
         for slot in range(1, 10):
             self.assertEqual(_opacity(f"[DWM] Dofus Capture {slot:02d}"), 1.0)
 
-    def test_focus_swap_enables_target_then_disables_previous_without_delay(self):
+    def test_focus_swap_keeps_both_captures_enabled_during_short_handoff(self):
         fake_obs = SimpleNamespace(ReqClient=_FakeReqClient)
         windows = [_window(index) for index in range(1, 4)]
 
-        with patch("dwm.services.obs_active_capture._obs", fake_obs):
+        handoff_states: list[tuple[bool, bool]] = []
+
+        def record_handoff(_bridge):
+            target_item = _FakeReqClient.scene_items[
+                ("[DWM] Dofus Active", "[DWM] Dofus Capture 01")
+            ]
+            previous_item = _FakeReqClient.scene_items[
+                ("[DWM] Dofus Active", "[DWM] Dofus Capture 03")
+            ]
+            handoff_states.append(
+                (
+                    bool(_FakeReqClient.enabled[target_item]),
+                    bool(_FakeReqClient.enabled[previous_item]),
+                )
+            )
+
+        with (
+            patch("dwm.services.obs_active_capture._obs", fake_obs),
+            patch.object(
+                OBSActiveCaptureBridge,
+                "_wait_capture_handoff",
+                autospec=True,
+                side_effect=record_handoff,
+            ) as handoff_wait,
+        ):
             bridge = OBSActiveCaptureBridge(OBSActiveCaptureConfig(enabled=True))
             try:
                 bridge.sync_windows(windows, active_hwnd=103)
@@ -446,6 +470,9 @@ class OBSActiveCaptureTests(unittest.TestCase):
         previous_item = _FakeReqClient.scene_items[
             ("[DWM] Dofus Active", "[DWM] Dofus Capture 03")
         ]
+        handoff_wait.assert_called()
+        self.assertEqual(handoff_states, [(True, True)])
+
         visibility_calls = [
             payload
             for request, payload in _FakeReqClient.calls
