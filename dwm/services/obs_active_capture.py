@@ -39,6 +39,7 @@ ADVSS_VENDOR_NAME = "AdvancedSceneSwitcher"
 ADVSS_SET_VARIABLES_REQUEST = "AdvancedSceneSwitcherSetVariables"
 ADVSS_GAME_VARIABLE_NAME = "Game"
 ADVSS_RETRY_SECONDS = 30.0
+OBS_CAPTURE_HANDOFF_DELAY_SECONDS = 0.033
 
 
 @dataclass(frozen=True)
@@ -1157,10 +1158,10 @@ class OBSActiveCaptureBridge:
 
         # Performance-first switching: a hidden OBS scene item stops "showing",
         # allowing Window Capture / WGC to release work for inactive clients.
-        # There is intentionally no artificial warm-up delay in this first pass.
-        # Enable the new target before disabling the previous one so the handoff
-        # remains make-before-break while still returning to one active capture
-        # immediately after the two synchronous WebSocket requests complete.
+        # Enable the new target before disabling the previous one. A very short
+        # stream-side handoff window lets WGC deliver its first frame while the
+        # previous capture still holds a valid image; normal operation still
+        # returns to one active capture immediately after that overlap.
         previous_slot = self._visible_slot
 
         if target_slot is not None:
@@ -1181,6 +1182,13 @@ class OBSActiveCaptureBridge:
             )
 
         if previous_slot is not None and previous_slot != target_slot:
+            if target_slot is not None:
+                # WGC starts asynchronously after OBS marks the new scene item
+                # as visible. Keep the previous valid frame alive for a tiny
+                # handoff window so OBS has time to receive the first frame of
+                # the new capture. This delay only affects the stream-side
+                # capture bridge; Dofus focus itself has already changed.
+                self._stop.wait(OBS_CAPTURE_HANDOFF_DELAY_SECONDS)
             self._set_scene_item_enabled(
                 client,
                 config,
