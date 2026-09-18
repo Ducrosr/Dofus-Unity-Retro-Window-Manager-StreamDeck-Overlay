@@ -582,6 +582,7 @@ class WindowManagerApp:
                 popup_opacity=self.settings.swap_notification_opacity / 100.0,
             )
         )
+        self.obs_capture_bridge.set_game_mode(self.game_mode)
 
         # ---- Hotkeys ----
         self.hotkeys = HotkeyManager()
@@ -4165,6 +4166,7 @@ class WindowManagerApp:
         self.game_mode = new_mode
         self.game_label = game_mode_label(new_mode)
         self.settings.game_mode = new_mode
+        self.obs_capture_bridge.set_game_mode(new_mode)
         self.settings.activate_display_preferences(new_mode)
         selected_theme = (self.settings.theme_by_game_mode or {}).get(
             new_mode,
