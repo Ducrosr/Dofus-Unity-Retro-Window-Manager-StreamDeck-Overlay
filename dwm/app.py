@@ -2227,7 +2227,7 @@ class WindowManagerApp:
         state = "affiché" if self.settings.rotation_overlay_enabled else "masqué"
         self._log(f"Overlay de rotation {state}")
 
-    def open_display_simulation(self, *, preset_id: str | None = None) -> None:
+    def open_display_simulation(self, *, preset_id: str | None = None):
         preview_settings = deepcopy(self.settings)
         if preset_id is not None:
             for key, value in display_preset_values(preset_id).items():
@@ -2241,7 +2241,7 @@ class WindowManagerApp:
                 elif current.winfo_exists():
                     current.lift()
                     current.focus_force()
-                    return
+                    return current
             except Exception:
                 pass
 
@@ -2376,6 +2376,7 @@ class WindowManagerApp:
         )
         win.protocol("WM_DELETE_WINDOW", close_simulation)
         render()
+        return win
 
     def _request_obs_interface_refresh(self, delay_ms: int = 0) -> None:
         bridge = getattr(self, "obs_capture_bridge", None)
@@ -5834,6 +5835,42 @@ class WindowManagerApp:
                 popup_opacity=clamp_overlay_opacity(swap_opacity.get()) / 100.0,
             ).normalized()
 
+        def open_preset_preview() -> None:
+            selected_index = max(0, preset_combo.current())
+            preset_id = DISPLAY_PRESET_IDS[selected_index]
+            released_settings_grab = False
+            try:
+                released_settings_grab = win.grab_current() == win
+            except Exception:
+                released_settings_grab = False
+            if released_settings_grab:
+                try:
+                    win.grab_release()
+                except Exception:
+                    released_settings_grab = False
+
+            preview = self.open_display_simulation(preset_id=preset_id)
+            if preview is None:
+                if released_settings_grab:
+                    try:
+                        if win.winfo_exists():
+                            win.grab_set()
+                    except Exception:
+                        pass
+                return
+
+            def restore_settings_grab(event) -> None:
+                if event.widget is not preview or not released_settings_grab:
+                    return
+                try:
+                    if win.winfo_exists():
+                        win.grab_set()
+                        win.lift()
+                except Exception:
+                    pass
+
+            preview.bind("<Destroy>", restore_settings_grab, add="+")
+
         def test_obs_connection() -> None:
             obs_connection_status.set(tr("Test de connexion en cours…"))
             config = current_obs_capture_config()
@@ -6008,7 +6045,7 @@ class WindowManagerApp:
         TtkButton(
             presets_row,
             text=tr("Simuler le préréglage sélectionné…"),
-            command=lambda: self.open_display_simulation(preset_id=DISPLAY_PRESET_IDS[preset_combo.current()]),
+            command=open_preset_preview,
         ).pack(side="right")
         TtkLabel(
             presets_section,
@@ -6621,10 +6658,9 @@ class WindowManagerApp:
                 ),
                 default_theme_for_mode(self.game_mode),
             )
-            try:
-                self._apply_runtime_theme(new_theme)
-            except Exception:
-                messagebox.showwarning("Thème", f"Thème non disponible: {new_theme}")
+            # Stage the theme first; the runtime/UI update is performed once
+            # after all settings have been collected to avoid multiple overlay redraws.
+            self.settings.theme = new_theme
 
             try:
                 sec = int(refresh_var.get())
@@ -6716,19 +6752,6 @@ class WindowManagerApp:
             )
             self.settings.obs_capture_cursor = bool(obs_capture_cursor.get())
             self.settings.obs_capture_force_sdr = bool(obs_capture_force_sdr.get())
-            self.obs_capture_bridge.configure(
-                OBSActiveCaptureConfig(
-                    enabled=self.settings.obs_capture_sync_enabled,
-                    port=self.settings.obs_websocket_port,
-                    password=self.settings.obs_websocket_password,
-                    scene_name=self.settings.obs_capture_scene,
-                    source_prefix=self.settings.obs_capture_source_prefix,
-                    capture_cursor=self.settings.obs_capture_cursor,
-                    force_sdr=self.settings.obs_capture_force_sdr,
-                    popup_opacity=clamp_overlay_opacity(swap_opacity.get()) / 100.0,
-                )
-            )
-            self._sync_obs_window_pool(refresh_all=True)
             self.settings.swap_notification_enabled = bool(swap_notification.get())
             selected_position = swap_position.get().strip()
             self.settings.swap_notification_anchor = next(
@@ -6813,6 +6836,18 @@ class WindowManagerApp:
 
             save_settings(self.settings_path, self.settings)
             self._apply_accessibility_preferences()
+            self.obs_capture_bridge.configure(
+                OBSActiveCaptureConfig(
+                    enabled=self.settings.obs_capture_sync_enabled,
+                    port=self.settings.obs_websocket_port,
+                    password=self.settings.obs_websocket_password,
+                    scene_name=self.settings.obs_capture_scene,
+                    source_prefix=self.settings.obs_capture_source_prefix,
+                    capture_cursor=self.settings.obs_capture_cursor,
+                    force_sdr=self.settings.obs_capture_force_sdr,
+                    popup_opacity=self.settings.swap_notification_opacity / 100.0,
+                )
+            )
             self._publish_order_consumers()
             self._log("Paramètres appliqués")
             win.destroy()
