@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
+
+from dwm.services.monitor_layout import Monitor
 
 from dwm.ui_windowing import (
     _clamp_geometry_to_work_area,
@@ -97,7 +99,11 @@ class WindowPlacementTests(unittest.TestCase):
             screen_height=1080,
         )
 
-        center_window_on_parent(child, parent)
+        with patch(
+            "dwm.ui_windowing.list_monitors",
+            return_value=(Monitor("primary", (0, 0, 1920, 1080), True),),
+        ):
+            center_window_on_parent(child, parent)
 
         self.assertEqual(child.geometry_calls, ["400x300+760+390"])
 
