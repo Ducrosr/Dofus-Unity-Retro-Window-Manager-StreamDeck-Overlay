@@ -107,7 +107,11 @@ from .services.configuration_diff import compare_configuration, compare_profiles
 from .ui_configuration_preview import confirm_configuration_changes
 from .ui_settings_search import SettingsSearch
 from .ui_update_download import UpdateDownloadDialog
-from .ui_windowing import install_combobox_wheel_guard, schedule_center_window
+from .ui_windowing import (
+    apply_windows_dark_titlebar,
+    install_combobox_wheel_guard,
+    schedule_center_window,
+)
 from .services.monitor_layout import list_monitors
 from .services.backup_history import (
     BackupSnapshot,
@@ -297,56 +301,133 @@ def apply_dark_theme(root, theme_name: str = MODERN_DARK_THEME) -> None:
     except Exception:
         pass
 
-    # Base style
-    style.configure(".",
-                    background=C["bg"],
-                    foreground=C["fg"],
-                    fieldbackground=C["bg2"],
-                    bordercolor=C["line"],
-                    lightcolor=C["line"],
-                    darkcolor=C["line"],
-                    troughcolor=C["bg2"],
-                    selectbackground=C["accent"],
-                    selectforeground=C["on_accent"],
-                    font=("Segoe UI", 10),
-                    )
+    # Base style — restrained desktop design system.
+    surface = blend_hex_colors(C["bg2"], C["bg"], 0.72)
+    surface_alt = blend_hex_colors(C["bg3"], C["bg"], 0.58)
+    line_soft = blend_hex_colors(C["line"], C["bg"], 0.36)
+
+    style.configure(
+        ".",
+        background=C["bg"],
+        foreground=C["fg"],
+        fieldbackground=C["bg2"],
+        bordercolor=line_soft,
+        lightcolor=line_soft,
+        darkcolor=line_soft,
+        troughcolor=C["bg2"],
+        selectbackground=C["accent"],
+        selectforeground=C["on_accent"],
+        font=("Segoe UI", 10),
+    )
 
     style.configure("TFrame", background=C["bg"])
+    style.configure("Surface.TFrame", background=surface)
+    style.configure("Toolbar.TFrame", background=surface_alt)
+    style.configure("ActionBar.TFrame", background=surface)
     style.configure("TLabel", background=C["bg"], foreground=C["fg"])
-    style.configure("Header.TLabel", background=C["bg"], foreground=C["accent"], font=("Segoe UI", 16, "bold"))
+    style.configure(
+        "Header.TLabel",
+        background=C["bg"],
+        foreground=C["accent"],
+        font=("Segoe UI", 17, "bold"),
+    )
+    style.configure(
+        "Hero.TLabel",
+        background=C["bg"],
+        foreground=C["accent"],
+        font=("Segoe UI", 21, "bold"),
+    )
+    style.configure(
+        "Section.TLabel",
+        background=C["bg"],
+        foreground=C["fg"],
+        font=("Segoe UI", 11, "bold"),
+    )
+    style.configure(
+        "Eyebrow.TLabel",
+        background=C["bg"],
+        foreground=C["muted"],
+        font=("Segoe UI", 9, "bold"),
+    )
     style.configure("Muted.TLabel", background=C["bg"], foreground=C["muted"])
 
+    # Cards keep structure without the heavy nested-box look of classic Tk.
     style.configure(
         "TLabelframe",
         background=C["bg"],
         foreground=C["fg"],
-        bordercolor=C["line"],
+        bordercolor=line_soft,
         borderwidth=1,
-        relief="solid",
+        relief="flat",
     )
-    if t == RETRO_THEME:
-        style.configure(
-            "TLabelframe.Label",
-            background=C["bg3"],
-            foreground=C["on_dark"],
-            padding=(8, 3),
-        )
-    else:
-        style.configure("TLabelframe.Label", background=C["bg"], foreground=C["fg"])
+    style.configure(
+        "TLabelframe.Label",
+        background=C["bg"],
+        foreground=C["muted"] if t != RETRO_THEME else C["on_dark"],
+        font=("Segoe UI", 10, "bold"),
+        padding=(5, 2),
+    )
+    style.configure(
+        "Card.TLabelframe",
+        background=C["bg"],
+        foreground=C["fg"],
+        bordercolor=line_soft,
+        borderwidth=1,
+        relief="flat",
+    )
+    style.configure(
+        "Card.TLabelframe.Label",
+        background=C["bg"],
+        foreground=C["fg"],
+        font=("Segoe UI", 10, "bold"),
+        padding=(6, 3),
+    )
 
-    style.configure("TButton",
-                    background=C["bg3"],
-                    foreground=C["on_dark"],
-                    borderwidth=1,
-                    focusthickness=0,
-                    padding=(11, 7))
+    style.configure(
+        "TButton",
+        background=C["bg3"],
+        foreground=C["on_dark"],
+        borderwidth=0,
+        focusthickness=0,
+        padding=(12, 8),
+        font=("Segoe UI", 10),
+    )
     style.map("TButton",
               background=[("active", C["button_hover"]), ("pressed", C["bg3"]), ("disabled", C["bg2"])],
               foreground=[("disabled", C["muted"])])
-    style.configure("Accent.TButton", background=C["accent"], foreground=C["on_accent"])
+    style.configure(
+        "Accent.TButton",
+        background=C["accent"],
+        foreground=C["on_accent"],
+        font=("Segoe UI", 10, "bold"),
+        padding=(13, 8),
+    )
     style.map(
         "Accent.TButton",
         background=[("active", C["accent_hover"]), ("pressed", C["accent_pressed"])],
+    )
+    style.configure(
+        "Quiet.TButton",
+        background=surface,
+        foreground=C["fg"],
+        borderwidth=0,
+        padding=(12, 8),
+    )
+    style.map(
+        "Quiet.TButton",
+        background=[("active", surface_alt), ("pressed", C["bg2"])],
+    )
+    style.configure(
+        "Danger.TButton",
+        background="#6d3035",
+        foreground="#fff4f4",
+        borderwidth=0,
+        padding=(12, 8),
+        font=("Segoe UI", 10, "bold"),
+    )
+    style.map(
+        "Danger.TButton",
+        background=[("active", "#8a3b42"), ("pressed", "#56262b")],
     )
     style.configure(
         "AttentionAction.TButton",
@@ -417,14 +498,44 @@ def apply_dark_theme(root, theme_name: str = MODERN_DARK_THEME) -> None:
     style.configure("TCheckbutton", background=C["bg"], foreground=C["fg"])
     style.configure("TRadiobutton", background=C["bg"], foreground=C["fg"])
 
-    style.configure("TEntry", fieldbackground=C["bg2"], foreground=C["fg"], insertcolor=C["fg"])
-    style.configure("TCombobox", fieldbackground=C["bg2"], background=C["bg2"], foreground=C["fg"])
+    style.configure(
+        "TEntry",
+        fieldbackground=C["bg2"],
+        foreground=C["fg"],
+        insertcolor=C["fg"],
+        bordercolor=line_soft,
+        padding=6,
+    )
+    style.configure(
+        "TSpinbox",
+        fieldbackground=C["bg2"],
+        foreground=C["fg"],
+        arrowsize=13,
+        padding=5,
+        bordercolor=line_soft,
+    )
+    style.configure(
+        "TCombobox",
+        fieldbackground=C["bg2"],
+        background=C["bg2"],
+        foreground=C["fg"],
+        arrowsize=13,
+        padding=5,
+        bordercolor=line_soft,
+    )
     style.map("TCombobox",
               fieldbackground=[("readonly", C["bg2"])],
               foreground=[("readonly", C["fg"])])
 
     style.configure("TNotebook", background=C["bg"], borderwidth=0)
-    style.configure("TNotebook.Tab", background=C["bg3"], foreground=C["on_dark"], padding=(10, 6))
+    style.configure(
+        "TNotebook.Tab",
+        background=C["bg3"],
+        foreground=C["on_dark"],
+        borderwidth=0,
+        padding=(15, 8),
+        font=("Segoe UI", 10, "bold"),
+    )
     style.map("TNotebook.Tab",
               background=[("selected", C["bg2"]), ("active", C["bg2"])],
               foreground=[("selected", C["fg"]), ("active", C["fg"])])
@@ -438,7 +549,14 @@ def apply_dark_theme(root, theme_name: str = MODERN_DARK_THEME) -> None:
     style.map("Treeview",
               background=[("selected", C["accent"])],
               foreground=[("selected", C["on_accent"])])
-    style.configure("Treeview.Heading", background=C["bg3"], foreground=C["on_dark"], relief="flat")
+    style.configure(
+        "Treeview.Heading",
+        background=C["bg3"],
+        foreground=C["on_dark"],
+        relief="flat",
+        padding=(8, 7),
+        font=("Segoe UI", 9, "bold"),
+    )
     style.map("Treeview.Heading", background=[("active", C["button_hover"])])
 
     style.configure(
@@ -609,8 +727,9 @@ class WindowManagerApp:
         except Exception:
             pass
 
-        # Apply dark skin (if a dark theme is selected)
+        # Apply the DWM skin before creating child widgets.
         apply_dark_theme(self.root, self.settings.theme)
+        self.root.after_idle(lambda: apply_windows_dark_titlebar(self.root))
 
         self.search_var = StringVar()
         self.game_mode_var = StringVar(value=self.game_label)
