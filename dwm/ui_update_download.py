@@ -6,10 +6,11 @@ import queue
 import threading
 import webbrowser
 from pathlib import Path
-from tkinter import StringVar, Toplevel, filedialog, messagebox
+from tkinter import StringVar, Toplevel, filedialog
 from tkinter.ttk import Button, Frame, Label, Radiobutton
 
 from .services.i18n import tr
+from .ui_dialogs import ask_confirmation, show_message
 from .ui_windowing import schedule_center_window
 from .services.update_download import download_asset
 
@@ -25,19 +26,53 @@ class UpdateDownloadDialog:
         self.active = False
         self.asset = None
         self.window.protocol("WM_DELETE_WINDOW", self.close)
-        frame = Frame(self.window, padding=16)
+        frame = Frame(self.window, padding=20)
         frame.pack(fill="both", expand=True)
-        Label(frame, text=tr("Nouvelle version : {tag}", tag=release.tag)).pack(anchor="w")
+        Label(
+            frame,
+            text=tr("Mise à jour disponible"),
+            style="Header.TLabel",
+        ).pack(anchor="w")
+        Label(
+            frame,
+            text=tr("Nouvelle version : {tag}", tag=release.tag),
+            style="Muted.TLabel",
+        ).pack(anchor="w", pady=(2, 16))
         self.choice = StringVar(value=release.assets[0].name)
+        choices = Frame(frame)
+        choices.pack(fill="x", pady=(0, 10))
         for asset in release.assets:
-            Radiobutton(frame, text=asset.name, variable=self.choice, value=asset.name).pack(anchor="w")
+            Radiobutton(
+                choices,
+                text=asset.name,
+                variable=self.choice,
+                value=asset.name,
+            ).pack(anchor="w", pady=2)
         self.status = StringVar(value=tr("Choisissez un fichier à télécharger et vérifier."))
-        Label(frame, textvariable=self.status, wraplength=440).pack(pady=12)
-        self.button = Button(frame, text=tr("Télécharger et vérifier"),
-                             command=lambda: self.start(release))
+        Label(
+            frame,
+            textvariable=self.status,
+            wraplength=460,
+            style="Muted.TLabel",
+        ).pack(anchor="w", pady=(4, 14))
+        self.button = Button(
+            frame,
+            text=tr("Télécharger et vérifier"),
+            command=lambda: self.start(release),
+            style="Accent.TButton",
+        )
         self.button.pack(fill="x")
-        Button(frame, text=tr("Release officielle"), command=lambda: webbrowser.open(release.url)).pack(fill="x", pady=4)
-        Button(frame, text=tr("Annuler"), command=self.close).pack(fill="x")
+        Button(
+            frame,
+            text=tr("Release officielle"),
+            command=lambda: webbrowser.open(release.url),
+        ).pack(fill="x", pady=(6, 0))
+        Button(
+            frame,
+            text=tr("Annuler"),
+            command=self.close,
+            style="Quiet.TButton",
+        ).pack(fill="x", pady=(6, 0))
         self.window.bind("<Destroy>", self._destroyed, add="+")
 
     def _destroyed(self, event):
@@ -104,18 +139,31 @@ class UpdateDownloadDialog:
             self.window.destroy()
             return
         if self.asset.name == "DofusWindowManager-Setup.exe":
-            if messagebox.askyesno(tr("Mise à jour"),
-                                  tr("SHA-256 vérifié. Lancer l’installateur ?") + "\n\n" + str(path),
-                                  parent=self.window):
+            if ask_confirmation(
+                self.window,
+                tr("Mise à jour"),
+                tr("SHA-256 vérifié. Lancer l’installateur ?") + "\n\n" + str(path),
+                confirm_text=tr("Lancer l’installateur"),
+                cancel_text=tr("Annuler"),
+            ):
                 try:
                     with path.open("rb") as downloaded:
                         if hashlib.file_digest(downloaded, "sha256").hexdigest() != self.asset.sha256:
                             raise ValueError("SHA-256")
                     os.startfile(str(path))
                 except Exception:
-                    messagebox.showwarning(tr("Mise à jour"), tr("Impossible de lancer le fichier vérifié."),
-                                           parent=self.window)
+                    show_message(
+                        self.window,
+                        tr("Mise à jour"),
+                        tr("Impossible de lancer le fichier vérifié."),
+                        heading=tr("Ouverture impossible"),
+                    )
         else:
-            messagebox.showinfo(tr("Mise à jour"),
-                               tr("Fermez l’application avant de remplacer votre EXE portable.")
-                               + "\n\n" + str(path), parent=self.window)
+            show_message(
+                self.window,
+                tr("Mise à jour"),
+                tr("Fermez l’application avant de remplacer votre EXE portable.")
+                + "\n\n"
+                + str(path),
+                heading=tr("Fichier vérifié"),
+            )
