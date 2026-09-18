@@ -2418,7 +2418,7 @@ class WindowManagerApp:
         win.transient(self.root)
         schedule_center_window(win, self.root)
         win.resizable(False, False)
-        content = TtkFrame(win, padding=14)
+        content = TtkFrame(win, padding=20)
         content.pack(fill="both", expand=True)
         TtkLabel(content, text=tr("Aperçu sans fenêtre Dofus"), style="Header.TLabel").pack(
             anchor="w"
@@ -3208,9 +3208,22 @@ class WindowManagerApp:
         win.title(tr("Équipe et emplacements"))
         win.transient(self.root)
         schedule_center_window(win, self.root)
-        content = TtkFrame(win, padding=12)
+        content = TtkFrame(win, padding=20)
         content.pack(fill="both", expand=True)
-        TtkLabel(content, text=tr("Les emplacements fixes servent aux raccourcis directs et au Stream Deck."), wraplength=540).pack(anchor="w", pady=(0, 8))
+        TtkLabel(
+            content,
+            text=tr("Équipe et emplacements"),
+            style="Header.TLabel",
+        ).pack(anchor="w")
+        TtkLabel(
+            content,
+            text=tr(
+                "Les emplacements fixes servent aux raccourcis directs et au Stream Deck."
+            ),
+            style="Muted.TLabel",
+            wraplength=560,
+            justify="left",
+        ).pack(anchor="w", pady=(3, 14))
         tree = Treeview(content, columns=("slot", "name", "status"), show="headings", height=8)
         for column, label, width in (("slot", "Emplacement", 90), ("name", "Personnage", 230), ("status", "État", 180)):
             tree.heading(column, text=tr(label))
@@ -3259,9 +3272,23 @@ class WindowManagerApp:
             self.desired_order_pseudos = list(roster.order)
             self.update_listboxes()
 
-        TtkButton(content, text=tr("Réattribuer selon l’ordre courant"), command=rebind).pack(fill="x", pady=(8, 0))
-        TtkButton(content, text=tr("Retirer les personnages absents"), command=forget_absent).pack(fill="x", pady=(4, 0))
-        TtkLabel(content, text=tr("Enregistrez le profil pour conserver l’équipe et ses emplacements."), wraplength=540).pack(anchor="w", pady=(8, 0))
+        TtkButton(
+            content,
+            text=tr("Réattribuer selon l’ordre courant"),
+            command=rebind,
+        ).pack(fill="x", pady=(12, 0))
+        TtkButton(
+            content,
+            text=tr("Retirer les personnages absents"),
+            command=forget_absent,
+            style="Danger.TButton",
+        ).pack(fill="x", pady=(6, 0))
+        TtkLabel(
+            content,
+            text=tr("Enregistrez le profil pour conserver l’équipe et ses emplacements."),
+            style="Muted.TLabel",
+            wraplength=560,
+        ).pack(anchor="w", pady=(12, 0))
         render()
 
     def _save_active_profile_customizations(self) -> bool:
@@ -3587,12 +3614,16 @@ class WindowManagerApp:
         win.transient(self.root)
         schedule_center_window(win, self.root)
 
-        content = TtkFrame(win, padding=14)
+        content = TtkFrame(win, padding=20)
         content.pack(fill="both", expand=True)
         TtkLabel(content, text="Aperçu interactif des profils fournis", style="Header.TLabel").pack(anchor="w")
         profile_row = TtkFrame(content)
         profile_row.pack(fill="x", pady=(8, 4))
-        TtkLabel(profile_row, text="Modèle de Stream Deck").pack(side="left")
+        TtkLabel(
+            profile_row,
+            text=tr("Modèle de Stream Deck"),
+            style="Eyebrow.TLabel",
+        ).pack(side="left")
         profile_var = StringVar(
             value=STREAMDECK_PROFILE_LABELS.get(
                 self._streamdeck_preview_profile_key,
@@ -3702,7 +3733,12 @@ class WindowManagerApp:
         profile_selector.bind("<<ComboboxSelected>>", lambda _event: render_profile())
         render_profile()
 
-        TtkButton(content, text="Fermer", command=self._close_streamdeck_preview).pack(anchor="e", pady=(12, 0))
+        TtkButton(
+            content,
+            text=tr("Fermer"),
+            command=self._close_streamdeck_preview,
+            style="Quiet.TButton",
+        ).pack(anchor="e", pady=(14, 0))
         win.protocol("WM_DELETE_WINDOW", self._close_streamdeck_preview)
 
         self._publish_streamdeck_state()
@@ -3910,7 +3946,7 @@ class WindowManagerApp:
         schedule_center_window(win, self.root)
         win.resizable(False, False)
 
-        content = TtkFrame(win, padding=12)
+        content = TtkFrame(win, padding=20)
         content.pack(fill="both", expand=True)
         TtkLabel(content, text="État de Dofus Window Manager", style="Header.TLabel").pack(anchor="w")
         TtkLabel(
@@ -3920,7 +3956,16 @@ class WindowManagerApp:
         ).pack(anchor="w", pady=(0, 8))
 
         report = build_diagnostic_report(self._diagnostic_rows())
-        report_text = Text(content, width=78, height=20, wrap="word")
+        report_text = Text(
+            content,
+            width=78,
+            height=20,
+            wrap="word",
+            relief="flat",
+            borderwidth=0,
+            padx=10,
+            pady=10,
+        )
         report_text.insert("1.0", report)
         report_text.configure(state="disabled")
         report_text.pack(fill="both", expand=True)
@@ -3952,7 +3997,12 @@ class WindowManagerApp:
             text=tr("Réparer le plugin…"),
             command=self.open_streamdeck_plugin_repair,
         ).pack(side="left", padx=(6, 0))
-        TtkButton(buttons, text="Fermer", command=win.destroy).pack(side="right")
+        TtkButton(
+            buttons,
+            text=tr("Fermer"),
+            command=win.destroy,
+            style="Quiet.TButton",
+        ).pack(side="right")
 
     def offer_interrupted_session_diagnostic(self) -> None:
         if self._stop_event.is_set():
@@ -4182,7 +4232,7 @@ class WindowManagerApp:
         schedule_center_window(win, self.root)
         win.resizable(False, False)
 
-        content = TtkFrame(win, padding=12)
+        content = TtkFrame(win, padding=20)
         content.pack(fill="both", expand=True)
         TtkLabel(content, text="Configuration de l’application", style="Header.TLabel").pack(anchor="w")
         TtkLabel(
@@ -4202,7 +4252,12 @@ class WindowManagerApp:
         TtkButton(content, text="Importer une sauvegarde…", command=self.import_configuration).pack(
             fill="x", pady=3
         )
-        history = TtkLabelFrame(content, text=tr("Points de restauration locaux"), padding=8)
+        history = TtkLabelFrame(
+            content,
+            text=tr("Points de restauration locaux"),
+            padding=12,
+            style="Card.TLabelframe",
+        )
         history.pack(fill="x", pady=(10, 3))
         snapshot_var = StringVar(value="")
         snapshot_combo = Combobox(history, textvariable=snapshot_var, state="readonly", width=58)
@@ -4260,10 +4315,18 @@ class WindowManagerApp:
             command=restore_selected_snapshot,
         ).pack(side="right")
         refresh_snapshots()
-        TtkButton(content, text="Réinitialiser les réglages…", command=self.reset_settings).pack(
-            fill="x", pady=3
-        )
-        TtkButton(content, text="Fermer", command=win.destroy).pack(anchor="e", pady=(12, 0))
+        TtkButton(
+            content,
+            text=tr("Réinitialiser les réglages…"),
+            command=self.reset_settings,
+            style="Danger.TButton",
+        ).pack(fill="x", pady=(10, 3))
+        TtkButton(
+            content,
+            text=tr("Fermer"),
+            command=win.destroy,
+            style="Quiet.TButton",
+        ).pack(anchor="e", pady=(14, 0))
 
     def export_configuration(self) -> None:
         backup = self._build_current_configuration_backup()
@@ -5603,13 +5666,15 @@ class WindowManagerApp:
         content.pack(fill="both", expand=True)
         content.columnconfigure(1, weight=1)
 
-        preview = TkLabel(content, width=96, height=96, borderwidth=0)
+        preview = TkLabel(content, width=112, height=112, borderwidth=0)
         preview.grid(row=0, column=0, rowspan=4, padx=(0, 12), pady=(0, 8))
         preview_photo: ImageTk.PhotoImage | None = None
 
-        TtkLabel(content, text=f"{window.pseudo} · {window.character_class or 'classe inconnue'}").grid(
-            row=0, column=1, columnspan=2, sticky="w", pady=(0, 8)
-        )
+        TtkLabel(
+            content,
+            text=f"{window.pseudo} · {window.character_class or 'classe inconnue'}",
+            style="Section.TLabel",
+        ).grid(row=0, column=1, columnspan=2, sticky="w", pady=(0, 10))
         TtkLabel(content, text="Alias").grid(row=1, column=1, sticky="w", padx=(0, 8), pady=3)
         TtkEntry(content, textvariable=alias_var, width=30).grid(row=1, column=2, sticky="ew", pady=3)
         TtkLabel(content, text="Icône").grid(row=2, column=1, sticky="w", padx=(0, 8), pady=3)
@@ -5666,9 +5731,12 @@ class WindowManagerApp:
         TtkButton(portrait_buttons, text="Choisir un portrait…", command=choose_portrait).pack(
             side="left", fill="x", expand=True, padx=(0, 3)
         )
-        TtkButton(portrait_buttons, text="Retirer", command=remove_portrait).pack(
-            side="left", padx=(3, 0)
-        )
+        TtkButton(
+            portrait_buttons,
+            text=tr("Retirer"),
+            command=remove_portrait,
+            style="Quiet.TButton",
+        ).pack(side="left", padx=(4, 0))
         class_portrait_combo = Combobox(
             content,
             values=tuple(class_portraits),
@@ -5735,7 +5803,12 @@ class WindowManagerApp:
         refresh_preview()
         buttons = TtkFrame(content)
         buttons.grid(row=6, column=0, columnspan=3, sticky="e")
-        TtkButton(buttons, text="Annuler", command=win.destroy).pack(side="right")
+        TtkButton(
+            buttons,
+            text=tr("Annuler"),
+            command=win.destroy,
+            style="Quiet.TButton",
+        ).pack(side="right")
         TtkButton(buttons, text="Appliquer", command=apply, style="Accent.TButton").pack(
             side="right", padx=(0, 6)
         )
