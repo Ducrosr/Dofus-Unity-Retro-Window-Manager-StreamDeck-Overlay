@@ -1,8 +1,15 @@
 from __future__ import annotations
 
-from tkinter import StringVar, Toplevel
+import tkinter as tk
+from tkinter import StringVar, Toplevel, messagebox as native_messagebox
 from tkinter.ttk import Button, Entry, Frame, Label
 
+from .ui_design import (
+    DANGER_BUTTON_STYLE,
+    PRIMARY_BUTTON_STYLE,
+    SECONDARY_BUTTON_STYLE,
+    UI,
+)
 from .ui_windowing import schedule_center_window
 
 
@@ -12,7 +19,7 @@ def _prepare_dialog(parent, title: str) -> tuple[Toplevel, Frame]:
     win.transient(parent)
     win.resizable(False, False)
 
-    body = Frame(win, padding=20)
+    body = Frame(win, padding=UI.window_padding)
     body.pack(fill="both", expand=True)
     return win, body
 
@@ -50,12 +57,17 @@ def show_message(
     *,
     heading: str | None = None,
     button_text: str = "OK",
+    kind: str = "info",
 ) -> None:
     win, body = _prepare_dialog(parent, title)
+    heading_style = {
+        "warning": "Warning.TLabel",
+        "error": "DangerHeader.TLabel",
+    }.get(kind, "Header.TLabel")
     Label(
         body,
         text=heading or title,
-        style="Header.TLabel",
+        style=heading_style,
     ).pack(anchor="w")
     Label(
         body,
@@ -71,12 +83,12 @@ def show_message(
         footer,
         text=button_text,
         command=win.destroy,
-        style="Accent.TButton",
+        style=PRIMARY_BUTTON_STYLE,
     ).pack(side="right")
 
     win.bind("<Return>", lambda _event: win.destroy())
     win.bind("<Escape>", lambda _event: win.destroy())
-    _finish_dialog_layout(win, parent, 500)
+    _finish_dialog_layout(win, parent, UI.dialog_width)
     _run_modal(win, parent)
 
 
@@ -116,18 +128,18 @@ def ask_confirmation(
         footer,
         text=confirm_text,
         command=accept,
-        style="Danger.TButton" if danger else "Accent.TButton",
+        style=DANGER_BUTTON_STYLE if danger else PRIMARY_BUTTON_STYLE,
     ).pack(side="right")
     Button(
         footer,
         text=cancel_text,
         command=win.destroy,
-        style="Quiet.TButton",
+        style=SECONDARY_BUTTON_STYLE,
     ).pack(side="right", padx=(0, 8))
 
     win.bind("<Return>", lambda _event: accept())
     win.bind("<Escape>", lambda _event: win.destroy())
-    _finish_dialog_layout(win, parent, 520)
+    _finish_dialog_layout(win, parent, UI.confirmation_width)
     _run_modal(win, parent)
     return bool(result["accepted"])
 
@@ -174,13 +186,13 @@ def ask_text(
         footer,
         text=confirm_text,
         command=accept,
-        style="Accent.TButton",
+        style=PRIMARY_BUTTON_STYLE,
     ).pack(side="right")
     Button(
         footer,
         text=cancel_text,
         command=win.destroy,
-        style="Quiet.TButton",
+        style=SECONDARY_BUTTON_STYLE,
     ).pack(side="right", padx=(0, 8))
 
     win.bind("<Return>", lambda _event: accept())
@@ -190,6 +202,52 @@ def ask_text(
         entry.focus_set()
     except Exception:
         pass
-    _finish_dialog_layout(win, parent, 500)
+    _finish_dialog_layout(win, parent, UI.dialog_width)
     _run_modal(win, parent)
     return result["value"]
+
+
+def _resolve_parent(parent):
+    return parent or getattr(tk, "_default_root", None)
+
+
+def show_info(title: str, message: str, *, parent=None, **_kwargs):
+    """Theme-aware drop-in replacement for messagebox.showinfo."""
+    resolved = _resolve_parent(parent)
+    if resolved is None:
+        return native_messagebox.showinfo(title, message, parent=parent)
+    show_message(resolved, str(title), str(message), heading=str(title), kind="info")
+    return "ok"
+
+
+def show_warning(title: str, message: str, *, parent=None, **_kwargs):
+    """Theme-aware drop-in replacement for messagebox.showwarning."""
+    resolved = _resolve_parent(parent)
+    if resolved is None:
+        return native_messagebox.showwarning(title, message, parent=parent)
+    show_message(resolved, str(title), str(message), heading=str(title), kind="warning")
+    return "ok"
+
+
+def show_error(title: str, message: str, *, parent=None, **_kwargs):
+    """Theme-aware drop-in replacement for messagebox.showerror."""
+    resolved = _resolve_parent(parent)
+    if resolved is None:
+        return native_messagebox.showerror(title, message, parent=parent)
+    show_message(resolved, str(title), str(message), heading=str(title), kind="error")
+    return "ok"
+
+
+def ask_yes_no(title: str, message: str, *, parent=None, **_kwargs) -> bool:
+    """Theme-aware drop-in replacement for messagebox.askyesno."""
+    resolved = _resolve_parent(parent)
+    if resolved is None:
+        return bool(native_messagebox.askyesno(title, message, parent=parent))
+    return ask_confirmation(
+        resolved,
+        str(title),
+        str(message),
+        heading=str(title),
+        confirm_text="Oui",
+        cancel_text="Non",
+    )
