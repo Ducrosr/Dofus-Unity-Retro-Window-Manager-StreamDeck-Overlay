@@ -6,6 +6,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from dwm.services.obs_active_capture import (
+    ADVSS_GAME_VARIABLE_NAME,
+    ADVSS_SET_VARIABLES_REQUEST,
+    ADVSS_VENDOR_NAME,
     OBSActiveCaptureBridge,
     OBSActiveCaptureConfig,
     OVERLAY_SOURCE_NAME,
@@ -13,6 +16,7 @@ from dwm.services.obs_active_capture import (
     POPUP_OPACITY_FILTER_NAME,
     POPUP_SOURCE_NAME,
     VISIBILITY_FILTER_NAME,
+    advanced_scene_switcher_game_value,
     fit_window_to_canvas,
     project_window_over_reference,
     probe_obs_connection,
@@ -252,6 +256,73 @@ class OBSProjectionTests(unittest.TestCase):
         self.assertAlmostEqual(transform.position_y, 120.0)
         self.assertAlmostEqual(transform.scale_x, 0.75)
         self.assertAlmostEqual(transform.scale_y, 0.75)
+
+
+class AdvancedSceneSwitcherGameTests(unittest.TestCase):
+    def test_game_values_match_expected_stream_variables(self):
+        self.assertEqual(advanced_scene_switcher_game_value("unity"), "Dofus Unity")
+        self.assertEqual(advanced_scene_switcher_game_value("retro"), "Dofus Retro")
+
+    def test_bridge_sets_game_variable_and_updates_it_on_mode_switch(self):
+        _FakeReqClient.reset()
+        fake_obs = SimpleNamespace(ReqClient=_FakeReqClient)
+
+        with (
+            patch("dwm.services.obs_active_capture._obs", fake_obs),
+            patch.object(
+                OBSActiveCaptureBridge,
+                "_find_interface_window",
+                return_value=None,
+            ),
+        ):
+            bridge = OBSActiveCaptureBridge(OBSActiveCaptureConfig(enabled=True))
+            try:
+                bridge.set_game_mode("retro")
+                bridge.sync_windows([], active_hwnd=None)
+                self.assertTrue(
+                    _wait_until(
+                        lambda: any(
+                            request == "CallVendorRequest"
+                            for request, _payload in _FakeReqClient.calls
+                        )
+                    )
+                )
+
+                first_payload = next(
+                    payload
+                    for request, payload in _FakeReqClient.calls
+                    if request == "CallVendorRequest"
+                )
+                self.assertEqual(first_payload["vendorName"], ADVSS_VENDOR_NAME)
+                self.assertEqual(
+                    first_payload["requestType"],
+                    ADVSS_SET_VARIABLES_REQUEST,
+                )
+                self.assertEqual(
+                    first_payload["requestData"]["variables"],
+                    [
+                        {
+                            "name": ADVSS_GAME_VARIABLE_NAME,
+                            "value": "Dofus Retro",
+                        }
+                    ],
+                )
+
+                _FakeReqClient.calls = []
+                bridge.set_game_mode("unity")
+                self.assertTrue(
+                    _wait_until(
+                        lambda: any(
+                            request == "CallVendorRequest"
+                            and payload
+                            and payload["requestData"]["variables"][0]["value"]
+                            == "Dofus Unity"
+                            for request, payload in _FakeReqClient.calls
+                        )
+                    )
+                )
+            finally:
+                bridge.stop()
 
 
 class OBSActiveCaptureTests(unittest.TestCase):
