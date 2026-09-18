@@ -2480,10 +2480,18 @@ class WindowManagerApp:
                 current_entries,
                 attention_count=(1 if attention_index is not None else 0),
             )
+            try:
+                win.update_idletasks()
+                preview_x = int(win.winfo_rootx()) + int(win.winfo_width()) + 18
+                preview_y = int(win.winfo_rooty())
+            except Exception:
+                preview_x = preview_settings.rotation_overlay_x + 36
+                preview_y = preview_settings.rotation_overlay_y + 36
+
             simulation_ui.configure_persistent(
                 enabled=True,
-                x=preview_settings.rotation_overlay_x + 36,
-                y=preview_settings.rotation_overlay_y + 36,
+                x=preview_x,
+                y=preview_y,
                 opacity=preview_settings.rotation_overlay_opacity,
                 locked=False,
                 layout=preview_settings.rotation_overlay_layout,
