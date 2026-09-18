@@ -32,6 +32,25 @@ class ThemedDialogAdapterTests(unittest.TestCase):
                 kind=kind,
             )
 
+    def test_message_adapter_keeps_existing_translation_layer(self):
+        parent = object()
+        set_language("en")
+
+        with patch("dwm.ui_dialogs.show_message") as modal:
+            show_warning(
+                "Fermeture anormale détectée",
+                "La session précédente s’est terminée anormalement.",
+                parent=parent,
+            )
+
+        modal.assert_called_once_with(
+            parent,
+            "Abnormal shutdown detected",
+            "The previous session ended abnormally.",
+            heading="Abnormal shutdown detected",
+            kind="warning",
+        )
+
     def test_nested_modal_restores_previous_grab(self):
         parent = Mock()
         previous = Mock()
