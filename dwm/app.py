@@ -9,7 +9,7 @@ import time
 import webbrowser
 from datetime import datetime
 from pathlib import Path
-from tkinter import BooleanVar, Canvas, Label as TkLabel, StringVar, Text, Tk, Toplevel, filedialog, messagebox, simpledialog
+from tkinter import BooleanVar, Canvas, Label as TkLabel, StringVar, Text, Tk, Toplevel, filedialog, messagebox
 from tkinter.ttk import (
     Button as TtkButton,
     Checkbutton as TtkCheckbutton,
@@ -42,7 +42,6 @@ from .services.focus import FocusError, focus_hwnd, get_foreground_hwnd, is_wind
 from .services.game_mode import game_mode_label, normalize_game_mode, win_event_filter
 from .services.themes import (
     THEME_LABELS,
-    RETRO_THEME,
     default_theme_for_mode,
     normalize_theme,
     theme_ids_for_mode,
@@ -74,6 +73,12 @@ from .services.profile_matching import rank_profile_matches, unique_exact_profil
 from .services.character_roster import CharacterRoster, character_key, character_names
 from .services.performance import RuntimeMetrics, adaptive_refresh_delay_seconds
 from .services.support_bundle import create_support_bundle
+from .services.obs_active_capture import (
+    OBSActiveCaptureBridge,
+    OBSActiveCaptureConfig,
+    probe_obs_connection,
+)
+from .services.window_telemetry import WindowTelemetry, collect_window_telemetry
 from .services.streamdeck_bridge import StreamDeckBridge
 from .services.streamdeck_installer import open_streamdeck_plugin
 from .services.streamdeck_health import (
@@ -101,6 +106,26 @@ from .services.configuration_diff import compare_configuration, compare_profiles
 from .ui_configuration_preview import confirm_configuration_changes
 from .ui_settings_search import SettingsSearch
 from .ui_update_download import UpdateDownloadDialog
+from .ui_dialogs import (
+    ask_confirmation,
+    ask_text,
+    ask_yes_no,
+    show_error,
+    show_info,
+    show_message,
+    show_warning,
+)
+from .ui_design import (
+    PRIMARY_BUTTON_STYLE,
+    SECONDARY_BUTTON_STYLE,
+    TERTIARY_BUTTON_STYLE,
+    UI,
+)
+from .ui_windowing import (
+    apply_windows_dark_titlebar,
+    install_combobox_wheel_guard,
+    schedule_center_window,
+)
 from .services.monitor_layout import list_monitors
 from .services.backup_history import (
     BackupSnapshot,
@@ -213,6 +238,7 @@ SWAP_POSITION_LABELS = {
     "bottom_right": "En bas à droite",
 }
 ROTATION_COALESCE_MS = 18
+MAIN_CONTENT_MAX_WIDTH = UI.main_content_max_width
 OFFICIAL_REPOSITORY_URL = (
     "https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay"
 )
@@ -290,56 +316,191 @@ def apply_dark_theme(root, theme_name: str = MODERN_DARK_THEME) -> None:
     except Exception:
         pass
 
-    # Base style
-    style.configure(".",
-                    background=C["bg"],
-                    foreground=C["fg"],
-                    fieldbackground=C["bg2"],
-                    bordercolor=C["line"],
-                    lightcolor=C["line"],
-                    darkcolor=C["line"],
-                    troughcolor=C["bg2"],
-                    selectbackground=C["accent"],
-                    selectforeground=C["on_accent"],
-                    font=("Segoe UI", 10),
-                    )
+    # Base style — restrained desktop design system.
+    surface = blend_hex_colors(C["bg2"], C["bg"], 0.72)
+    surface_alt = blend_hex_colors(C["bg3"], C["bg"], 0.58)
+    line_soft = blend_hex_colors(C["line"], C["bg"], 0.36)
+
+    style.configure(
+        ".",
+        background=C["bg"],
+        foreground=C["fg"],
+        fieldbackground=C["bg2"],
+        bordercolor=line_soft,
+        lightcolor=line_soft,
+        darkcolor=line_soft,
+        troughcolor=C["bg2"],
+        selectbackground=C["accent"],
+        selectforeground=C["on_accent"],
+        font=("Segoe UI", 10),
+    )
 
     style.configure("TFrame", background=C["bg"])
+    style.configure("Surface.TFrame", background=surface)
+    style.configure("Toolbar.TFrame", background=surface_alt)
+    style.configure("ActionBar.TFrame", background=surface)
     style.configure("TLabel", background=C["bg"], foreground=C["fg"])
-    style.configure("Header.TLabel", background=C["bg"], foreground=C["accent"], font=("Segoe UI", 16, "bold"))
+    style.configure(
+        "Header.TLabel",
+        background=C["bg"],
+        foreground=C["accent"],
+        font=("Segoe UI", 17, "bold"),
+    )
+    style.configure(
+        "Hero.TLabel",
+        background=C["bg"],
+        foreground=C["accent"],
+        font=("Segoe UI", 21, "bold"),
+    )
+    style.configure(
+        "Section.TLabel",
+        background=C["bg"],
+        foreground=C["fg"],
+        font=("Segoe UI", 11, "bold"),
+    )
+    style.configure(
+        "Eyebrow.TLabel",
+        background=C["bg"],
+        foreground=C["muted"],
+        font=("Segoe UI", 9, "bold"),
+    )
+    style.configure(
+        "StepActive.TLabel",
+        background=C["bg"],
+        foreground=C["accent"],
+        font=("Segoe UI", 10, "bold"),
+    )
+    style.configure(
+        "StepDone.TLabel",
+        background=C["bg"],
+        foreground=C["fg"],
+        font=("Segoe UI", 10, "bold"),
+    )
+    style.configure(
+        "StepIdle.TLabel",
+        background=C["bg"],
+        foreground=C["muted"],
+        font=("Segoe UI", 10),
+    )
     style.configure("Muted.TLabel", background=C["bg"], foreground=C["muted"])
+    style.configure(
+        "Warning.TLabel",
+        background=C["bg"],
+        foreground=C["attention"],
+        font=("Segoe UI", 17, "bold"),
+    )
+    style.configure(
+        "DangerHeader.TLabel",
+        background=C["bg"],
+        foreground="#e58b91",
+        font=("Segoe UI", 17, "bold"),
+    )
 
+    # Cards keep structure without the heavy nested-box look of classic Tk.
     style.configure(
         "TLabelframe",
         background=C["bg"],
         foreground=C["fg"],
-        bordercolor=C["line"],
-        borderwidth=1,
-        relief="solid",
+        bordercolor=C["bg"],
+        borderwidth=0,
+        relief="flat",
     )
-    if t == RETRO_THEME:
-        style.configure(
-            "TLabelframe.Label",
-            background=C["bg3"],
-            foreground=C["on_dark"],
-            padding=(8, 3),
-        )
-    else:
-        style.configure("TLabelframe.Label", background=C["bg"], foreground=C["fg"])
+    style.configure(
+        "TLabelframe.Label",
+        background=C["bg"],
+        foreground=C["header"],
+        font=("Segoe UI", 10, "bold"),
+        padding=(5, 2),
+    )
+    style.configure(
+        "Card.TLabelframe",
+        background=C["bg"],
+        foreground=C["fg"],
+        bordercolor=line_soft,
+        borderwidth=1,
+        relief="flat",
+    )
+    style.configure(
+        "Card.TLabelframe.Label",
+        background=C["bg"],
+        foreground=C["fg"],
+        font=("Segoe UI", 10, "bold"),
+        padding=(6, 3),
+    )
 
-    style.configure("TButton",
-                    background=C["bg3"],
-                    foreground=C["on_dark"],
-                    borderwidth=1,
-                    focusthickness=0,
-                    padding=(11, 7))
+    style.configure(
+        "TButton",
+        background=C["bg3"],
+        foreground=C["on_dark"],
+        borderwidth=0,
+        focusthickness=0,
+        padding=(12, 8),
+        font=("Segoe UI", 10),
+    )
     style.map("TButton",
               background=[("active", C["button_hover"]), ("pressed", C["bg3"]), ("disabled", C["bg2"])],
               foreground=[("disabled", C["muted"])])
-    style.configure("Accent.TButton", background=C["accent"], foreground=C["on_accent"])
+    style.configure(
+        "Secondary.TButton",
+        background=C["bg3"],
+        foreground=C["on_dark"],
+        borderwidth=0,
+        focusthickness=0,
+        padding=(12, 8),
+        font=("Segoe UI", 10),
+    )
+    style.map(
+        "Secondary.TButton",
+        background=[("active", C["button_hover"]), ("pressed", C["bg3"]), ("disabled", C["bg2"])],
+        foreground=[("disabled", C["muted"])],
+    )
+    style.configure(
+        "Tertiary.TButton",
+        background=C["bg"],
+        foreground=C["muted"],
+        borderwidth=0,
+        focusthickness=0,
+        padding=(10, 8),
+        font=("Segoe UI", 10),
+    )
+    style.map(
+        "Tertiary.TButton",
+        background=[("active", surface), ("pressed", C["bg2"])],
+        foreground=[("active", C["fg"]), ("pressed", C["fg"]), ("disabled", C["muted"])],
+    )
+    style.configure(
+        "Accent.TButton",
+        background=C["accent"],
+        foreground=C["on_accent"],
+        font=("Segoe UI", 10, "bold"),
+        padding=(13, 8),
+    )
     style.map(
         "Accent.TButton",
         background=[("active", C["accent_hover"]), ("pressed", C["accent_pressed"])],
+    )
+    style.configure(
+        "Quiet.TButton",
+        background=surface,
+        foreground=C["fg"],
+        borderwidth=0,
+        padding=(12, 8),
+    )
+    style.map(
+        "Quiet.TButton",
+        background=[("active", surface_alt), ("pressed", C["bg2"])],
+    )
+    style.configure(
+        "Danger.TButton",
+        background="#6d3035",
+        foreground="#fff4f4",
+        borderwidth=0,
+        padding=(12, 8),
+        font=("Segoe UI", 10, "bold"),
+    )
+    style.map(
+        "Danger.TButton",
+        background=[("active", "#8a3b42"), ("pressed", "#56262b")],
     )
     style.configure(
         "AttentionAction.TButton",
@@ -410,17 +571,50 @@ def apply_dark_theme(root, theme_name: str = MODERN_DARK_THEME) -> None:
     style.configure("TCheckbutton", background=C["bg"], foreground=C["fg"])
     style.configure("TRadiobutton", background=C["bg"], foreground=C["fg"])
 
-    style.configure("TEntry", fieldbackground=C["bg2"], foreground=C["fg"], insertcolor=C["fg"])
-    style.configure("TCombobox", fieldbackground=C["bg2"], background=C["bg2"], foreground=C["fg"])
+    style.configure(
+        "TEntry",
+        fieldbackground=C["bg2"],
+        foreground=C["fg"],
+        insertcolor=C["fg"],
+        bordercolor=line_soft,
+        padding=6,
+    )
+    style.configure(
+        "TSpinbox",
+        fieldbackground=C["bg2"],
+        foreground=C["fg"],
+        arrowsize=13,
+        padding=5,
+        bordercolor=line_soft,
+    )
+    style.configure(
+        "TCombobox",
+        fieldbackground=C["bg2"],
+        background=C["bg2"],
+        foreground=C["fg"],
+        arrowsize=13,
+        padding=5,
+        bordercolor=line_soft,
+    )
+    style.map("TEntry", bordercolor=[("focus", C["header"])])
+    style.map("TSpinbox", bordercolor=[("focus", C["header"])])
     style.map("TCombobox",
               fieldbackground=[("readonly", C["bg2"])],
-              foreground=[("readonly", C["fg"])])
+              foreground=[("readonly", C["fg"])],
+              bordercolor=[("focus", C["header"])])
 
     style.configure("TNotebook", background=C["bg"], borderwidth=0)
-    style.configure("TNotebook.Tab", background=C["bg3"], foreground=C["on_dark"], padding=(10, 6))
+    style.configure(
+        "TNotebook.Tab",
+        background=C["bg3"],
+        foreground=C["on_dark"],
+        borderwidth=0,
+        padding=(15, 8),
+        font=("Segoe UI", 10, "bold"),
+    )
     style.map("TNotebook.Tab",
-              background=[("selected", C["bg2"]), ("active", C["bg2"])],
-              foreground=[("selected", C["fg"]), ("active", C["fg"])])
+              background=[("selected", C["header"]), ("active", surface_alt)],
+              foreground=[("selected", C["on_dark"]), ("active", C["fg"])])
 
     style.configure("Treeview",
                     background=C["bg2"],
@@ -429,9 +623,16 @@ def apply_dark_theme(root, theme_name: str = MODERN_DARK_THEME) -> None:
                     bordercolor=C["line"],
                     rowheight=28)
     style.map("Treeview",
-              background=[("selected", C["accent"])],
-              foreground=[("selected", C["on_accent"])])
-    style.configure("Treeview.Heading", background=C["bg3"], foreground=C["on_dark"], relief="flat")
+              background=[("selected", C["header"])],
+              foreground=[("selected", C["on_dark"])])
+    style.configure(
+        "Treeview.Heading",
+        background=C["bg3"],
+        foreground=C["on_dark"],
+        relief="flat",
+        padding=(8, 7),
+        font=("Segoe UI", 9, "bold"),
+    )
     style.map("Treeview.Heading", background=[("active", C["button_hover"])])
 
     style.configure(
@@ -501,6 +702,7 @@ class WindowManagerApp:
         self._display_simulation_ui: OverlayUI | None = None
         self.rotation_index: int = 0
         self._active_game_hwnd: int | None = None
+        self._window_telemetry: dict[int, WindowTelemetry] = {}
         self._pending_rotation_delta = 0
         self._rotation_request_job: str | None = None
         self.attention_state = WindowAttentionState()
@@ -561,11 +763,27 @@ class WindowManagerApp:
         )
         self.runtime_metrics = RuntimeMetrics()
 
+        # ---- OBS active Dofus capture ----
+        self.obs_capture_bridge = OBSActiveCaptureBridge(
+            OBSActiveCaptureConfig(
+                enabled=self.settings.obs_capture_sync_enabled,
+                port=self.settings.obs_websocket_port,
+                password=self.settings.obs_websocket_password,
+                scene_name=self.settings.obs_capture_scene,
+                source_prefix=self.settings.obs_capture_source_prefix,
+                capture_cursor=self.settings.obs_capture_cursor,
+                force_sdr=self.settings.obs_capture_force_sdr,
+                popup_opacity=self.settings.swap_notification_opacity / 100.0,
+            )
+        )
+        self.obs_capture_bridge.set_game_mode(self.game_mode)
+
         # ---- Hotkeys ----
         self.hotkeys = HotkeyManager()
 
         # ---- UI ----
         self.root = Tk()
+        install_combobox_wheel_guard(self.root)
         self._base_tk_scaling = float(self.root.tk.call("tk", "scaling"))
         self.root._dwm_high_contrast = bool(  # type: ignore[attr-defined]
             self.settings.accessibility_high_contrast
@@ -585,8 +803,9 @@ class WindowManagerApp:
         except Exception:
             pass
 
-        # Apply dark skin (if a dark theme is selected)
+        # Apply the DWM skin before creating child widgets.
         apply_dark_theme(self.root, self.settings.theme)
+        self.root.after_idle(lambda: apply_windows_dark_titlebar(self.root))
 
         self.search_var = StringVar()
         self.game_mode_var = StringVar(value=self.game_label)
@@ -726,6 +945,7 @@ class WindowManagerApp:
         dialog = Toplevel(self.root)
         dialog.title(tr("Avertissement de sécurité"))
         dialog.transient(self.root)
+        schedule_center_window(dialog, self.root)
         dialog.grab_set()
         dialog.resizable(False, False)
         try:
@@ -846,7 +1066,7 @@ class WindowManagerApp:
                 save_settings(self.settings_path, self.settings)
             except OSError as exc:
                 self.settings.security_notice_accepted = False
-                messagebox.showerror(
+                show_error(
                     tr("Enregistrement impossible"),
                     str(exc),
                     parent=dialog,
@@ -895,6 +1115,7 @@ class WindowManagerApp:
 
         dialog = Toplevel(self.root)
         dialog.transient(self.root)
+        schedule_center_window(dialog, self.root)
         dialog.grab_set()
         dialog.resizable(False, False)
         try:
@@ -902,25 +1123,41 @@ class WindowManagerApp:
         except Exception:
             pass
 
-        shell = TtkFrame(dialog, padding=18)
+        shell = TtkFrame(dialog, padding=22)
         shell.pack(fill="both", expand=True)
         title_var = StringVar()
         progress_var = StringVar()
         TtkLabel(shell, textvariable=title_var, style="Header.TLabel").pack(anchor="w")
         TtkLabel(shell, textvariable=progress_var, style="Muted.TLabel").pack(
-            anchor="w", pady=(2, 12)
+            anchor="w", pady=(2, 8)
         )
+        stepper = TtkFrame(shell)
+        stepper.pack(fill="x", pady=(0, 16))
+        step_labels = []
+        for step_index in range(6):
+            if step_index:
+                TtkLabel(stepper, text="—", style="StepIdle.TLabel").pack(
+                    side="left", padx=4
+                )
+            label = TtkLabel(
+                stepper,
+                text=str(step_index + 1),
+                style="StepIdle.TLabel",
+            )
+            label.pack(side="left")
+            step_labels.append(label)
+
         page = TtkFrame(shell, width=660, height=330)
         page.pack(fill="both", expand=True)
         page.pack_propagate(False)
         footer = TtkFrame(shell)
         footer.pack(fill="x", pady=(14, 0))
 
-        later_button = TtkButton(footer)
+        later_button = TtkButton(footer, style="Quiet.TButton")
         later_button.pack(side="left")
         next_button = TtkButton(footer, style="Accent.TButton")
         next_button.pack(side="right")
-        previous_button = TtkButton(footer)
+        previous_button = TtkButton(footer, style="Quiet.TButton")
         previous_button.pack(side="right", padx=(0, 8))
 
         def choices() -> OnboardingChoices:
@@ -958,7 +1195,7 @@ class WindowManagerApp:
                 try:
                     save_settings(self.settings_path, self.settings)
                 except OSError as exc:
-                    messagebox.showerror(
+                    show_error(
                         tr("Enregistrement impossible"),
                         str(exc),
                         parent=dialog,
@@ -1067,6 +1304,16 @@ class WindowManagerApp:
             progress_var.set(
                 tr("Étape {current} sur {total}", current=current_step + 1, total=len(step_titles))
             )
+            for index, label in enumerate(step_labels):
+                label.configure(
+                    style=(
+                        "StepActive.TLabel"
+                        if index == current_step
+                        else "StepDone.TLabel"
+                        if index < current_step
+                        else "StepIdle.TLabel"
+                    )
+                )
             later_button.configure(text=tr("Configurer plus tard"))
             previous_button.configure(
                 text=tr("← Précédent"),
@@ -1080,7 +1327,12 @@ class WindowManagerApp:
                 add_text(
                     "Bienvenue dans Dofus Window Manager. Cet assistant configure les éléments essentiels sans modifier vos profils de personnages."
                 )
-                language_box = TtkLabelFrame(page, text=tr("Langue"), padding=10)
+                language_box = TtkLabelFrame(
+                    page,
+                    text=tr("Langue"),
+                    padding=12,
+                    style="Card.TLabelframe",
+                )
                 language_box.pack(fill="x", pady=(5, 0))
                 for language in LANGUAGES:
                     flag_image = self._language_flag_images.get(language)
@@ -1402,7 +1654,7 @@ class WindowManagerApp:
         self._publish_streamdeck_state()
         if language in {"en", "es"}:
             title, notice = translation_notice(language)
-            messagebox.showwarning(title, notice, parent=self.root)
+            show_warning(title, notice, parent=self.root)
 
     def _load_language_flag_images(self) -> dict[str, ImageTk.PhotoImage]:
         images: dict[str, ImageTk.PhotoImage] = {}
@@ -1438,7 +1690,7 @@ class WindowManagerApp:
         self.root.bind_all("<MouseWheel>", self._on_global_mousewheel, add="+")
 
         header = TtkFrame(self.main_content)
-        header.pack(fill="x", padx=12, pady=(12, 6))
+        header.pack(fill="x", padx=18, pady=(16, 10))
 
         title_box = TtkFrame(header)
         title_box.pack(side="left")
@@ -1468,8 +1720,8 @@ class WindowManagerApp:
             self.language_buttons[language] = button
 
         search_box = TtkFrame(header)
-        search_box.pack(side="right", fill="x", expand=True, padx=(30, 0))
-        TtkLabel(search_box, text="Rechercher").pack(anchor="w")
+        search_box.pack(side="right", fill="x", expand=True, padx=(36, 0))
+        TtkLabel(search_box, text="Rechercher", style="Eyebrow.TLabel").pack(anchor="w")
         search_row = TtkFrame(search_box)
         search_row.pack(fill="x", pady=(2, 0))
         search = TtkEntry(search_row, textvariable=self.search_var)
@@ -1478,19 +1730,21 @@ class WindowManagerApp:
         TtkButton(search_row, text="Rafraîchir", command=self.refresh_windows).pack(side="right", padx=(6, 0))
 
         main = TtkFrame(self.main_content)
-        main.pack(fill="both", expand=True, padx=12, pady=(4, 10))
-        main.columnconfigure(0, weight=5, minsize=500)
-        main.columnconfigure(1, weight=3, minsize=310)
+        main.pack(fill="both", expand=True, padx=18, pady=(4, 14))
+        main.columnconfigure(0, weight=5, minsize=520)
+        main.columnconfigure(1, weight=3, minsize=340)
         main.rowconfigure(0, weight=1)
 
         left = TtkFrame(main)
         left.grid(row=0, column=0, sticky="nsew")
 
         right = TtkFrame(main)
-        right.grid(row=0, column=1, sticky="new", padx=(12, 0))
+        right.grid(row=0, column=1, sticky="new", padx=(16, 0))
 
         # Window tables
-        TtkLabel(left, text="Fenêtres gérées").pack(pady=(0, 5), anchor="w")
+        TtkLabel(left, text="Fenêtres gérées", style="Section.TLabel").pack(
+            pady=(0, 7), anchor="w"
+        )
         self.managed_tree = self._create_window_tree(left, height=10)
         self.managed_tree.bind("<ButtonPress-1>", lambda event: self._on_window_tree_press(event, self.managed_tree), add="+")
         self.managed_tree.bind(
@@ -1509,7 +1763,9 @@ class WindowManagerApp:
             text="Glissez un personnage pour modifier l’ordre ; glissez un en-tête pour déplacer une colonne.",
         ).pack(pady=(4, 0), anchor="w")
 
-        TtkLabel(left, text="Fenêtres ignorées").pack(pady=(10, 5), anchor="w")
+        TtkLabel(left, text="Fenêtres ignorées", style="Section.TLabel").pack(
+            pady=(16, 6), anchor="w"
+        )
         TtkLabel(left, textvariable=self.roster_status_var, wraplength=550, style="Muted.TLabel").pack(fill="x")
         self.ignored_tree = self._create_window_tree(left, height=5)
         self.ignored_tree.bind("<ButtonPress-1>", lambda event: self._on_window_tree_press(event, self.ignored_tree), add="+")
@@ -1526,8 +1782,10 @@ class WindowManagerApp:
         )
 
         # Right panel controls, grouped by frequency and purpose.
-        navigation = TtkLabelFrame(right, text="Navigation", padding=8)
-        navigation.pack(fill="x", pady=(0, 8))
+        navigation = TtkLabelFrame(
+            right, text="Navigation", padding=12, style="Card.TLabelframe"
+        )
+        navigation.pack(fill="x", pady=(0, 12))
         navigation.columnconfigure(0, weight=1)
         navigation.columnconfigure(1, weight=1)
         TtkButton(navigation, text="← Précédent", command=lambda: self.request_rotation("backward")).grid(
@@ -1553,12 +1811,14 @@ class WindowManagerApp:
         )
         self.undo_order_button = TtkButton(navigation, text=tr("Annuler le déplacement"), command=self.undo_order_change, state="disabled")
         self.undo_order_button.grid(row=3, column=0, columnspan=2, sticky="ew", pady=2)
-        TtkButton(navigation, text=tr("Rétablir l’ordre du profil"), command=self.restore_profile_order).grid(row=4, column=0, columnspan=2, sticky="ew", pady=2)
+        TtkButton(navigation, text=tr("Rétablir l’ordre du profil"), command=self.restore_profile_order).grid(row=4, column=0, columnspan=2, sticky="ew", pady=(8, 2))
         TtkButton(navigation, text=tr("Équipe et emplacements…"), command=self.show_character_slots).grid(row=5, column=0, columnspan=2, sticky="ew", pady=2)
         TtkButton(navigation, textvariable=self.hotkey_pause_text, command=self.toggle_hotkeys_paused).grid(row=6, column=0, columnspan=2, sticky="ew", pady=2)
 
-        selection = TtkLabelFrame(right, text="Fenêtre sélectionnée", padding=8)
-        selection.pack(fill="x", pady=(0, 8))
+        selection = TtkLabelFrame(
+            right, text="Fenêtre sélectionnée", padding=12, style="Card.TLabelframe"
+        )
+        selection.pack(fill="x", pady=(0, 12))
         selection.columnconfigure(0, weight=1)
         selection.columnconfigure(1, weight=1)
         character_preview = TtkFrame(selection)
@@ -1591,14 +1851,16 @@ class WindowManagerApp:
             justify="left",
         ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(5, 7))
         TtkButton(selection, text="Ignorer", command=self.ignore_selected).grid(
-            row=3, column=0, sticky="ew", padx=(0, 3), pady=2
+            row=5, column=0, sticky="ew", padx=(0, 3), pady=2
         )
         TtkButton(selection, text="Réintégrer", command=self.unignore_selected).grid(
-            row=3, column=1, sticky="ew", padx=(3, 0), pady=2
+            row=5, column=1, sticky="ew", padx=(3, 0), pady=2
         )
 
-        profiles = TtkLabelFrame(right, text="Profils", padding=8)
-        profiles.pack(fill="x", pady=(0, 8))
+        profiles = TtkLabelFrame(
+            right, text="Profils", padding=12, style="Card.TLabelframe"
+        )
+        profiles.pack(fill="x", pady=(0, 12))
         profiles.columnconfigure(0, weight=1)
         profiles.columnconfigure(1, weight=1)
         self.profile_combo = Combobox(
@@ -1626,14 +1888,20 @@ class WindowManagerApp:
         TtkLabel(
             profiles,
             text=tr("Cette option prend effet avec Enregistrer. Décochée, le profil conserve l’affichage courant au chargement."),
-            wraplength=235,
-        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(2, 0))
+            wraplength=260,
+            style="Muted.TLabel",
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
-        application = TtkLabelFrame(right, text="Application", padding=8)
+        application = TtkLabelFrame(
+            right,
+            text=tr("Application"),
+            padding=12,
+            style="Card.TLabelframe",
+        )
         application.pack(fill="x")
         mode_row = TtkFrame(application)
         mode_row.pack(fill="x", pady=(1, 6))
-        TtkLabel(mode_row, text="Version de Dofus").pack(side="left")
+        TtkLabel(mode_row, text=tr("Version de Dofus")).pack(side="left")
         self.game_mode_combo = Combobox(
             mode_row,
             textvariable=self.game_mode_var,
@@ -1643,79 +1911,41 @@ class WindowManagerApp:
         )
         self.game_mode_combo.pack(side="right")
         self.game_mode_combo.bind("<<ComboboxSelected>>", self._on_game_mode_selected)
+
+        quick_actions = TtkFrame(application)
+        quick_actions.pack(fill="x", pady=(2, 0))
+        quick_actions.columnconfigure(0, weight=1)
+        quick_actions.columnconfigure(1, weight=1)
         TtkButton(
-            application,
-            text="Assistant de configuration…",
-            command=lambda: self._show_first_run_assistant(force=True),
-        ).pack(fill="x", pady=2)
-        TtkButton(application, text="Paramètres…", command=self.open_settings_window).pack(fill="x", pady=2)
+            quick_actions,
+            text=tr("Paramètres…"),
+            command=self.open_settings_window,
+            style="Accent.TButton",
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 3), pady=2)
         TtkButton(
-            application,
-            text="Réinitialiser l’affichage…",
-            command=self.reset_display_settings,
-        ).pack(fill="x", pady=2)
-        display_row = TtkFrame(application)
-        display_row.pack(fill="x", pady=2)
-        TtkButton(display_row, text="Mode compact", command=self.open_compact_mode).pack(
-            side="left", fill="x", expand=True, padx=(0, 3)
-        )
+            quick_actions,
+            text=tr("Outils…"),
+            command=self.open_tools_window,
+        ).grid(row=0, column=1, sticky="ew", padx=(3, 0), pady=2)
         TtkButton(
-            display_row,
+            quick_actions,
+            text=tr("Mode compact"),
+            command=self.open_compact_mode,
+        ).grid(row=1, column=0, sticky="ew", padx=(0, 3), pady=2)
+        TtkButton(
+            quick_actions,
             textvariable=self.overlay_button_text,
             command=self.toggle_rotation_overlay,
-        ).pack(side="left", fill="x", expand=True, padx=(3, 0))
-        TtkButton(application, text="Aperçu Stream Deck…", command=self.open_streamdeck_preview).pack(fill="x", pady=2)
+        ).grid(row=1, column=1, sticky="ew", padx=(3, 0), pady=2)
         TtkButton(
             application,
-            text=tr("Simuler l’affichage…"),
-            command=self.open_display_simulation,
-        ).pack(fill="x", pady=2)
-        TtkButton(application, text="Diagnostic…", command=self.open_diagnostics_window).pack(fill="x", pady=2)
-        TtkButton(
-            application,
-            text="Sauvegarder / restaurer…",
-            command=self.open_configuration_manager,
-        ).pack(fill="x", pady=2)
-        TtkButton(
-            application,
-            text=tr("Installer ou réparer le plugin Stream Deck"),
-            command=self.open_streamdeck_plugin_repair,
-            style="Accent.TButton",
-        ).pack(fill="x", pady=2)
-        TtkButton(
-            application,
-            text="Dépôt GitHub officiel",
-            command=lambda: self._open_trusted_web_page(
-                OFFICIAL_REPOSITORY_URL,
-                "Dépôt GitHub officiel",
-            ),
-        ).pack(fill="x", pady=2)
-        TtkButton(
-            application,
-            text="Conseils anti-phishing Ankama",
-            command=lambda: self._open_trusted_web_page(
-                ANKAMA_ANTI_PHISHING_URL,
-                "Conseils anti-phishing Ankama",
-            ),
-        ).pack(fill="x", pady=2)
-        self.update_button = TtkButton(
-            application,
-            text="Rechercher une mise à jour…",
-            command=self.check_for_updates,
-        )
-        self.update_button.pack(fill="x", pady=2)
-        TtkLabel(
-            application,
-            text="Illustrations et icônes Dofus © Ankama Games. Projet communautaire non affilié.",
-            style="Muted.TLabel",
-            wraplength=235,
-            justify="left",
-        ).pack(fill="x", pady=(7, 1))
-        TtkButton(application, text="Quitter", command=lambda: self.on_close(force=True)).pack(fill="x", pady=2)
+            text=tr("Quitter"),
+            command=lambda: self.on_close(force=True),
+        ).pack(fill="x", pady=(6, 2))
 
         # Status and logs
         bottom = TtkFrame(self.main_content)
-        bottom.pack(fill="both", expand=False, padx=12, pady=(0, 10))
+        bottom.pack(fill="both", expand=False, padx=18, pady=(0, 12))
 
         status_row = TtkFrame(bottom)
         status_row.pack(fill="x")
@@ -1741,13 +1971,157 @@ class WindowManagerApp:
         ).pack(side="left")
         TtkLabel(self.log_footer, textvariable=self.last_update_time, style="Muted.TLabel").pack(side="right")
 
+    def open_tools_window(self) -> None:
+        existing = getattr(self, "_tools_window", None)
+        try:
+            if existing is not None and existing.winfo_exists():
+                existing.deiconify()
+                existing.lift()
+                existing.focus_force()
+                return
+        except Exception:
+            pass
+
+        win = Toplevel(self.root)
+        self._tools_window = win
+        win.title(tr("Outils et maintenance"))
+        win.transient(self.root)
+        schedule_center_window(win, self.root)
+        win.resizable(False, False)
+        win.geometry("590x545")
+        win.minsize(560, 520)
+
+        def clear_reference(event) -> None:
+            if event.widget is win:
+                self._tools_window = None
+
+        win.bind("<Destroy>", clear_reference, add="+")
+
+        body = TtkFrame(win, padding=UI.window_padding)
+        body.pack(fill="both", expand=True)
+
+        TtkLabel(
+            body,
+            text=tr("Outils et maintenance"),
+            style="Header.TLabel",
+        ).pack(anchor="w")
+        TtkLabel(
+            body,
+            text=tr(
+                "Les outils moins fréquents sont regroupés ici pour garder la fenêtre principale légère."
+            ),
+            style="Muted.TLabel",
+            wraplength=540,
+            justify="left",
+        ).pack(anchor="w", pady=(2, 16))
+
+        def action_group(title: str, *, gap: int = 12):
+            section = TtkFrame(body)
+            section.pack(fill="x", pady=(0, gap))
+            TtkLabel(section, text=title, style="Section.TLabel").pack(anchor="w")
+            panel = TtkFrame(section, padding=10, style="Surface.TFrame")
+            panel.pack(fill="x", pady=(6, 0))
+            panel.columnconfigure(0, weight=1)
+            panel.columnconfigure(1, weight=1)
+            return panel
+
+        stream_tools = action_group(tr("Affichage et stream"))
+        TtkButton(
+            stream_tools,
+            text=tr("Aperçu Stream Deck…"),
+            command=self.open_streamdeck_preview,
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 3), pady=2)
+        TtkButton(
+            stream_tools,
+            text=tr("Simuler l’affichage…"),
+            command=self.open_display_simulation,
+        ).grid(row=0, column=1, sticky="ew", padx=(3, 0), pady=2)
+        TtkButton(
+            stream_tools,
+            text=tr("Diagnostic…"),
+            command=self.open_diagnostics_window,
+        ).grid(row=1, column=0, sticky="ew", padx=(0, 3), pady=2)
+        TtkButton(
+            stream_tools,
+            text=tr("Réinitialiser l’affichage…"),
+            command=self.reset_display_settings,
+        ).grid(row=1, column=1, sticky="ew", padx=(3, 0), pady=2)
+
+        configuration = action_group(tr("Configuration"))
+        TtkButton(
+            configuration,
+            text=tr("Assistant de configuration…"),
+            command=lambda: self._show_first_run_assistant(force=True),
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 3), pady=2)
+        TtkButton(
+            configuration,
+            text=tr("Sauvegarder / restaurer…"),
+            command=self.open_configuration_manager,
+        ).grid(row=0, column=1, sticky="ew", padx=(3, 0), pady=2)
+        TtkButton(
+            configuration,
+            text=tr("Installer ou réparer le plugin Stream Deck"),
+            command=self.open_streamdeck_plugin_repair,
+            style="Accent.TButton",
+        ).grid(row=1, column=0, columnspan=2, sticky="ew", pady=2)
+
+        maintenance = action_group(tr("Maintenance et sécurité"), gap=10)
+        self.update_button = TtkButton(
+            maintenance,
+            text=tr("Rechercher une mise à jour…"),
+            command=self.check_for_updates,
+        )
+        self.update_button.grid(row=0, column=0, columnspan=2, sticky="ew", pady=2)
+        TtkButton(
+            maintenance,
+            text=tr("Dépôt GitHub officiel"),
+            command=lambda: self._open_trusted_web_page(
+                OFFICIAL_REPOSITORY_URL,
+                tr("Dépôt GitHub officiel"),
+            ),
+        ).grid(row=1, column=0, sticky="ew", padx=(0, 3), pady=2)
+        TtkButton(
+            maintenance,
+            text=tr("Conseils anti-phishing Ankama"),
+            command=lambda: self._open_trusted_web_page(
+                ANKAMA_ANTI_PHISHING_URL,
+                tr("Conseils anti-phishing Ankama"),
+            ),
+        ).grid(row=1, column=1, sticky="ew", padx=(3, 0), pady=2)
+
+        TtkLabel(
+            body,
+            text=tr(
+                "Illustrations et icônes Dofus © Ankama Games. Projet communautaire non affilié."
+            ),
+            style="Muted.TLabel",
+            wraplength=470,
+            justify="left",
+        ).pack(fill="x", pady=(6, 8))
+
+        footer = TtkFrame(body)
+        footer.pack(fill="x", side="bottom")
+        TtkButton(
+            footer,
+            text=tr("Fermer"),
+            command=win.destroy,
+            style=SECONDARY_BUTTON_STYLE,
+        ).pack(side="right")
+
+        self._localize_widget_tree(win)
+
     def _on_main_content_configure(self, _event=None) -> None:
         bounds = self.main_canvas.bbox("all")
         if bounds is not None:
             self.main_canvas.configure(scrollregion=bounds)
 
     def _on_main_canvas_configure(self, event) -> None:
-        self.main_canvas.itemconfigure(self._main_canvas_window, width=event.width)
+        # On ultrawide/maximized desktops, keep the information architecture
+        # readable instead of stretching tables and controls edge-to-edge.
+        content_width = max(1, min(int(event.width), MAIN_CONTENT_MAX_WIDTH))
+        left = max(0, (int(event.width) - content_width) // 2)
+        self.main_canvas.itemconfigure(self._main_canvas_window, width=content_width)
+        self.main_canvas.coords(self._main_canvas_window, left, 0)
 
     def _on_global_mousewheel(self, event):
         widget = self.root.winfo_containing(event.x_root, event.y_root)
@@ -2058,6 +2432,7 @@ class WindowManagerApp:
             tr("Masquer l’overlay") if self.settings.rotation_overlay_enabled else tr("Afficher l’overlay")
         )
         self._refresh_auxiliary_displays()
+        self._request_obs_interface_refresh(40)
 
     def _apply_accessibility_preferences(self) -> None:
         self.settings.accessibility_ui_scale_percent = clamp_ui_scale_percent(
@@ -2110,7 +2485,7 @@ class WindowManagerApp:
         state = "affiché" if self.settings.rotation_overlay_enabled else "masqué"
         self._log(f"Overlay de rotation {state}")
 
-    def open_display_simulation(self, *, preset_id: str | None = None) -> None:
+    def open_display_simulation(self, *, preset_id: str | None = None):
         preview_settings = deepcopy(self.settings)
         if preset_id is not None:
             for key, value in display_preset_values(preset_id).items():
@@ -2124,7 +2499,7 @@ class WindowManagerApp:
                 elif current.winfo_exists():
                     current.lift()
                     current.focus_force()
-                    return
+                    return current
             except Exception:
                 pass
 
@@ -2132,8 +2507,9 @@ class WindowManagerApp:
         self.display_simulation_window = win
         win.title(tr("Simulation de l’affichage"))
         win.transient(self.root)
+        schedule_center_window(win, self.root)
         win.resizable(False, False)
-        content = TtkFrame(win, padding=14)
+        content = TtkFrame(win, padding=20)
         content.pack(fill="both", expand=True)
         TtkLabel(content, text=tr("Aperçu sans fenêtre Dofus"), style="Header.TLabel").pack(
             anchor="w"
@@ -2195,10 +2571,18 @@ class WindowManagerApp:
                 current_entries,
                 attention_count=(1 if attention_index is not None else 0),
             )
+            try:
+                win.update_idletasks()
+                preview_x = int(win.winfo_rootx()) + int(win.winfo_width()) + 18
+                preview_y = int(win.winfo_rooty())
+            except Exception:
+                preview_x = preview_settings.rotation_overlay_x + 36
+                preview_y = preview_settings.rotation_overlay_y + 36
+
             simulation_ui.configure_persistent(
                 enabled=True,
-                x=preview_settings.rotation_overlay_x + 36,
-                y=preview_settings.rotation_overlay_y + 36,
+                x=preview_x,
+                y=preview_y,
                 opacity=preview_settings.rotation_overlay_opacity,
                 locked=False,
                 layout=preview_settings.rotation_overlay_layout,
@@ -2259,6 +2643,24 @@ class WindowManagerApp:
         )
         win.protocol("WM_DELETE_WINDOW", close_simulation)
         render()
+        return win
+
+    def _request_obs_interface_refresh(self, delay_ms: int = 0) -> None:
+        bridge = getattr(self, "obs_capture_bridge", None)
+        root = getattr(self, "root", None)
+        if bridge is None or root is None:
+            return
+
+        def request() -> None:
+            try:
+                bridge.request_refresh()
+            except Exception:
+                pass
+
+        if delay_ms > 0:
+            root.after(delay_ms, request)
+        else:
+            request()
 
     def _save_overlay_position(self, x: int, y: int) -> None:
         if (x, y) == (self.settings.rotation_overlay_x, self.settings.rotation_overlay_y):
@@ -2266,6 +2668,7 @@ class WindowManagerApp:
         self.settings.rotation_overlay_x = int(x)
         self.settings.rotation_overlay_y = int(y)
         save_settings(self.settings_path, self.settings)
+        self._request_obs_interface_refresh()
 
     def _save_overlay_size(self, width: int, height: int, *, auto_width: bool = False) -> None:
         normalized = (max(80, min(1800, int(width))), max(80, min(1600, int(height))))
@@ -2278,6 +2681,7 @@ class WindowManagerApp:
         self.settings.rotation_overlay_width, self.settings.rotation_overlay_height = normalized
         self.settings.rotation_overlay_auto_width = bool(auto_width)
         save_settings(self.settings_path, self.settings)
+        self._request_obs_interface_refresh()
 
     def _reorder_from_overlay(self, hwnd: int, destination: str | int) -> None:
         if hwnd not in self._managed_order:
@@ -2322,6 +2726,13 @@ class WindowManagerApp:
             self.update_listboxes()
         elif previous_hwnd != hwnd:
             self._refresh_focus_views()
+        if previous_hwnd != hwnd:
+            refresh_targets = (
+                (previous_hwnd, hwnd)
+                if previous_hwnd is not None
+                else (hwnd,)
+            )
+            self._sync_obs_window_pool(refresh_hwnds=refresh_targets)
         if not notify or not self.settings.swap_notification_enabled:
             return
         window = self._all_windows.get(hwnd)
@@ -2344,6 +2755,53 @@ class WindowManagerApp:
             show_portrait=self.settings.show_popup_portraits,
             show_badge=self.settings.show_popup_badges,
         )
+        # The popup reuses one stable HWND but changes geometry when shown.
+        # Refresh shortly after Tk has applied that geometry so OBS receives the
+        # projected position while the notification is still visible.
+        self._request_obs_interface_refresh(40)
+        self._request_obs_interface_refresh(120)
+
+    def _sync_obs_window_pool(
+        self,
+        *,
+        refresh_all: bool = False,
+        refresh_hwnds: tuple[int, ...] = (),
+    ) -> None:
+        if not bool(getattr(self.settings, "obs_capture_sync_enabled", False)):
+            return
+        bridge = getattr(self, "obs_capture_bridge", None)
+        if bridge is None:
+            return
+
+        current_hwnds = set(self._all_windows)
+        for stale_hwnd in tuple(self._window_telemetry):
+            if stale_hwnd not in current_hwnds:
+                self._window_telemetry.pop(stale_hwnd, None)
+
+        targets = current_hwnds if refresh_all else {
+            int(hwnd) for hwnd in refresh_hwnds if int(hwnd) in current_hwnds
+        }
+        if not self._window_telemetry and current_hwnds:
+            targets = current_hwnds
+
+        for target_hwnd in targets:
+            window = self._all_windows.get(target_hwnd)
+            if window is None:
+                continue
+            try:
+                self._window_telemetry[target_hwnd] = collect_window_telemetry(
+                    window,
+                    self.game_mode,
+                )
+            except Exception as exc:
+                self._log(f"Télémétrie fenêtre {target_hwnd} indisponible : {exc}")
+
+        snapshots = [
+            self._window_telemetry[hwnd]
+            for hwnd in self._all_windows
+            if hwnd in self._window_telemetry
+        ]
+        bridge.sync_windows(snapshots, self._active_game_hwnd)
 
     def _focus_hwnd_measured(self, hwnd: int) -> None:
         started_at = time.monotonic()
@@ -2472,10 +2930,11 @@ class WindowManagerApp:
             return
         if self._update_check_inflight:
             if manual:
-                messagebox.showinfo(
-                    "Mise à jour",
-                    "Une recherche est déjà en cours.",
-                    parent=self.root,
+                show_message(
+                    self.root,
+                    tr("Mise à jour"),
+                    tr("Une recherche est déjà en cours."),
+                    heading=tr("Recherche déjà en cours"),
                 )
             return
 
@@ -2546,7 +3005,12 @@ class WindowManagerApp:
             self.logger.warn(f"Update check failed: {error}")
             if manual:
                 self._log(f"Mise à jour : {error}")
-                messagebox.showwarning("Mise à jour", error, parent=self.root)
+                show_message(
+                    self.root,
+                    tr("Mise à jour"),
+                    error,
+                    heading=tr("Recherche impossible"),
+                )
             return
 
         if result is None:
@@ -2570,7 +3034,12 @@ class WindowManagerApp:
                 detail = "Aucune version publiée compatible n’a été trouvée."
             else:
                 detail = f"Vous utilisez déjà la version la plus récente ({__release_tag__})."
-            messagebox.showinfo("Mise à jour", detail, parent=self.root)
+            show_message(
+                self.root,
+                tr("Mise à jour"),
+                detail,
+                heading=tr("Dofus Window Manager est à jour"),
+            )
 
     def _restore_update_button(self) -> None:
         if self._available_release is None:
@@ -2592,15 +3061,19 @@ class WindowManagerApp:
         release_label = release.tag
         if release.name and release.name != release.tag:
             release_label = f"{release.tag} — {release.name}"
-        open_release = messagebox.askyesno(
-            "Mise à jour disponible",
+        open_release = ask_confirmation(
+            self.root,
+            tr("Mise à jour disponible"),
             (
                 f"Version installée : {__version__} ({__release_tag__})\n"
                 f"Nouvelle version : {release_label}\n\n"
-                "Aucun fichier ne sera téléchargé automatiquement. "
-                "Ouvrir la Release officielle dans votre navigateur ?"
+                + tr(
+                    "Aucun fichier ne sera téléchargé automatiquement. "
+                    "Ouvrir la Release officielle dans votre navigateur ?"
+                )
             ),
-            parent=self.root,
+            confirm_text=tr("Ouvrir la Release"),
+            cancel_text=tr("Annuler"),
         )
         if not open_release:
             return
@@ -2610,10 +3083,13 @@ class WindowManagerApp:
             opened = False
             self.logger.warn(f"Official release page could not be opened: {exc}")
         if not opened:
-            messagebox.showwarning(
-                "Mise à jour",
-                "Le navigateur n’a pas pu être ouvert. Consultez la Release depuis le dépôt officiel.",
-                parent=self.root,
+            show_message(
+                self.root,
+                tr("Mise à jour"),
+                tr(
+                    "Le navigateur n’a pas pu être ouvert. Consultez la Release depuis le dépôt officiel."
+                ),
+                heading=tr("Ouverture impossible"),
             )
 
     def _open_trusted_web_page(self, url: str, label: str) -> None:
@@ -2625,7 +3101,7 @@ class WindowManagerApp:
         if opened:
             self._log(f"Ouverture : {label}")
             return
-        messagebox.showwarning(
+        show_warning(
             "Lien externe",
             tr(
                 "Le navigateur n’a pas pu être ouvert.\n\nAdresse à consulter :\n{url}",
@@ -2822,9 +3298,23 @@ class WindowManagerApp:
         win = Toplevel(self.root)
         win.title(tr("Équipe et emplacements"))
         win.transient(self.root)
-        content = TtkFrame(win, padding=12)
+        schedule_center_window(win, self.root)
+        content = TtkFrame(win, padding=UI.window_padding)
         content.pack(fill="both", expand=True)
-        TtkLabel(content, text=tr("Les emplacements fixes servent aux raccourcis directs et au Stream Deck."), wraplength=540).pack(anchor="w", pady=(0, 8))
+        TtkLabel(
+            content,
+            text=tr("Équipe et emplacements"),
+            style="Header.TLabel",
+        ).pack(anchor="w")
+        TtkLabel(
+            content,
+            text=tr(
+                "Les emplacements fixes servent aux raccourcis directs et au Stream Deck."
+            ),
+            style="Muted.TLabel",
+            wraplength=560,
+            justify="left",
+        ).pack(anchor="w", pady=(3, 14))
         tree = Treeview(content, columns=("slot", "name", "status"), show="headings", height=8)
         for column, label, width in (("slot", "Emplacement", 90), ("name", "Personnage", 230), ("status", "État", 180)):
             tree.heading(column, text=tr(label))
@@ -2852,7 +3342,7 @@ class WindowManagerApp:
             refresh_job = self.root.after(750, render)
 
         def rebind() -> None:
-            if not messagebox.askyesno(tr("Réattribuer les emplacements"), tr("Remplacer les emplacements fixes par l’ordre courant ?"), parent=win):
+            if not ask_yes_no(tr("Réattribuer les emplacements"), tr("Remplacer les emplacements fixes par l’ordre courant ?"), parent=win):
                 return
             roster = self._ensure_character_roster()
             roster.slots = list(roster.order)
@@ -2864,7 +3354,19 @@ class WindowManagerApp:
             roster = self._ensure_character_roster()
             present = {character_key(window.pseudo) for window in self._all_windows.values()}
             absent = [name for name in roster.order if character_key(name) not in present]
-            if not absent or not messagebox.askyesno(tr("Retirer les personnages absents"), tr("Retirer {names} de l’équipe ? Les emplacements suivants seront renumérotés. Enregistrez ensuite le profil.", names=", ".join(absent)), parent=win):
+            if not absent:
+                return
+            if not ask_confirmation(
+                win,
+                tr("Retirer les personnages absents"),
+                tr(
+                    "Retirer {names} de l’équipe ? Les emplacements suivants seront renumérotés. Enregistrez ensuite le profil.",
+                    names=", ".join(absent),
+                ),
+                confirm_text=tr("Retirer"),
+                cancel_text=tr("Annuler"),
+                danger=True,
+            ):
                 return
             roster.order = [name for name in roster.order if character_key(name) in present]
             roster.slots = [name for name in roster.slots if character_key(name) in present]
@@ -2873,9 +3375,29 @@ class WindowManagerApp:
             self.desired_order_pseudos = list(roster.order)
             self.update_listboxes()
 
-        TtkButton(content, text=tr("Réattribuer selon l’ordre courant"), command=rebind).pack(fill="x", pady=(8, 0))
-        TtkButton(content, text=tr("Retirer les personnages absents"), command=forget_absent).pack(fill="x", pady=(4, 0))
-        TtkLabel(content, text=tr("Enregistrez le profil pour conserver l’équipe et ses emplacements."), wraplength=540).pack(anchor="w", pady=(8, 0))
+        TtkButton(
+            content,
+            text=tr("Réattribuer selon l’ordre courant"),
+            command=rebind,
+        ).pack(fill="x", pady=(12, 0))
+        TtkButton(
+            content,
+            text=tr("Retirer les personnages absents"),
+            command=forget_absent,
+            style="Danger.TButton",
+        ).pack(fill="x", pady=(6, 0))
+        TtkLabel(
+            content,
+            text=tr("Enregistrez le profil pour conserver l’équipe et ses emplacements."),
+            style="Muted.TLabel",
+            wraplength=560,
+        ).pack(anchor="w", pady=(12, 0))
+        TtkButton(
+            content,
+            text=tr("Fermer"),
+            command=win.destroy,
+            style=SECONDARY_BUTTON_STYLE,
+        ).pack(anchor="e", pady=(12, 0))
         render()
 
     def _save_active_profile_customizations(self) -> bool:
@@ -2901,20 +3423,28 @@ class WindowManagerApp:
 
     def save_profile_dialog(self):
         current_name = self.selected_profile.get().strip()
-        name = simpledialog.askstring(
-            "Enregistrer le profil",
-            "Nom du profil :",
-            initialvalue=current_name,
-            parent=self.root,
+        name = ask_text(
+            self.root,
+            tr("Enregistrer le profil"),
+            tr("Choisissez un nom clair pour retrouver facilement cette équipe."),
+            initial=current_name,
+            confirm_text=tr("Enregistrer"),
+            cancel_text=tr("Annuler"),
         )
         if not name:
             return
         name = name.strip()
         replacing_existing = name in self._get_profiles()
-        if replacing_existing and not messagebox.askyesno(
-            "Mettre à jour le profil",
-            tr("Le profil « {name} » existe déjà. Remplacer son ordre, ses alias, ses apparences et sa disposition d’overlay ?", name=name),
-            parent=self.root,
+        if replacing_existing and not ask_confirmation(
+            self.root,
+            tr("Mettre à jour le profil"),
+            tr(
+                "Le profil « {name} » existe déjà. Remplacer son ordre, ses alias, "
+                "ses apparences et sa disposition d’overlay ?",
+                name=name,
+            ),
+            confirm_text=tr("Mettre à jour"),
+            cancel_text=tr("Annuler"),
         ):
             return
         if replacing_existing:
@@ -2924,7 +3454,7 @@ class WindowManagerApp:
             try:
                 overlays = dict(load_profile(self.dirs["profiles"], name).overlay_by_game_mode or {})
             except Exception as exc:
-                messagebox.showerror(tr("Erreur"), str(exc), parent=self.root)
+                show_error(tr("Erreur"), str(exc), parent=self.root)
                 return
         overlay_var = getattr(self, "profile_overlay_var", None)
         if overlay_var is None or overlay_var.get():
@@ -2961,12 +3491,12 @@ class WindowManagerApp:
     def load_profile_selected(self):
         name = self.selected_profile.get().strip()
         if not name:
-            messagebox.showwarning("Charger profil", "Sélectionne un profil.")
+            show_warning("Charger profil", "Sélectionne un profil.")
             return
         try:
             pr = load_profile(self.dirs["profiles"], name)
         except Exception as e:
-            messagebox.showerror("Erreur", f"Impossible de charger: {e}")
+            show_error("Erreur", f"Impossible de charger: {e}")
             return
 
         self._activate_profile(pr)
@@ -2978,7 +3508,14 @@ class WindowManagerApp:
         name = self.selected_profile.get().strip()
         if not name:
             return
-        if not messagebox.askyesno("Confirmer", f"Supprimer le profil '{name}' ?"):
+        if not ask_confirmation(
+            self.root,
+            tr("Supprimer le profil"),
+            tr("Supprimer définitivement le profil « {name} » ?", name=name),
+            confirm_text=tr("Supprimer"),
+            cancel_text=tr("Annuler"),
+            danger=True,
+        ):
             return
         try:
             self._create_configuration_snapshot("avant suppression profil")
@@ -2989,17 +3526,17 @@ class WindowManagerApp:
             self.selected_profile.set("")
             self._refresh_profile_combo()
         except Exception as e:
-            messagebox.showerror("Erreur", f"Suppression impossible: {e}")
+            show_error("Erreur", f"Suppression impossible: {e}")
 
     def export_profile_json(self):
         name = self.selected_profile.get().strip()
         if not name:
-            messagebox.showwarning("Exporter", "Sélectionne un profil.")
+            show_warning("Exporter", "Sélectionne un profil.")
             return
         try:
             pr = load_profile(self.dirs["profiles"], name)
         except Exception as e:
-            messagebox.showerror("Erreur", f"Impossible de charger: {e}")
+            show_error("Erreur", f"Impossible de charger: {e}")
             return
         path = filedialog.asksaveasfilename(
             title="Exporter le profil",
@@ -3026,28 +3563,39 @@ class WindowManagerApp:
             if not confirm_configuration_changes(self.root, changes, retained):
                 return
             if not self._create_configuration_snapshot("avant import profil"):
-                messagebox.showerror(tr("Import impossible"), tr("Le point de restauration n’a pas pu être créé. Aucun changement n’a été appliqué."), parent=self.root)
+                show_error(tr("Import impossible"), tr("Le point de restauration n’a pas pu être créé. Aucun changement n’a été appliqué."), parent=self.root)
                 return
             save_profile(self.dirs["profiles"], pr)
             self._log(f"Profil importé: '{pr.name}'")
             self._refresh_profile_combo()
             self.selected_profile.set(pr.name)
         except Exception as e:
-            messagebox.showerror("Erreur", f"Import impossible: {e}")
+            show_error("Erreur", f"Import impossible: {e}")
 
     def open_profile_manager(self) -> None:
         win = Toplevel(self.root)
         win.title("Gérer les profils")
         win.transient(self.root)
+        schedule_center_window(win, self.root)
         win.grab_set()
         win.resizable(False, False)
 
-        content = TtkFrame(win, padding=12)
+        content = TtkFrame(win, padding=20)
         content.pack(fill="both", expand=True)
         content.columnconfigure(0, weight=1)
         content.columnconfigure(1, weight=1)
 
-        TtkLabel(content, text="Profil sélectionné").grid(row=0, column=0, columnspan=2, sticky="w")
+        TtkLabel(content, text=tr("Gérer les profils"), style="Header.TLabel").grid(
+            row=0, column=0, columnspan=2, sticky="w"
+        )
+        TtkLabel(
+            content,
+            text=tr("Importer, exporter ou supprimer les profils enregistrés."),
+            style="Muted.TLabel",
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(2, 16))
+        TtkLabel(content, text=tr("Profil sélectionné"), style="Eyebrow.TLabel").grid(
+            row=2, column=0, columnspan=2, sticky="w"
+        )
         manager_combo = Combobox(
             content,
             textvariable=self.selected_profile,
@@ -3055,7 +3603,7 @@ class WindowManagerApp:
             state="readonly",
             width=36,
         )
-        manager_combo.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(3, 10))
+        manager_combo.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(3, 10))
 
         TtkLabel(
             content,
@@ -3066,7 +3614,7 @@ class WindowManagerApp:
             style="Muted.TLabel",
             wraplength=380,
             justify="left",
-        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(0, 10))
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(0, 14))
 
         def refresh_values() -> None:
             values = self._get_profiles()
@@ -3081,34 +3629,44 @@ class WindowManagerApp:
             self.delete_profile_selected()
             refresh_values()
 
-        TtkButton(content, text="Importer un JSON…", command=import_profile).grid(
-            row=3, column=0, sticky="ew", padx=(0, 3), pady=2
+        TtkButton(content, text=tr("Importer un JSON…"), command=import_profile).grid(
+            row=5, column=0, sticky="ew", padx=(0, 4), pady=2
         )
-        TtkButton(content, text="Exporter une copie…", command=self.export_profile_json).grid(
-            row=3, column=1, sticky="ew", padx=(3, 0), pady=2
+        TtkButton(
+            content,
+            text=tr("Exporter une copie…"),
+            command=self.export_profile_json,
+        ).grid(row=5, column=1, sticky="ew", padx=(4, 0), pady=2)
+        TtkButton(
+            content,
+            text=tr("Supprimer le profil"),
+            command=delete_selected_profile,
+            style="Danger.TButton",
+        ).grid(
+            row=6, column=0, columnspan=2, sticky="ew", pady=(8, 2)
         )
-        TtkButton(content, text="Supprimer le profil", command=delete_selected_profile).grid(
-            row=4, column=0, columnspan=2, sticky="ew", pady=2
-        )
-        TtkButton(content, text="Fermer", command=win.destroy).grid(
-            row=5, column=0, columnspan=2, sticky="e", pady=(10, 0)
-        )
+        TtkButton(
+            content,
+            text=tr("Fermer"),
+            command=win.destroy,
+            style=SECONDARY_BUTTON_STYLE,
+        ).grid(row=7, column=0, columnspan=2, sticky="e", pady=(14, 0))
 
     def install_streamdeck_plugin(self) -> bool:
         try:
             open_streamdeck_plugin()
         except FileNotFoundError as exc:
-            messagebox.showerror(
+            show_error(
                 "Plugin Stream Deck introuvable",
                 f"Le paquet d’installation n’est pas inclus dans cette copie de l’application.\n\n{exc}",
                 parent=self.root,
             )
             return False
         except OSError as exc:
-            messagebox.showerror("Installation impossible", str(exc), parent=self.root)
+            show_error("Installation impossible", str(exc), parent=self.root)
             return False
         except Exception as exc:
-            messagebox.showerror(
+            show_error(
                 "Installation impossible",
                 f"Impossible d’ouvrir le paquet Stream Deck : {exc}",
                 parent=self.root,
@@ -3133,7 +3691,7 @@ class WindowManagerApp:
     def open_streamdeck_plugin_repair(self) -> None:
         health = self._streamdeck_plugin_health()
         if health.status == "bundled_missing":
-            messagebox.showerror(
+            show_error(
                 tr("État du plugin Stream Deck"),
                 health.message,
                 parent=self.root,
@@ -3144,7 +3702,7 @@ class WindowManagerApp:
             if health.repair_recommended
             else tr("Réinstaller quand même le paquet fourni ?")
         )
-        if not messagebox.askyesno(
+        if not ask_yes_no(
             tr("État du plugin Stream Deck"),
             f"{health.message}\n\n{action}",
             parent=self.root,
@@ -3170,13 +3728,18 @@ class WindowManagerApp:
         win.title("Aperçu Stream Deck multi-modèles")
         win.resizable(False, False)
         win.transient(self.root)
+        schedule_center_window(win, self.root)
 
-        content = TtkFrame(win, padding=14)
+        content = TtkFrame(win, padding=20)
         content.pack(fill="both", expand=True)
         TtkLabel(content, text="Aperçu interactif des profils fournis", style="Header.TLabel").pack(anchor="w")
         profile_row = TtkFrame(content)
         profile_row.pack(fill="x", pady=(8, 4))
-        TtkLabel(profile_row, text="Modèle de Stream Deck").pack(side="left")
+        TtkLabel(
+            profile_row,
+            text=tr("Modèle de Stream Deck"),
+            style="Eyebrow.TLabel",
+        ).pack(side="left")
         profile_var = StringVar(
             value=STREAMDECK_PROFILE_LABELS.get(
                 self._streamdeck_preview_profile_key,
@@ -3286,7 +3849,12 @@ class WindowManagerApp:
         profile_selector.bind("<<ComboboxSelected>>", lambda _event: render_profile())
         render_profile()
 
-        TtkButton(content, text="Fermer", command=self._close_streamdeck_preview).pack(anchor="e", pady=(12, 0))
+        TtkButton(
+            content,
+            text=tr("Fermer"),
+            command=self._close_streamdeck_preview,
+            style="Quiet.TButton",
+        ).pack(anchor="e", pady=(14, 0))
         win.protocol("WM_DELETE_WINDOW", self._close_streamdeck_preview)
 
         self._publish_streamdeck_state()
@@ -3384,7 +3952,7 @@ class WindowManagerApp:
         except Exception as exc:
             result = {"ok": False, "error": str(exc)}
         if not result.get("ok"):
-            messagebox.showwarning(
+            show_warning(
                 "Action Stream Deck impossible",
                 str(result.get("error") or "La commande n’a pas pu être exécutée."),
                 parent=self.streamdeck_preview_window or self.root,
@@ -3491,9 +4059,10 @@ class WindowManagerApp:
         win = Toplevel(self.root)
         win.title("Diagnostic")
         win.transient(self.root)
+        schedule_center_window(win, self.root)
         win.resizable(False, False)
 
-        content = TtkFrame(win, padding=12)
+        content = TtkFrame(win, padding=20)
         content.pack(fill="both", expand=True)
         TtkLabel(content, text="État de Dofus Window Manager", style="Header.TLabel").pack(anchor="w")
         TtkLabel(
@@ -3503,7 +4072,16 @@ class WindowManagerApp:
         ).pack(anchor="w", pady=(0, 8))
 
         report = build_diagnostic_report(self._diagnostic_rows())
-        report_text = Text(content, width=78, height=20, wrap="word")
+        report_text = Text(
+            content,
+            width=78,
+            height=20,
+            wrap="word",
+            relief="flat",
+            borderwidth=0,
+            padx=10,
+            pady=10,
+        )
         report_text.insert("1.0", report)
         report_text.configure(state="disabled")
         report_text.pack(fill="both", expand=True)
@@ -3521,7 +4099,7 @@ class WindowManagerApp:
             if callable(opener):
                 opener(str(self.dirs["logs"]))
                 return
-            messagebox.showinfo("Journaux", str(self.dirs["logs"]), parent=win)
+            show_info("Journaux", str(self.dirs["logs"]), parent=win)
 
         TtkButton(buttons, text="Copier le rapport", command=copy_report).pack(side="left")
         TtkButton(buttons, text="Ouvrir les journaux", command=open_logs).pack(side="left", padx=(6, 0))
@@ -3535,13 +4113,18 @@ class WindowManagerApp:
             text=tr("Réparer le plugin…"),
             command=self.open_streamdeck_plugin_repair,
         ).pack(side="left", padx=(6, 0))
-        TtkButton(buttons, text="Fermer", command=win.destroy).pack(side="right")
+        TtkButton(
+            buttons,
+            text=tr("Fermer"),
+            command=win.destroy,
+            style="Quiet.TButton",
+        ).pack(side="right")
 
     def offer_interrupted_session_diagnostic(self) -> None:
         if self._stop_event.is_set():
             return
         self._log("La session précédente s’est terminée anormalement.")
-        if messagebox.askyesno(
+        if ask_yes_no(
             tr("Fermeture anormale détectée"),
             tr("La session précédente ne s’est pas fermée normalement. Cela peut provenir d’un plantage ou d’un arrêt forcé. Voulez-vous enregistrer un paquet de support anonymisé ? Aucun rapport ne sera envoyé automatiquement."),
             parent=self.root,
@@ -3592,7 +4175,7 @@ class WindowManagerApp:
                 app_version=__version__,
             )
         except OSError as exc:
-            messagebox.showerror(
+            show_error(
                 tr("Paquet de support"),
                 tr("Impossible de créer le paquet : {error}", error=exc),
                 parent=parent or self.root,
@@ -3600,7 +4183,7 @@ class WindowManagerApp:
             return
 
         self._log(f"Paquet de support anonymisé créé : {created}")
-        messagebox.showinfo(
+        show_info(
             tr("Paquet de support"),
             tr(
                 "Le paquet anonymisé a été créé. Relisez son contenu avant de le publier : une anonymisation automatique ne peut pas garantir qu’un texte libre ne contient aucune donnée personnelle."
@@ -3658,7 +4241,7 @@ class WindowManagerApp:
             set_startup_enabled(restored_settings.start_with_windows)
         except OSError as exc:
             restored_settings.start_with_windows = False
-            messagebox.showwarning(
+            show_warning(
                 "Démarrage Windows",
                 f"Le démarrage automatique n’a pas pu être restauré : {exc}",
                 parent=parent,
@@ -3720,7 +4303,7 @@ class WindowManagerApp:
         self.update_listboxes()
         self._register_hotkeys()
         self._log(f"Configuration restaurée depuis {source}")
-        messagebox.showinfo(
+        show_info(
             "Configuration restaurée",
             "La configuration est restaurée. Redémarrez l’application pour appliquer complètement les options de détection.",
             parent=parent,
@@ -3742,12 +4325,12 @@ class WindowManagerApp:
             changes, retained = compare_configuration(self.settings.to_dict(), restored_settings.to_dict(),
                                                        current_profiles, profiles, current_session, session)
         except (OSError, ValueError, TypeError) as exc:
-            messagebox.showerror("Sauvegarde invalide", str(exc), parent=parent)
+            show_error("Sauvegarde invalide", str(exc), parent=parent)
             return False
         if not confirm_configuration_changes(parent, changes, retained):
             return False
         if not self._create_configuration_snapshot("avant restauration"):
-            messagebox.showerror(tr("Import impossible"), tr("Le point de restauration n’a pas pu être créé. Aucun changement n’a été appliqué."), parent=parent)
+            show_error(tr("Import impossible"), tr("Le point de restauration n’a pas pu être créé. Aucun changement n’a été appliqué."), parent=parent)
             return False
         self._apply_restored_configuration(
             restored_settings,
@@ -3762,9 +4345,10 @@ class WindowManagerApp:
         win = Toplevel(self.root)
         win.title("Sauvegarde et restauration")
         win.transient(self.root)
+        schedule_center_window(win, self.root)
         win.resizable(False, False)
 
-        content = TtkFrame(win, padding=12)
+        content = TtkFrame(win, padding=UI.window_padding)
         content.pack(fill="both", expand=True)
         TtkLabel(content, text="Configuration de l’application", style="Header.TLabel").pack(anchor="w")
         TtkLabel(
@@ -3784,7 +4368,12 @@ class WindowManagerApp:
         TtkButton(content, text="Importer une sauvegarde…", command=self.import_configuration).pack(
             fill="x", pady=3
         )
-        history = TtkLabelFrame(content, text=tr("Points de restauration locaux"), padding=8)
+        history = TtkLabelFrame(
+            content,
+            text=tr("Points de restauration locaux"),
+            padding=12,
+            style="Card.TLabelframe",
+        )
         history.pack(fill="x", pady=(10, 3))
         snapshot_var = StringVar(value="")
         snapshot_combo = Combobox(history, textvariable=snapshot_var, state="readonly", width=58)
@@ -3811,7 +4400,7 @@ class WindowManagerApp:
         def restore_selected_snapshot() -> None:
             snapshot = snapshots_by_label.get(snapshot_var.get())
             if snapshot is None:
-                messagebox.showwarning(
+                show_warning(
                     tr("Points de restauration locaux"),
                     tr("Aucun point de restauration valide n’est sélectionné."),
                     parent=win,
@@ -3820,7 +4409,7 @@ class WindowManagerApp:
             try:
                 data = load_backup_snapshot(snapshot)
             except (OSError, ValueError, json.JSONDecodeError) as exc:
-                messagebox.showerror("Sauvegarde invalide", str(exc), parent=win)
+                show_error("Sauvegarde invalide", str(exc), parent=win)
                 return
             if self._restore_configuration_data(
                 data,
@@ -3842,10 +4431,18 @@ class WindowManagerApp:
             command=restore_selected_snapshot,
         ).pack(side="right")
         refresh_snapshots()
-        TtkButton(content, text="Réinitialiser les réglages…", command=self.reset_settings).pack(
-            fill="x", pady=3
-        )
-        TtkButton(content, text="Fermer", command=win.destroy).pack(anchor="e", pady=(12, 0))
+        TtkButton(
+            content,
+            text=tr("Réinitialiser les réglages…"),
+            command=self.reset_settings,
+            style=TERTIARY_BUTTON_STYLE,
+        ).pack(fill="x", pady=(10, 3))
+        TtkButton(
+            content,
+            text=tr("Fermer"),
+            command=win.destroy,
+            style=SECONDARY_BUTTON_STYLE,
+        ).pack(anchor="e", pady=(14, 0))
 
     def export_configuration(self) -> None:
         backup = self._build_current_configuration_backup()
@@ -3870,13 +4467,13 @@ class WindowManagerApp:
         try:
             data = json_load(Path(path))
         except (OSError, ValueError, json.JSONDecodeError) as exc:
-            messagebox.showerror("Sauvegarde invalide", str(exc), parent=self.root)
+            show_error("Sauvegarde invalide", str(exc), parent=self.root)
             return
         self._restore_configuration_data(data, source=path, parent=self.root)
 
     def reset_display_settings(self, *, parent=None) -> bool:
         dialog_parent = parent or self.root
-        if not messagebox.askyesno(
+        if not ask_yes_no(
             "Réinitialiser l’affichage",
             (
                 "Rétablir le thème, les colonnes, la notification et l’overlay par défaut ?\n\n"
@@ -3901,7 +4498,7 @@ class WindowManagerApp:
             pass
         self._publish_streamdeck_state()
         self._log("Affichage réinitialisé")
-        messagebox.showinfo(
+        show_info(
             "Affichage réinitialisé",
             "L’affichage par défaut est restauré et l’overlay est activé à sa position initiale.",
             parent=dialog_parent,
@@ -3909,7 +4506,7 @@ class WindowManagerApp:
         return True
 
     def reset_settings(self) -> None:
-        if not messagebox.askyesno(
+        if not ask_yes_no(
             "Réinitialiser les réglages",
             "Revenir aux réglages par défaut ? Les profils et alias enregistrés ne seront pas supprimés.",
             parent=self.root,
@@ -3935,7 +4532,7 @@ class WindowManagerApp:
             pass
         self._publish_streamdeck_state()
         self._log("Réglages réinitialisés")
-        messagebox.showinfo(
+        show_info(
             "Réglages réinitialisés",
             "Les réglages par défaut seront entièrement appliqués au prochain démarrage.",
             parent=self.root,
@@ -3963,6 +4560,7 @@ class WindowManagerApp:
         self.game_mode = new_mode
         self.game_label = game_mode_label(new_mode)
         self.settings.game_mode = new_mode
+        self.obs_capture_bridge.set_game_mode(new_mode)
         self.settings.activate_display_preferences(new_mode)
         selected_theme = (self.settings.theme_by_game_mode or {}).get(
             new_mode,
@@ -4149,6 +4747,7 @@ class WindowManagerApp:
         # If nothing changed, just update the timestamp and skip rebuilding the UI.
         if unchanged:
             self.last_update_time.set(datetime.now().strftime("Dernier scan: %H:%M:%S"))
+            self._sync_obs_window_pool()
             return
 
         # Heuristic: detect privilege mismatch (Dofus launched as admin but this tool isn't).
@@ -4194,6 +4793,7 @@ class WindowManagerApp:
         self._log(f"{len(self._managed_order)} gérées, {len(self._ignored)} ignorées")
         self.update_listboxes()
         self._update_popup_watcher_targets()
+        self._sync_obs_window_pool(refresh_all=True)
 
     def _schedule_refresh(self):
         if self._stop_event.is_set():
@@ -4437,7 +5037,7 @@ class WindowManagerApp:
                 profile = load_profile(self.dirs["profiles"], value)
             except Exception as exc:
                 self._show_main_window()
-                messagebox.showerror(tr("Erreur"), str(exc), parent=self.root)
+                show_error(tr("Erreur"), str(exc), parent=self.root)
                 self._refresh_profile_combo()
                 return
             if profile.game_mode in {"unity", "retro"} and profile.game_mode != self.game_mode:
@@ -4764,6 +5364,7 @@ class WindowManagerApp:
             pass
 
         self._request_ui_update()
+        self._sync_obs_window_pool(refresh_all=True)
 
     # ---------------------------- List operations ----------------------------
 
@@ -5154,7 +5755,7 @@ class WindowManagerApp:
         hwnd = self._selected_character_hwnd()
         window = self._all_windows.get(hwnd) if hwnd is not None else None
         if window is None:
-            messagebox.showwarning(
+            show_warning(
                 "Personnaliser le personnage",
                 "Sélectionnez d’abord une fenêtre Dofus.",
                 parent=self.root,
@@ -5174,19 +5775,22 @@ class WindowManagerApp:
         win = Toplevel(self.root)
         win.title(f"Personnaliser — {window.pseudo}")
         win.transient(self.root)
+        schedule_center_window(win, self.root)
         win.grab_set()
         win.resizable(False, False)
-        content = TtkFrame(win, padding=14)
+        content = TtkFrame(win, padding=UI.window_padding)
         content.pack(fill="both", expand=True)
         content.columnconfigure(1, weight=1)
 
-        preview = TkLabel(content, width=96, height=96, borderwidth=0)
+        preview = TkLabel(content, width=112, height=112, borderwidth=0)
         preview.grid(row=0, column=0, rowspan=4, padx=(0, 12), pady=(0, 8))
         preview_photo: ImageTk.PhotoImage | None = None
 
-        TtkLabel(content, text=f"{window.pseudo} · {window.character_class or 'classe inconnue'}").grid(
-            row=0, column=1, columnspan=2, sticky="w", pady=(0, 8)
-        )
+        TtkLabel(
+            content,
+            text=f"{window.pseudo} · {window.character_class or 'classe inconnue'}",
+            style="Header.TLabel",
+        ).grid(row=0, column=1, columnspan=2, sticky="w", pady=(0, 10))
         TtkLabel(content, text="Alias").grid(row=1, column=1, sticky="w", padx=(0, 8), pady=3)
         TtkEntry(content, textvariable=alias_var, width=30).grid(row=1, column=2, sticky="ew", pady=3)
         TtkLabel(content, text="Icône").grid(row=2, column=1, sticky="w", padx=(0, 8), pady=3)
@@ -5229,7 +5833,7 @@ class WindowManagerApp:
             try:
                 portrait_data = encode_portrait_file(path)
             except ValueError as exc:
-                messagebox.showerror("Portrait incompatible", str(exc), parent=win)
+                show_error("Portrait incompatible", str(exc), parent=win)
                 return
             refresh_preview()
 
@@ -5243,9 +5847,12 @@ class WindowManagerApp:
         TtkButton(portrait_buttons, text="Choisir un portrait…", command=choose_portrait).pack(
             side="left", fill="x", expand=True, padx=(0, 3)
         )
-        TtkButton(portrait_buttons, text="Retirer", command=remove_portrait).pack(
-            side="left", padx=(3, 0)
-        )
+        TtkButton(
+            portrait_buttons,
+            text=tr("Retirer"),
+            command=remove_portrait,
+            style=TERTIARY_BUTTON_STYLE,
+        ).pack(side="left", padx=(4, 0))
         class_portrait_combo = Combobox(
             content,
             values=tuple(class_portraits),
@@ -5263,7 +5870,7 @@ class WindowManagerApp:
             try:
                 portrait_data = encode_portrait_file(path)
             except ValueError as exc:
-                messagebox.showerror("Portrait incompatible", str(exc), parent=win)
+                show_error("Portrait incompatible", str(exc), parent=win)
                 return
             refresh_preview()
 
@@ -5312,8 +5919,13 @@ class WindowManagerApp:
         refresh_preview()
         buttons = TtkFrame(content)
         buttons.grid(row=6, column=0, columnspan=3, sticky="e")
-        TtkButton(buttons, text="Annuler", command=win.destroy).pack(side="right")
-        TtkButton(buttons, text="Appliquer", command=apply, style="Accent.TButton").pack(
+        TtkButton(
+            buttons,
+            text=tr("Annuler"),
+            command=win.destroy,
+            style=SECONDARY_BUTTON_STYLE,
+        ).pack(side="right")
+        TtkButton(buttons, text="Appliquer", command=apply, style=PRIMARY_BUTTON_STYLE).pack(
             side="right", padx=(0, 6)
         )
 
@@ -5325,15 +5937,18 @@ class WindowManagerApp:
         if not w:
             return
         current = self.aliases.get(w.pseudo, "")
-        new = simpledialog.askstring(
-            "Alias facultatif",
+        new = ask_text(
+            self.root,
+            tr("Alias facultatif"),
             (
                 f"Alias pour {w.pseudo} :\n\n"
                 "Exemples : Terre, Feu, Eau, Air, Mineur, Alchimiste…\n"
                 "Laissez le champ vide pour supprimer l’alias."
             ),
-            initialvalue=current,
-            parent=self.root,
+            initial=current,
+            confirm_text=tr("Appliquer"),
+            cancel_text=tr("Annuler"),
+            allow_empty=True,
         )
         if new is None:
             return
@@ -5393,12 +6008,14 @@ class WindowManagerApp:
         win.bind("<Destroy>", resume_after_settings, add="+")
         win.title("Paramètres")
         win.transient(self.root)
+        schedule_center_window(win, self.root)
         win.grab_set()
         win.resizable(True, True)
         game_hotkeys = BooleanVar(value=self.settings.hotkey_scope == "game")
         fixed_slots = BooleanVar(value=self.settings.fixed_character_slots)
         settings_height = max(560, min(820, self.root.winfo_screenheight() - 120))
-        win.geometry(f"650x{settings_height}")
+        win.geometry(f"720x{settings_height}")
+        win.minsize(680, 560)
 
         localized_overlay_labels = {field: tr(label) for field, label in OVERLAY_FIELD_LABELS.items()}
         localized_position_labels = {anchor: tr(label) for anchor, label in SWAP_POSITION_LABELS.items()}
@@ -5509,14 +6126,22 @@ class WindowManagerApp:
         )
         obs_overlay_geometry = StringVar(value=tr("Fenêtre indisponible"))
         obs_popup_geometry = StringVar(value=tr("Fenêtre indisponible"))
+        obs_capture_sync = BooleanVar(value=bool(self.settings.obs_capture_sync_enabled))
+        obs_websocket_port = StringVar(value=str(self.settings.obs_websocket_port))
+        obs_websocket_password = StringVar(value=self.settings.obs_websocket_password)
+        obs_capture_scene = StringVar(value=self.settings.obs_capture_scene)
+        obs_capture_source_prefix = StringVar(value=self.settings.obs_capture_source_prefix)
+        obs_capture_cursor = BooleanVar(value=bool(self.settings.obs_capture_cursor))
+        obs_capture_force_sdr = BooleanVar(value=bool(self.settings.obs_capture_force_sdr))
+        obs_connection_status = StringVar(value="")
 
         available_theme_ids = theme_ids_for_mode(self.game_mode)
         theme_labels = [THEME_LABELS[theme_id] for theme_id in available_theme_ids]
 
-        settings_footer = TtkFrame(win, padding=(12, 8))
+        settings_footer = TtkFrame(win, padding=(18, 12), style="ActionBar.TFrame")
         settings_footer.pack(side="bottom", fill="x")
         settings_notebook = Notebook(win)
-        settings_notebook.pack(fill="both", expand=True, padx=12, pady=(10, 0))
+        settings_notebook.pack(fill="both", expand=True, padx=18, pady=(12, 0))
         tab_canvases: dict[str, Canvas] = {}
 
         def create_scrollable_tab(label: str) -> TtkFrame:
@@ -5534,7 +6159,7 @@ class WindowManagerApp:
             canvas.configure(yscrollcommand=scrollbar.set)
             scrollbar.pack(side="right", fill="y")
             canvas.pack(side="left", fill="both", expand=True)
-            content = TtkFrame(canvas, padding=12)
+            content = TtkFrame(canvas, padding=16)
             content_window = canvas.create_window((0, 0), window=content, anchor="nw")
             content.bind(
                 "<Configure>",
@@ -5554,6 +6179,7 @@ class WindowManagerApp:
 
         general_content = create_scrollable_tab("Général")
         appearance_content = create_scrollable_tab("Apparence")
+        obs_content = create_scrollable_tab("OBS")
         shortcuts_content = create_scrollable_tab("Raccourcis")
 
         def live_obs_geometry(window) -> str:
@@ -5614,6 +6240,80 @@ class WindowManagerApp:
                 live_obs_geometry(getattr(self.overlay_ui, "toast_window", None))
             )
             win.after(200, refresh_obs_geometry)
+
+        def current_obs_capture_config() -> OBSActiveCaptureConfig:
+            try:
+                port = int(obs_websocket_port.get())
+            except (TypeError, ValueError):
+                port = 4455
+            return OBSActiveCaptureConfig(
+                enabled=bool(obs_capture_sync.get()),
+                port=port,
+                password=obs_websocket_password.get(),
+                scene_name=obs_capture_scene.get(),
+                source_prefix=obs_capture_source_prefix.get(),
+                capture_cursor=bool(obs_capture_cursor.get()),
+                force_sdr=bool(obs_capture_force_sdr.get()),
+                popup_opacity=clamp_overlay_opacity(swap_opacity.get()) / 100.0,
+            ).normalized()
+
+        def open_preset_preview() -> None:
+            selected_index = max(0, preset_combo.current())
+            preset_id = DISPLAY_PRESET_IDS[selected_index]
+            released_settings_grab = False
+            try:
+                released_settings_grab = win.grab_current() == win
+            except Exception:
+                released_settings_grab = False
+            if released_settings_grab:
+                try:
+                    win.grab_release()
+                except Exception:
+                    released_settings_grab = False
+
+            preview = self.open_display_simulation(preset_id=preset_id)
+            if preview is None:
+                if released_settings_grab:
+                    try:
+                        if win.winfo_exists():
+                            win.grab_set()
+                    except Exception:
+                        pass
+                return
+
+            def restore_settings_grab(event) -> None:
+                if event.widget is not preview or not released_settings_grab:
+                    return
+                try:
+                    if win.winfo_exists():
+                        win.grab_set()
+                        win.lift()
+                except Exception:
+                    pass
+
+            preview.bind("<Destroy>", restore_settings_grab, add="+")
+
+        def test_obs_connection() -> None:
+            obs_connection_status.set(tr("Test de connexion en cours…"))
+            config = current_obs_capture_config()
+
+            def worker() -> None:
+                ok, message = probe_obs_connection(config)
+
+                def publish() -> None:
+                    try:
+                        if win.winfo_exists():
+                            obs_connection_status.set(message)
+                    except Exception:
+                        pass
+
+                self.root.after(0, publish)
+
+            threading.Thread(
+                target=worker,
+                name="DWMOBSTest",
+                daemon=True,
+            ).start()
 
         def scroll_active_tab(event) -> None:
             canvas = tab_canvases.get(settings_notebook.select())
@@ -5767,7 +6467,7 @@ class WindowManagerApp:
         TtkButton(
             presets_row,
             text=tr("Simuler le préréglage sélectionné…"),
-            command=lambda: self.open_display_simulation(preset_id=DISPLAY_PRESET_IDS[preset_combo.current()]),
+            command=open_preset_preview,
         ).pack(side="right")
         TtkLabel(
             presets_section,
@@ -5922,9 +6622,115 @@ class WindowManagerApp:
             textvariable=overlay_orientation,
             width=11,
         ).pack(side="left")
+        obs_connection_section = TtkLabelFrame(
+            obs_content,
+            text=tr("Connexion OBS"),
+            padding=10,
+        )
+        obs_connection_section.pack(fill="x", pady=(0, 8))
+        obs_connection_section.columnconfigure(1, weight=1)
+        TtkLabel(obs_connection_section, text=tr("Hôte OBS")).grid(
+            row=0, column=0, sticky="w", padx=(0, 12), pady=3
+        )
+        TtkLabel(
+            obs_connection_section,
+            text="127.0.0.1",
+            style="Muted.TLabel",
+        ).grid(row=0, column=1, sticky="w", pady=3)
+        TtkLabel(obs_connection_section, text=tr("Port WebSocket")).grid(
+            row=1, column=0, sticky="w", padx=(0, 12), pady=3
+        )
+        Spinbox(
+            obs_connection_section,
+            from_=1,
+            to=65535,
+            textvariable=obs_websocket_port,
+            width=8,
+        ).grid(row=1, column=1, sticky="w", pady=3)
+        TtkLabel(obs_connection_section, text=tr("Mot de passe OBS")).grid(
+            row=2, column=0, sticky="w", padx=(0, 12), pady=3
+        )
+        TtkEntry(
+            obs_connection_section,
+            textvariable=obs_websocket_password,
+            show="•",
+            width=36,
+        ).grid(row=2, column=1, sticky="ew", pady=3)
+        test_row = TtkFrame(obs_connection_section)
+        test_row.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(7, 2))
+        TtkButton(
+            test_row,
+            text=tr("Tester la connexion OBS"),
+            command=test_obs_connection,
+        ).pack(side="left")
+        TtkLabel(
+            test_row,
+            textvariable=obs_connection_status,
+            style="Muted.TLabel",
+        ).pack(side="left", padx=(10, 0))
+        TtkLabel(
+            obs_connection_section,
+            text=tr(
+                "OBS WebSocket reste limité à l’hôte local. DWM ne modifie que les scènes et sources qu’il gère."
+            ),
+            style="Muted.TLabel",
+            wraplength=600,
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(5, 0))
+
+        obs_capture_section = TtkLabelFrame(
+            obs_content,
+            text=tr("Captures automatiques"),
+            padding=10,
+        )
+        obs_capture_section.pack(fill="x", pady=(0, 8))
+        obs_capture_section.columnconfigure(1, weight=1)
+        TtkCheckbutton(
+            obs_capture_section,
+            text=tr("Afficher automatiquement dans OBS le client Dofus actif"),
+            variable=obs_capture_sync,
+        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 6))
+        TtkLabel(obs_capture_section, text=tr("Scène OBS gérée par DWM")).grid(
+            row=1, column=0, sticky="w", padx=(0, 12), pady=3
+        )
+        TtkEntry(
+            obs_capture_section,
+            textvariable=obs_capture_scene,
+            width=36,
+        ).grid(row=1, column=1, sticky="ew", pady=3)
+        TtkLabel(obs_capture_section, text=tr("Préfixe des captures")).grid(
+            row=2, column=0, sticky="w", padx=(0, 12), pady=3
+        )
+        TtkEntry(
+            obs_capture_section,
+            textvariable=obs_capture_source_prefix,
+            width=36,
+        ).grid(row=2, column=1, sticky="ew", pady=3)
+        TtkCheckbutton(
+            obs_capture_section,
+            text=tr("Capturer le curseur dans les fenêtres Dofus"),
+            variable=obs_capture_cursor,
+        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(5, 2))
+        TtkCheckbutton(
+            obs_capture_section,
+            text=tr("Forcer le SDR pour ces captures"),
+            variable=obs_capture_force_sdr,
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=2)
+        TtkLabel(
+            obs_capture_section,
+            text=tr(
+                "DWM crée automatiquement une Capture de fenêtre persistante par client détecté dans cette scène, "
+                "sans limite fixe de 8 clients. Seule la capture du client actif reste affichée dans OBS ; "
+                "lors d’un changement, DWM active la nouvelle source, conserve l’ancienne environ 33 ms, puis la masque "
+                "afin de laisser à WGC le temps de fournir sa première image tout en libérant ensuite le travail GPU des clients inactifs. "
+                "L’overlay et la popup DWM sont aussi capturés automatiquement et maintenus au-dessus des fenêtres Dofus."
+            ),
+            style="Muted.TLabel",
+            wraplength=600,
+        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(5, 0))
+
         obs_geometry_section = TtkLabelFrame(
-            appearance_content,
-            text=tr("Repères OBS en direct"),
+            obs_content,
+            text=tr("Repères DWM → OBS"),
             padding=10,
         )
         obs_geometry_section.pack(fill="x", pady=(0, 8))
@@ -5951,10 +6757,10 @@ class WindowManagerApp:
             obs_geometry_section,
             text=tr(
                 "X / Y sont relatifs au coin supérieur gauche de l’écran contenant la fenêtre. "
-                "Les valeurs et dimensions sont actualisées automatiquement."
+                "DWM projette ensuite automatiquement ces coordonnées dans le canvas OBS."
             ),
             style="Muted.TLabel",
-            wraplength=530,
+            wraplength=600,
         ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(5, 0))
         refresh_obs_geometry()
 
@@ -6131,6 +6937,7 @@ class WindowManagerApp:
             dialog = Toplevel(win)
             dialog.title(tr("Capturer un raccourci"))
             dialog.transient(win)
+            schedule_center_window(dialog, win)
             dialog.grab_set()
             dialog.resizable(False, False)
             body = TtkFrame(dialog, padding=16)
@@ -6275,10 +7082,9 @@ class WindowManagerApp:
                 ),
                 default_theme_for_mode(self.game_mode),
             )
-            try:
-                self._apply_runtime_theme(new_theme)
-            except Exception:
-                messagebox.showwarning("Thème", f"Thème non disponible: {new_theme}")
+            # Stage the theme first; the runtime/UI update is performed once
+            # after all settings have been collected to avoid multiple overlay redraws.
+            self.settings.theme = new_theme
 
             try:
                 sec = int(refresh_var.get())
@@ -6288,6 +7094,26 @@ class WindowManagerApp:
             self.settings.accessibility_ui_scale_percent = clamp_ui_scale_percent(
                 accessibility_scale.get()
             )
+            try:
+                obs_port_value = int(obs_websocket_port.get())
+                if not 1 <= obs_port_value <= 65535:
+                    raise ValueError
+            except (TypeError, ValueError):
+                show_error(
+                    tr("OBS"),
+                    tr("Le port WebSocket OBS doit être compris entre 1 et 65535."),
+                    parent=win,
+                )
+                return
+            obs_scene_value = obs_capture_scene.get().strip()
+            obs_prefix_value = obs_capture_source_prefix.get().strip()
+            if obs_capture_sync.get() and (not obs_scene_value or not obs_prefix_value):
+                show_error(
+                    tr("OBS"),
+                    tr("Indiquez un nom de scène OBS et un préfixe de capture."),
+                    parent=win,
+                )
+                return
 
             # Validate hotkeys early (gives immediate feedback)
             fwd = hk_fwd.get().strip() or "F5"
@@ -6297,7 +7123,7 @@ class WindowManagerApp:
             ref = hk_ref.get().strip() or "Ctrl+Alt+R"
             direct_specs = [variable.get().strip() for variable in direct_hotkeys]
             if not validate_hotkey_form():
-                messagebox.showerror(
+                show_error(
                     "Hotkeys",
                     hotkey_validation_status.get(),
                     parent=win,
@@ -6329,7 +7155,7 @@ class WindowManagerApp:
                 try:
                     set_startup_enabled(requested_startup)
                 except OSError as exc:
-                    messagebox.showerror("Démarrage Windows", str(exc), parent=win)
+                    show_error("Démarrage Windows", str(exc), parent=win)
                     return
             self.settings.start_with_windows = requested_startup
             self.settings.minimize_to_tray = bool(minimize_to_tray.get())
@@ -6339,6 +7165,17 @@ class WindowManagerApp:
             self.settings.smart_profile_loading_enabled = bool(
                 smart_profile_loading.get()
             )
+            self.settings.obs_capture_sync_enabled = bool(obs_capture_sync.get())
+            self.settings.obs_websocket_port = obs_port_value
+            self.settings.obs_websocket_password = obs_websocket_password.get()
+            self.settings.obs_capture_scene = (
+                obs_scene_value or "[DWM] Dofus Active"
+            )
+            self.settings.obs_capture_source_prefix = (
+                obs_prefix_value or "[DWM] Dofus Capture"
+            )
+            self.settings.obs_capture_cursor = bool(obs_capture_cursor.get())
+            self.settings.obs_capture_force_sdr = bool(obs_capture_force_sdr.get())
             self.settings.swap_notification_enabled = bool(swap_notification.get())
             selected_position = swap_position.get().strip()
             self.settings.swap_notification_anchor = next(
@@ -6418,11 +7255,23 @@ class WindowManagerApp:
                 # If Windows refuses a hotkey (already in use, etc.), show it quickly.
                 self.root.after(250, self._report_hotkey_error_popup)
             except Exception as e:
-                messagebox.showerror("Hotkeys", f"Impossible d'appliquer les hotkeys: {e}")
+                show_error("Hotkeys", f"Impossible d'appliquer les hotkeys: {e}")
                 return
 
             save_settings(self.settings_path, self.settings)
             self._apply_accessibility_preferences()
+            self.obs_capture_bridge.configure(
+                OBSActiveCaptureConfig(
+                    enabled=self.settings.obs_capture_sync_enabled,
+                    port=self.settings.obs_websocket_port,
+                    password=self.settings.obs_websocket_password,
+                    scene_name=self.settings.obs_capture_scene,
+                    source_prefix=self.settings.obs_capture_source_prefix,
+                    capture_cursor=self.settings.obs_capture_cursor,
+                    force_sdr=self.settings.obs_capture_force_sdr,
+                    popup_opacity=self.settings.swap_notification_opacity / 100.0,
+                )
+            )
             self._publish_order_consumers()
             self._log("Paramètres appliqués")
             win.destroy()
@@ -6435,11 +7284,17 @@ class WindowManagerApp:
 
         TtkButton(
             settings_footer,
-            text="Réinitialiser l’affichage…",
+            text=tr("Réinitialiser l’affichage…"),
             command=reset_display_from_settings,
+            style=TERTIARY_BUTTON_STYLE,
         ).pack(side="left")
-        TtkButton(settings_footer, text="Annuler", command=win.destroy).pack(side="right")
-        TtkButton(settings_footer, text="Appliquer", command=apply, style="Accent.TButton").pack(
+        TtkButton(
+            settings_footer,
+            text=tr("Annuler"),
+            command=win.destroy,
+            style=SECONDARY_BUTTON_STYLE,
+        ).pack(side="right")
+        TtkButton(settings_footer, text="Appliquer", command=apply, style=PRIMARY_BUTTON_STYLE).pack(
             side="right", padx=(0, 6)
         )
         self._localize_widget_tree(win)
@@ -6464,7 +7319,7 @@ class WindowManagerApp:
                         for position in range(1, 9)
                     },
                 }
-                messagebox.showwarning(
+                show_warning(
                     "Hotkeys",
                     tr(
                         "Windows n’a pas pu enregistrer certaines combinaisons :\n\n{details}\n\nChoisissez une autre combinaison puis réessayez.",
@@ -6715,17 +7570,13 @@ class WindowManagerApp:
         except Exception:
             pass
 
-        # Tk-owned windows must be closed on this thread. Service stop methods
-        # may wait for other threads, which themselves need the Tk event loop.
+        # Service stop methods may wait for other threads, so keep the Tk event
+        # loop alive while they finish. Tk-owned windows are closed later from
+        # finish_close(), after OBS has had a chance to hide its DWM-only layers.
         simulation_ui = getattr(self, "_display_simulation_ui", None)
-        for ui in (simulation_ui, self.overlay_ui):
-            if ui is not None:
-                try:
-                    ui.close_all()
-                except Exception:
-                    pass
 
         services = [
+            (getattr(self, "obs_capture_bridge", None), "stop"),
             (getattr(self, "streamdeck_bridge", None), "stop"),
             (self.hotkeys, "stop"),
             (getattr(self, "win_events", None), "stop"),
@@ -6752,6 +7603,12 @@ class WindowManagerApp:
 
         def finish_close() -> None:
             if finished.is_set():
+                for ui in (simulation_ui, getattr(self, "overlay_ui", None)):
+                    if ui is not None:
+                        try:
+                            ui.close_all()
+                        except Exception:
+                            pass
                 self.root.destroy()
             else:
                 self.root.after(50, finish_close)

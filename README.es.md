@@ -117,7 +117,7 @@ py -3.14 -m venv .venv
 .\.venv\Scripts\python.exe main.py
 ```
 
-Instala el plugin desde **Aplicación → Instalar plugin de Stream Deck** y acepta el perfil propuesto.
+Instala el plugin desde **Aplicación → Herramientas… → Instalar o reparar el plugin de Stream Deck** y acepta el perfil propuesto.
 
 ## Primeros pasos
 

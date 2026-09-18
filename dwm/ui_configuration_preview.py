@@ -6,6 +6,7 @@ from tkinter.ttk import Button, Frame, Label, Scrollbar, Style, Treeview
 
 from .services.configuration_diff import ConfigurationChange
 from .services.i18n import tr
+from .ui_windowing import schedule_center_window
 
 
 FIELD_LABELS = {
@@ -78,6 +79,7 @@ def confirm_configuration_changes(parent, changes: list[ConfigurationChange], re
     win = Toplevel(parent)
     win.title(tr("Aperçu des modifications"))
     win.transient(parent)
+    schedule_center_window(win, parent)
     win.geometry(f"{min(1000, max(520, win.winfo_screenwidth() - 100))}x{min(680, max(400, win.winfo_screenheight() - 120))}")
     win.minsize(520, 400)
     content = Frame(win, padding=12)

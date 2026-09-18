@@ -76,14 +76,14 @@ class SessionRecoveryTests(unittest.TestCase):
         from dwm.app import WindowManagerApp
         app = Mock()
         app._stop_event.is_set.return_value = False
-        with patch("dwm.app.messagebox.askyesno", return_value=False):
+        with patch("dwm.app.ask_yes_no", return_value=False):
             WindowManagerApp.offer_interrupted_session_diagnostic(app)
         app.export_support_bundle.assert_not_called()
-        with patch("dwm.app.messagebox.askyesno", return_value=True):
+        with patch("dwm.app.ask_yes_no", return_value=True):
             WindowManagerApp.offer_interrupted_session_diagnostic(app)
         app.export_support_bundle.assert_called_once()
         app._stop_event.is_set.return_value = True
-        with patch("dwm.app.messagebox.askyesno") as prompt:
+        with patch("dwm.app.ask_yes_no") as prompt:
             WindowManagerApp.offer_interrupted_session_diagnostic(app)
         prompt.assert_not_called()
 

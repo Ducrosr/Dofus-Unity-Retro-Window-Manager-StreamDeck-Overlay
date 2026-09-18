@@ -14,7 +14,11 @@ def should_prompt_for_game_mode(settings, *, use_saved_mode: bool) -> bool:
     return not bool(use_saved_mode) and bool(settings.onboarding_completed)
 
 
-def choose_game_dialog(default_mode: str = "unity", language: str = "fr") -> tuple[str, bool]:
+def choose_game_dialog(
+    default_mode: str = "unity",
+    language: str = "fr",
+    theme_name: str = "unity-standard",
+) -> tuple[str, bool]:
     """Small startup dialog to pick Unity vs Retro.
 
     Returns: (game_mode, remember_choice)
@@ -22,6 +26,9 @@ def choose_game_dialog(default_mode: str = "unity", language: str = "fr") -> tup
     import tkinter as tk
     from tkinter import ttk
     from dwm.services.i18n import set_language, tr
+    from dwm.services.themes import normalize_theme, theme_palette
+    from dwm.ui_design import UI
+    from dwm.ui_windowing import apply_windows_dark_titlebar, center_window_on_parent
 
     set_language(language)
 
@@ -34,29 +41,137 @@ def choose_game_dialog(default_mode: str = "unity", language: str = "fr") -> tup
     root = tk.Tk()
     root.title(tr("Choisir le jeu"))
     root.resizable(False, False)
+    root.geometry("560x330")
 
-    # Center-ish
+    palette = theme_palette(normalize_theme(theme_name, gm))
+    style = ttk.Style(root)
     try:
-        root.update_idletasks()
-        w, h = 360, 170
-        x = (root.winfo_screenwidth() // 2) - (w // 2)
-        y = (root.winfo_screenheight() // 2) - (h // 2)
-        root.geometry(f"{w}x{h}+{x}+{y}")
+        style.theme_use("clam")
     except Exception:
         pass
+    root.configure(background=palette["bg"])
+    style.configure(
+        ".",
+        background=palette["bg"],
+        foreground=palette["fg"],
+        fieldbackground=palette["bg2"],
+        bordercolor=palette["line"],
+        font=("Segoe UI", 10),
+    )
+    style.configure("TFrame", background=palette["bg"])
+    style.configure("StartupSurface.TFrame", background=palette["bg2"])
+    style.configure("TLabel", background=palette["bg"], foreground=palette["fg"])
+    style.configure(
+        "StartupHeader.TLabel",
+        background=palette["bg"],
+        foreground=palette["accent"],
+        font=("Segoe UI", 18, "bold"),
+    )
+    style.configure(
+        "StartupMuted.TLabel",
+        background=palette["bg"],
+        foreground=palette["muted"],
+    )
+    style.configure(
+        "TButton",
+        background=palette["bg3"],
+        foreground=palette["on_dark"],
+        borderwidth=0,
+        padding=(12, 8),
+    )
+    style.configure(
+        "StartupAccent.TButton",
+        background=palette["accent"],
+        foreground=palette["on_accent"],
+        borderwidth=0,
+        padding=(13, 8),
+        font=("Segoe UI", 10, "bold"),
+    )
+    style.map(
+        "StartupAccent.TButton",
+        background=[
+            ("active", palette["accent_hover"]),
+            ("pressed", palette["accent_pressed"]),
+        ],
+    )
+    style.configure("TRadiobutton", background=palette["bg"], foreground=palette["fg"])
+    style.configure(
+        "StartupChoice.TRadiobutton",
+        background=palette["bg2"],
+        foreground=palette["fg"],
+        padding=(12, 9),
+        font=("Segoe UI", 10, "bold"),
+    )
+    style.map(
+        "StartupChoice.TRadiobutton",
+        background=[
+            ("selected", palette["header"]),
+            ("active", palette["bg3"]),
+        ],
+        foreground=[
+            ("selected", palette["on_dark"]),
+            ("active", palette["fg"]),
+        ],
+    )
+    style.configure(
+        "StartupCheck.TCheckbutton",
+        background=palette["bg"],
+        foreground=palette["muted"],
+        padding=(2, 4),
+    )
+    style.configure("TCheckbutton", background=palette["bg"], foreground=palette["fg"])
+    style.configure(
+        "StartupSecondary.TButton",
+        background=palette["bg3"],
+        foreground=palette["on_dark"],
+        borderwidth=0,
+        padding=(12, 8),
+    )
+
+    root.update_idletasks()
+    center_window_on_parent(root, None)
+    root.after_idle(lambda: apply_windows_dark_titlebar(root))
 
     mode_var = tk.StringVar(value=gm)
     remember_var = tk.BooleanVar(value=True)
 
-    frm = ttk.Frame(root, padding=12)
+    frm = ttk.Frame(root, padding=UI.window_padding)
     frm.pack(fill="both", expand=True)
 
-    ttk.Label(frm, text=tr("Sélectionne la version de Dofus :"), font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(0, 8))
+    ttk.Label(
+        frm,
+        text=tr("Choisir la version de Dofus"),
+        style="StartupHeader.TLabel",
+    ).pack(anchor="w")
+    ttk.Label(
+        frm,
+        text=tr("Sélectionnez la version que DWM doit gérer pour cette session."),
+        style="StartupMuted.TLabel",
+    ).pack(anchor="w", pady=(4, 18))
 
-    ttk.Radiobutton(frm, text="Dofus Unity", value="unity", variable=mode_var).pack(anchor="w")
-    ttk.Radiobutton(frm, text="Dofus Retro", value="retro", variable=mode_var).pack(anchor="w", pady=(0, 6))
+    choices = ttk.Frame(frm, padding=6, style="StartupSurface.TFrame")
+    choices.pack(fill="x")
+    ttk.Radiobutton(
+        choices,
+        text="Dofus Unity",
+        value="unity",
+        variable=mode_var,
+        style="StartupChoice.TRadiobutton",
+    ).pack(fill="x", pady=2)
+    ttk.Radiobutton(
+        choices,
+        text="Dofus Retro",
+        value="retro",
+        variable=mode_var,
+        style="StartupChoice.TRadiobutton",
+    ).pack(fill="x", pady=2)
 
-    ttk.Checkbutton(frm, text=tr("Mémoriser ce choix (pré-sélection au prochain lancement)"), variable=remember_var).pack(anchor="w", pady=(6, 10))
+    ttk.Checkbutton(
+        frm,
+        text=tr("Mémoriser ce choix (pré-sélection au prochain lancement)"),
+        variable=remember_var,
+        style="StartupCheck.TCheckbutton",
+    ).pack(anchor="w", pady=(14, 18))
 
     btns = ttk.Frame(frm)
     btns.pack(fill="x")
@@ -70,8 +185,18 @@ def choose_game_dialog(default_mode: str = "unity", language: str = "fr") -> tup
     def on_cancel():
         root.destroy()
 
-    ttk.Button(btns, text="OK", command=on_ok).pack(side="right")
-    ttk.Button(btns, text=tr("Annuler"), command=on_cancel).pack(side="right", padx=(0, 8))
+    ttk.Button(
+        btns,
+        text=tr("Continuer"),
+        command=on_ok,
+        style="StartupAccent.TButton",
+    ).pack(side="right")
+    ttk.Button(
+        btns,
+        text=tr("Annuler"),
+        command=on_cancel,
+        style="StartupSecondary.TButton",
+    ).pack(side="right", padx=(0, 8))
 
     root.bind("<Return>", lambda e: on_ok())
     root.bind("<Escape>", lambda e: on_cancel())
@@ -116,7 +241,11 @@ def main() -> None:
             logger.warn(f"Impossible d’actualiser le démarrage Windows : {exc}")
 
     if should_prompt_for_game_mode(settings, use_saved_mode=args.use_saved_mode):
-        mode, remember = choose_game_dialog(settings.game_mode, settings.language)
+        mode, remember = choose_game_dialog(
+            settings.game_mode,
+            settings.language,
+            settings.theme,
+        )
         if remember:
             settings.game_mode = mode
             save_settings(settings_path, settings)

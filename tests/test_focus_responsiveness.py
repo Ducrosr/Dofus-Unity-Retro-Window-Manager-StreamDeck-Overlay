@@ -10,6 +10,7 @@ from unittest.mock import Mock, patch
 from dwm.models import GameWindow
 from dwm.services.display_overlay import CharacterDisplay
 from dwm.ui_overlays import (
+    DEFAULT_PALETTE,
     DISPLAY_MAX_WIDTH,
     DISPLAY_MIN_WIDTH,
     OverlayUI,
@@ -206,6 +207,39 @@ class OverlayResponsivenessTests(unittest.TestCase):
         self.assertEqual(_adaptive_display_width(1200), 1200)
         self.assertEqual(_adaptive_display_width(2400), DISPLAY_MAX_WIDTH)
         self.assertEqual(_adaptive_display_width(700, 460), 460)
+
+    def test_palette_change_keeps_persistent_overlay_window_alive(self) -> None:
+        overlay = OverlayUI.__new__(OverlayUI)
+        overlay.palette = dict(DEFAULT_PALETTE)
+        overlay.persistent_window = Mock()
+        overlay.persistent_enabled = True
+        overlay.compact_window = None
+        overlay._destroy_persistent = Mock()
+        overlay._render_persistent = Mock()
+        overlay._refresh_compact = Mock()
+
+        updated = dict(DEFAULT_PALETTE)
+        updated["accent"] = "#123456"
+        overlay.set_palette(updated)
+
+        overlay._destroy_persistent.assert_not_called()
+        overlay._render_persistent.assert_called_once_with()
+        overlay.persistent_window.configure.assert_called_once()
+
+    def test_identical_palette_does_not_redraw_overlay(self) -> None:
+        overlay = OverlayUI.__new__(OverlayUI)
+        overlay.palette = dict(DEFAULT_PALETTE)
+        overlay.persistent_window = Mock()
+        overlay.persistent_enabled = True
+        overlay.compact_window = None
+        overlay._render_persistent = Mock()
+        overlay._refresh_compact = Mock()
+
+        overlay.set_palette(dict(DEFAULT_PALETTE))
+
+        overlay._render_persistent.assert_not_called()
+        overlay._refresh_compact.assert_not_called()
+        overlay.persistent_window.configure.assert_not_called()
 
     def test_focus_only_update_does_not_rebuild_overlay_rows(self) -> None:
         overlay = OverlayUI.__new__(OverlayUI)

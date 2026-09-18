@@ -82,16 +82,23 @@ class UpdateDownloadTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "installer.exe"
             path.write_bytes(self.data)
-            with patch("dwm.ui_update_download.messagebox") as messages, patch(
-                    "dwm.ui_update_download.os.startfile", create=True) as launch:
-                messages.askyesno.return_value = False
+            with patch(
+                "dwm.ui_update_download.ask_confirmation"
+            ) as confirm, patch(
+                "dwm.ui_update_download.show_message"
+            ) as show_message, patch(
+                "dwm.ui_update_download.os.startfile", create=True
+            ) as launch:
+                confirm.return_value = False
                 dialog.finish(path)
                 launch.assert_not_called()
-                messages.askyesno.return_value = True
+
+                confirm.return_value = True
                 path.write_bytes(b"modified")
                 dialog.finish(path)
                 launch.assert_not_called()
-                messages.showwarning.assert_called_once()
+                show_message.assert_called_once()
+
                 path.write_bytes(self.data)
                 dialog.finish(path)
                 launch.assert_called_once_with(str(path))
@@ -103,10 +110,13 @@ class UpdateDownloadTests(unittest.TestCase):
         dialog.window = Mock()
         dialog.cancel = Event()
         dialog.asset = self.asset
-        with patch("dwm.ui_update_download.messagebox") as messages, patch(
-                "dwm.ui_update_download.os.startfile", create=True) as launch:
+        with patch(
+            "dwm.ui_update_download.show_message"
+        ) as show_message, patch(
+            "dwm.ui_update_download.os.startfile", create=True
+        ) as launch:
             dialog.finish(Path("portable.exe"))
-            messages.showinfo.assert_called_once()
+            show_message.assert_called_once()
             launch.assert_not_called()
 
 

@@ -2,7 +2,7 @@
 
 **Écrans et ancrage (bêta 5).** Dans Paramètres → Apparence, choisissez l’écran de l’overlay et une position de bord. L’ancrage tient compte de la taille de l’overlay et de la barre des tâches. Un écran débranché est remplacé temporairement par l’écran principal. Position libre permet le déplacement à la souris. Ces réglages sont conservés par mode et dans les dispositions des profils.
 
-**Recherche des paramètres (bêta 5).** Utilisez le champ en haut des paramètres ou **Ctrl+F**. La recherche porte sur les libellés et les sections des trois onglets, sans distinction de casse ni d’accents. Cliquez sur un résultat ou appuyez sur Entrée pour atteindre le premier. Effacer la recherche conserve vos modifications en cours.
+**Recherche des paramètres (bêta 5).** Utilisez le champ en haut des paramètres ou **Ctrl+F**. La recherche porte sur les libellés et les sections des quatre onglets, sans distinction de casse ni d’accents. Cliquez sur un résultat ou appuyez sur Entrée pour atteindre le premier. Effacer la recherche conserve vos modifications en cours.
 
 **Aperçu avant importation (bêta 5).** L’importation d’un profil ou d’une sauvegarde et la restauration locale présentent les différences avant/après. Sélectionnez une ligne pour lire les valeurs complètes. Annuler ne modifie rien ; Appliquer crée d’abord un point de restauration. Les profils locaux non remplacés sont conservés.
 
@@ -81,7 +81,8 @@ Activez les deux nouveaux modes dans **Paramètres → Raccourcis**. **Navigatio
 - vérification facultative des nouvelles Releases officielles, sans téléchargement automatique ;
 - douze thèmes disponibles dans les deux modes : Standard, Bonta, Brakmar, Tribute, Gold and Steel, Belladone, Unicorn, Emerald Mine, Sufokia, Pandala, Wabbit et Retro ;
 - interface en français par défaut, anglais ou espagnol, sélectionnable en un clic avec trois drapeaux graphiques ;
-- paramètres répartis en onglets Général, Apparence et Raccourcis pour retrouver rapidement chaque option ;
+- paramètres répartis en onglets Général, Apparence, OBS et Raccourcis ; l’intégration OBS dispose de sa propre page pour la connexion WebSocket, les captures automatiques et les repères DWM → OBS ;
+- panneau principal allégé : les commandes peu fréquentes sont regroupées dans une fenêtre **Outils et maintenance** dédiée ;
 - accessibilité : contraste renforcé, échelle d’interface de 80 à 160 % et réduction des animations/clignotements ;
 - avertissement de sécurité obligatoire au premier lancement, avant l’activation des raccourcis globaux ;
 - assistant guidé de première configuration : langue, mode Unity/Retro, détection, test du focus, overlay et installation facultative de Stream Deck ;
@@ -161,7 +162,7 @@ py -3.14 -m venv .venv
 
 Python 3.14 peut être remplacé par une autre version installée à partir de Python 3.12.
 
-Pour installer le plugin Stream Deck, lancez d’abord le gestionnaire puis utilisez **Application → Installer le plugin Stream Deck**. Acceptez ensuite le profil proposé par Stream Deck. Aucun téléchargement supplémentaire du plugin n’est nécessaire.
+Pour installer le plugin Stream Deck, lancez d’abord le gestionnaire puis utilisez **Application → Outils… → Installer ou réparer le plugin Stream Deck**. Acceptez ensuite le profil proposé par Stream Deck. Aucun téléchargement supplémentaire du plugin n’est nécessaire.
 
 Le guide détaillé couvre l'exécutable, l’installation depuis un ZIP, les mises à jour, la fonction Retro facultative et les problèmes les plus courants : **[Guide d’installation](docs/INSTALLATION.md)**.
 

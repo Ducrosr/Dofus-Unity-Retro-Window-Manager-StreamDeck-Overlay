@@ -1,5 +1,49 @@
 # Historique
 
+## 2.20.0-beta.7 — en cours
+
+### OBS et overlay
+
+- Synchronisation automatique de la variable Advanced Scene Switcher `Game` : `Dofus Unity` en mode Unity et `Dofus Retro` en mode Retro, via le VendorRequest officiel lorsque le plugin est disponible.
+- À la fermeture complète de DWM, les sources OBS `[DWM] Overlay` et `[DWM] Focus Popup` sont désactivées proprement avant destruction des fenêtres Tk ; les captures Dofus restent inchangées.
+- Intégration OBS WebSocket avec pool dynamique de Captures de fenêtre persistantes, sans limite fixe à huit clients.
+- Test de commutation OBS orientée performances : seule la capture Dofus active reste affichée en régime stable ; lors d’un changement, la nouvelle source est activée puis l’ancienne reste visible environ **33 ms** avant d’être masquée. Ce très court chevauchement laisse à WGC le temps de fournir sa première image tout en permettant ensuite à OBS de relâcher le travail GPU des clients inactifs. Le filtre d’opacité DWM est conservé à 100 % uniquement pour compatibilité avec les scènes créées par les builds précédents.
+- Création automatique des captures de l’overlay et de la popup DWM, toujours maintenues au-dessus des fenêtres Dofus.
+- Projection automatique de la position et de l’échelle de l’overlay et de la popup dans le canvas OBS.
+- Nouvel onglet **OBS** dans les paramètres, séparant connexion WebSocket, captures automatiques et repères de géométrie.
+- Interface principale allégée : les actions peu fréquentes sont regroupées dans **Outils et maintenance**.
+
+### Fiabilité
+
+- Les fenêtres secondaires et boîtes de dialogue DWM s’ouvrent centrées sur la fenêtre principale lorsqu’elle est visible ; les sous-dialogues restent centrés sur leur parent direct.
+- La molette ne change plus accidentellement la valeur des listes déroulantes ni des champs numériques (`Spinbox`) ; le défilement continue vers le conteneur lorsque le contrôle est fermé.
+- Prévisualisation des préréglages d’affichage désormais interactive même lorsque la fenêtre Paramètres est ouverte : le verrou modal est suspendu pendant l’aperçu puis restauré à sa fermeture.
+- Application des paramètres regroupée pour éviter les rafraîchissements successifs de l’intégration OBS.
+- Mise à jour de palette et verrouillage de l’overlay effectués sans remplacer son HWND ; les réglages identiques ne provoquent plus de rendu inutile, ce qui réduit fortement les clignotements lors de l’application.
+- La boucle principale de traitement reste active après une erreur de synchronisation de la zone de notification, ce qui préserve l’actualisation automatique lors de l’ouverture ou fermeture de fenêtres Dofus.
+
+
+### Refonte visuelle et ergonomie
+
+- Nouveau langage visuel desktop : hiérarchie typographique renforcée, espacements plus généreux, bordures adoucies, cartes plus légères et boutons différenciés par rôle (primaire, discret, dangereux).
+- Fenêtre principale mieux équilibrée sur les grands écrans : contenu plafonné et centré au lieu d’être étiré sur toute la largeur lorsque DWM est maximisé.
+- Fenêtres secondaires contraintes à la zone de travail du moniteur avec marge de sécurité afin d’éviter qu’un dialogue, notamment Paramètres, soit tronqué hors écran.
+- Barre de titre sombre demandée à Windows pour les fenêtres DWM afin d’uniformiser le chrome natif avec le thème de l’application.
+- Boîtes de dialogue DWM dédiées pour les confirmations, informations et saisies principales ; le contrôle de mise à jour et l’enregistrement d’un profil n’utilisent plus les boîtes blanches Windows.
+- Sélecteur Unity/Retro du démarrage entièrement aligné sur la palette sombre DWM.
+- Fenêtres **Outils et maintenance**, **Gérer les profils**, **Équipe et emplacements**, **Personnaliser**, **Sauvegarde/restauration**, **Diagnostic** et **Aperçu Stream Deck** harmonisées.
+- Paramètres modernisés : recherche plus discrète, onglets plus lisibles, marges augmentées et barre d’actions inférieure cohérente.
+- Assistant de configuration enrichi d’un repère visuel des six étapes sans modifier son parcours.
+- Simulation d’affichage repositionnée pour présenter son overlay d’aperçu à côté de la fenêtre de contrôle au lieu de la recouvrir.
+- Ajout de jetons UI partagés pour les espacements, la largeur maximale du contenu, la marge écran et les rôles de boutons, afin d’éviter les réglages visuels dispersés.
+- Les informations, avertissements, erreurs et confirmations restantes de l’application passent désormais par les modales sombres DWM au lieu des boîtes Windows blanches ; les boutons Oui/Non suivent aussi la langue active.
+- Onglets, sélection des tableaux et focus des champs utilisent davantage la couleur structurelle du thème, tandis que l’accent sable/or reste réservé aux actions principales.
+- Le placement des fenêtres secondaires est revérifié après leur mappage natif/DPI, avec contrainte à la zone de travail réelle du moniteur ; un test couvre explicitement le centrage sur un écran secondaire.
+- Correction d’un chevauchement visuel dans le bloc Navigation de la fenêtre principale entre « Rétablir l’ordre du profil » et la suspension des raccourcis.
+- Paramètres allégés visuellement avec des sections ordinaires sans cadres lourds ; **Outils et maintenance** adopte des groupes d’actions sur surfaces discrètes plutôt que des `LabelFrame` imbriqués.
+- Sélecteur Unity/Retro du démarrage retravaillé en choix pleine largeur plus lisibles, et dernières petites fenêtres prioritaires harmonisées : équipe/emplacements, personnalisation, sauvegarde/restauration et saisie d’alias.
+- Les modales DWM restaurent le verrou du parent lorsqu’elles sont ouvertes depuis une autre fenêtre modale, afin de conserver le comportement existant des Paramètres et sous-dialogues.
+
 ## 2.20.0-beta.6 — 2026-09-17
 
 ### OBS et overlay
@@ -12,7 +56,6 @@
 ### Fiabilité
 
 - Correction du `KeyError: 'popdown'` de Tkinter lors de l’utilisation des listes déroulantes.
-- La boucle principale de traitement reste active après une erreur de synchronisation de la zone de notification, ce qui préserve l’actualisation automatique lors de l’ouverture ou fermeture de fenêtres Dofus.
 
 ## 2.20.0-beta.5 — 2026-09-07
 

@@ -111,7 +111,7 @@ class ConfigurationImportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             app = self.make_app(directory)
             app._create_configuration_snapshot.return_value = None
-            with patch("dwm.app.confirm_configuration_changes", return_value=True), patch("dwm.app.messagebox.showerror"):
+            with patch("dwm.app.confirm_configuration_changes", return_value=True), patch("dwm.app.show_error"):
                 self.assertFalse(app._restore_configuration_data(self.backup(), source="test", parent=app.root))
             app._apply_restored_configuration.assert_not_called()
 
@@ -131,7 +131,7 @@ class ConfigurationImportTests(unittest.TestCase):
             app = self.make_app(directory)
             backup = self.backup()
             backup["profiles"].append(profile("TEAM").to_dict())
-            with patch("dwm.app.confirm_configuration_changes") as preview, patch("dwm.app.messagebox.showerror"):
+            with patch("dwm.app.confirm_configuration_changes") as preview, patch("dwm.app.show_error"):
                 self.assertFalse(app._restore_configuration_data(backup, source="test", parent=app.root))
             preview.assert_not_called()
             app._create_configuration_snapshot.assert_not_called()

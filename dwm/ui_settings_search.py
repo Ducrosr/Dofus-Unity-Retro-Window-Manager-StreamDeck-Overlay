@@ -55,14 +55,23 @@ class SettingsSearch:
         self.pending = None
         self.query = StringVar(master=win)
         self.status = StringVar(master=win)
-        self.frame = Frame(win, padding=(12, 8, 12, 0))
+        self.frame = Frame(win, padding=(18, 14, 18, 0))
         self.frame.pack(fill="x", before=notebook)
         row = Frame(self.frame)
         row.pack(fill="x")
-        Label(row, text=tr("Rechercher un paramètre")).pack(side="left", padx=(0, 8))
+        Label(
+            row,
+            text=tr("Rechercher un paramètre"),
+            style="Eyebrow.TLabel",
+        ).pack(side="left", padx=(0, 10))
         self.entry = Entry(row, textvariable=self.query)
         self.entry.pack(side="left", fill="x", expand=True)
-        Button(row, text=tr("Effacer"), command=lambda: self.query.set("")).pack(side="right", padx=(8, 0))
+        Button(
+            row,
+            text=tr("Effacer"),
+            command=lambda: self.query.set(""),
+            style="Quiet.TButton",
+        ).pack(side="right", padx=(10, 0))
         self.results_frame = Frame(self.frame)
         Label(self.results_frame, textvariable=self.status).pack(anchor="w", pady=3)
         table_frame = Frame(self.results_frame)

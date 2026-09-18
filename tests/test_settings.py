@@ -61,6 +61,13 @@ class SettingsTests(unittest.TestCase):
         self.assertFalse(settings.accessibility_high_contrast)
         self.assertFalse(settings.accessibility_reduce_motion)
         self.assertEqual(settings.accessibility_ui_scale_percent, 100)
+        self.assertFalse(settings.obs_capture_sync_enabled)
+        self.assertEqual(settings.obs_websocket_port, 4455)
+        self.assertEqual(settings.obs_websocket_password, "")
+        self.assertEqual(settings.obs_capture_scene, "[DWM] Dofus Active")
+        self.assertEqual(settings.obs_capture_source_prefix, "[DWM] Dofus Capture")
+        self.assertFalse(settings.obs_capture_cursor)
+        self.assertFalse(settings.obs_capture_force_sdr)
         self.assertTrue(all(settings.hotkeys[f"window_{position}"] == "" for position in range(1, 9)))
 
     def test_column_order_is_sanitized_and_completed(self) -> None:
@@ -112,6 +119,13 @@ class SettingsTests(unittest.TestCase):
                 accessibility_high_contrast=True,
                 accessibility_reduce_motion=True,
                 accessibility_ui_scale_percent=125,
+                obs_capture_sync_enabled=True,
+                obs_websocket_port=4456,
+                obs_websocket_password="secret",
+                obs_capture_scene="[DWM] Focus actif",
+                obs_capture_source_prefix="[DWM] Capture test",
+                obs_capture_cursor=True,
+                obs_capture_force_sdr=True,
                 last_profile="Équipe",
                 window_column_order=["name", "alias", "class", "hwnd"],
                 check_updates_automatically=False,
@@ -165,6 +179,13 @@ class SettingsTests(unittest.TestCase):
         self.assertTrue(actual.accessibility_high_contrast)
         self.assertTrue(actual.accessibility_reduce_motion)
         self.assertEqual(actual.accessibility_ui_scale_percent, 125)
+        self.assertTrue(actual.obs_capture_sync_enabled)
+        self.assertEqual(actual.obs_websocket_port, 4456)
+        self.assertEqual(actual.obs_websocket_password, "secret")
+        self.assertEqual(actual.obs_capture_scene, "[DWM] Focus actif")
+        self.assertEqual(actual.obs_capture_source_prefix, "[DWM] Capture test")
+        self.assertTrue(actual.obs_capture_cursor)
+        self.assertTrue(actual.obs_capture_force_sdr)
         self.assertEqual(actual.last_profile, "Équipe")
         self.assertTrue(actual.smart_profile_loading_enabled)
         self.assertEqual(actual.window_column_order, ["name", "alias", "class", "hwnd"])

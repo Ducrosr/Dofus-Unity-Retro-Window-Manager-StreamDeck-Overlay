@@ -93,7 +93,9 @@ class ProfileOverlayTests(unittest.TestCase):
             save_profile(Path(directory), Profile("Team", [], {}, "", "", overlay_by_game_mode={
                 "unity": {"rotation_overlay_width": 400}, "retro": {"rotation_overlay_width": 500},
             }))
-            with patch("dwm.app.simpledialog.askstring", return_value="Team"), patch("dwm.app.messagebox.askyesno", return_value=True):
+            with patch("dwm.app.ask_text", return_value="Team"), patch(
+                "dwm.app.ask_confirmation", return_value=True
+            ):
                 app.profile_overlay_var.get.return_value = False
                 app.save_profile_dialog()
                 self.assertEqual(load_profile(Path(directory), "Team").overlay_by_game_mode,
