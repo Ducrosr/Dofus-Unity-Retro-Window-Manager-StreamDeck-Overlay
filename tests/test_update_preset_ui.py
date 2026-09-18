@@ -46,14 +46,21 @@ class UpdatePresetUITests(unittest.TestCase):
         ]:
             app = Mock()
             app.settings = Settings()
-            with patch("dwm.app.save_settings"), patch("dwm.app.messagebox") as messages:
-                WindowManagerApp._finish_update_check(app, manual=True, result=result, error=error, checked_at="")
+            with patch("dwm.app.save_settings"), patch(
+                "dwm.app.show_message"
+            ) as show_message:
+                WindowManagerApp._finish_update_check(
+                    app,
+                    manual=True,
+                    result=result,
+                    error=error,
+                    checked_at="",
+                )
                 if expected == "offer":
                     app._offer_official_release.assert_called_once_with(release)
-                elif expected == "info":
-                    messages.showinfo.assert_called_once()
+                    show_message.assert_not_called()
                 else:
-                    messages.showwarning.assert_called_once()
+                    show_message.assert_called_once()
 
     def test_each_preset_replaces_preview_without_saving_settings(self):
         from dwm.app import WindowManagerApp
