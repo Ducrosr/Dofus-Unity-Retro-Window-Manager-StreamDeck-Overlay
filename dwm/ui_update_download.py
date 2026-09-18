@@ -10,6 +10,7 @@ from tkinter import StringVar, Toplevel, filedialog, messagebox
 from tkinter.ttk import Button, Frame, Label, Radiobutton
 
 from .services.i18n import tr
+from .ui_windowing import schedule_center_window
 from .services.update_download import download_asset
 
 
@@ -18,6 +19,7 @@ class UpdateDownloadDialog:
         self.window = Toplevel(root)
         self.window.title(tr("Mise à jour"))
         self.window.transient(root)
+        schedule_center_window(self.window, root)
         self.cancel = threading.Event()
         self.events = queue.Queue()
         self.active = False
