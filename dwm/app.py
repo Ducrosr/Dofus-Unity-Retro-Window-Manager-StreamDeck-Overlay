@@ -3472,19 +3472,21 @@ class WindowManagerApp:
             self.delete_profile_selected()
             refresh_values()
 
-        TtkButton(content, text="Importer un JSON…", command=import_profile).grid(
-            row=3, column=0, sticky="ew", padx=(0, 3), pady=2
+        TtkButton(content, text=tr("Importer un JSON…"), command=import_profile).grid(
+            row=5, column=0, sticky="ew", padx=(0, 4), pady=2
         )
-        TtkButton(content, text="Exporter une copie…", command=self.export_profile_json).grid(
-            row=3, column=1, sticky="ew", padx=(3, 0), pady=2
-        )
+        TtkButton(
+            content,
+            text=tr("Exporter une copie…"),
+            command=self.export_profile_json,
+        ).grid(row=5, column=1, sticky="ew", padx=(4, 0), pady=2)
         TtkButton(
             content,
             text=tr("Supprimer le profil"),
             command=delete_selected_profile,
             style="Danger.TButton",
         ).grid(
-            row=4, column=0, columnspan=2, sticky="ew", pady=2
+            row=6, column=0, columnspan=2, sticky="ew", pady=(8, 2)
         )
         TtkButton(
             content,
