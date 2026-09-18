@@ -40,6 +40,9 @@
 - Onglets, sélection des tableaux et focus des champs utilisent davantage la couleur structurelle du thème, tandis que l’accent sable/or reste réservé aux actions principales.
 - Le placement des fenêtres secondaires est revérifié après leur mappage natif/DPI, avec contrainte à la zone de travail réelle du moniteur ; un test couvre explicitement le centrage sur un écran secondaire.
 - Correction d’un chevauchement visuel dans le bloc Navigation de la fenêtre principale entre « Rétablir l’ordre du profil » et la suspension des raccourcis.
+- Paramètres allégés visuellement avec des sections ordinaires sans cadres lourds ; **Outils et maintenance** adopte des groupes d’actions sur surfaces discrètes plutôt que des `LabelFrame` imbriqués.
+- Sélecteur Unity/Retro du démarrage retravaillé en choix pleine largeur plus lisibles, et dernières petites fenêtres prioritaires harmonisées : équipe/emplacements, personnalisation, sauvegarde/restauration et saisie d’alias.
+- Les modales DWM restaurent le verrou du parent lorsqu’elles sont ouvertes depuis une autre fenêtre modale, afin de conserver le comportement existant des Paramètres et sous-dialogues.
 
 ## 2.20.0-beta.6 — 2026-09-17
 
