@@ -202,9 +202,10 @@ class OBSActiveCaptureBridge:
     """Maintain a dynamic OBS Window Capture pool for Dofus clients.
 
     The pool has no fixed client count. Sources are created lazily as concurrent
-    clients appear, retained for reuse, and only visibility changes on ordinary
-    focus swaps. A source target is updated only when a client appears, restarts
-    or changes identity/title.
+    clients appear and retained for reuse. Only the focused Dofus scene item is
+    enabled in normal operation; focus swaps enable the new item first and then
+    disable the previous one immediately. A source target is updated only when a
+    client appears, restarts or changes identity/title.
     """
 
     def __init__(self, config: OBSActiveCaptureConfig):
@@ -1154,28 +1155,37 @@ class OBSActiveCaptureBridge:
         if target_slot == self._visible_slot:
             return
 
-        # All assigned captures remain enabled in the scene. OBS Window Capture
-        # frees its WGC session when a source stops "showing", so toggling scene
-        # item visibility would recreate the capture and reintroduce a black
-        # acquisition frame. Opacity changes keep the source showing and its WGC
-        # session warm while making only the focused client visible.
+        # Performance-first switching: a hidden OBS scene item stops "showing",
+        # allowing Window Capture / WGC to release work for inactive clients.
+        # There is intentionally no artificial warm-up delay in this first pass.
+        # Enable the new target before disabling the previous one so the handoff
+        # remains make-before-break while still returning to one active capture
+        # immediately after the two synchronous WebSocket requests complete.
         previous_slot = self._visible_slot
+
         if target_slot is not None:
             source_name = _slot_name(config.source_prefix, target_slot)
+            # Neutralise the legacy DWM opacity filter before showing a slot.
+            # Older builds may have left this filter at 0 for inactive clients.
             self._ensure_visibility_filter(
                 client,
                 source_name,
                 target_slot,
                 1.0,
             )
+            self._set_scene_item_enabled(
+                client,
+                config,
+                target_slot,
+                True,
+            )
 
         if previous_slot is not None and previous_slot != target_slot:
-            source_name = _slot_name(config.source_prefix, previous_slot)
-            self._ensure_visibility_filter(
+            self._set_scene_item_enabled(
                 client,
-                source_name,
+                config,
                 previous_slot,
-                0.0,
+                False,
             )
 
         self._visible_slot = target_slot
@@ -1187,14 +1197,6 @@ class OBSActiveCaptureBridge:
     ) -> None:
         assigned = set(self._session_by_slot)
         for slot in sorted(self._known_slots - assigned):
-            source_name = _slot_name(config.source_prefix, slot)
-            if slot in self._filter_ready_slots:
-                self._ensure_visibility_filter(
-                    client,
-                    source_name,
-                    slot,
-                    0.0,
-                )
             self._set_scene_item_enabled(
                 client,
                 config,
@@ -1223,20 +1225,15 @@ class OBSActiveCaptureBridge:
                     continue
                 self._ensure_slot(client, config, slot, window)
                 source_name = _slot_name(config.source_prefix, slot)
-                # Initialize newly discovered/created filters to the correct
-                # state without hiding the underlying source.
-                if slot not in self._filter_ready_slots:
-                    self._ensure_visibility_filter(
-                        client,
-                        source_name,
-                        slot,
-                        1.0 if slot == target_slot else 0.0,
-                    )
-                self._set_scene_item_enabled(
+                # The opacity filter is retained only for compatibility with
+                # scenes created by older DWM builds. Keep it neutral (100 %)
+                # and use the scene-item enabled state as the real visibility
+                # and GPU-resource control.
+                self._ensure_visibility_filter(
                     client,
-                    config,
+                    source_name,
                     slot,
-                    True,
+                    1.0,
                 )
                 if canvas is not None:
                     base_width, base_height = canvas
