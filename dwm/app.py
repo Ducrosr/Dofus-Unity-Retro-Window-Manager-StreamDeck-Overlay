@@ -107,6 +107,7 @@ from .services.configuration_diff import compare_configuration, compare_profiles
 from .ui_configuration_preview import confirm_configuration_changes
 from .ui_settings_search import SettingsSearch
 from .ui_update_download import UpdateDownloadDialog
+from .ui_windowing import install_combobox_wheel_guard, schedule_center_window
 from .services.monitor_layout import list_monitors
 from .services.backup_history import (
     BackupSnapshot,
@@ -587,6 +588,7 @@ class WindowManagerApp:
 
         # ---- UI ----
         self.root = Tk()
+        install_combobox_wheel_guard(self.root)
         self._base_tk_scaling = float(self.root.tk.call("tk", "scaling"))
         self.root._dwm_high_contrast = bool(  # type: ignore[attr-defined]
             self.settings.accessibility_high_contrast
@@ -747,6 +749,7 @@ class WindowManagerApp:
         dialog = Toplevel(self.root)
         dialog.title(tr("Avertissement de sécurité"))
         dialog.transient(self.root)
+        schedule_center_window(dialog, self.root)
         dialog.grab_set()
         dialog.resizable(False, False)
         try:
@@ -916,6 +919,7 @@ class WindowManagerApp:
 
         dialog = Toplevel(self.root)
         dialog.transient(self.root)
+        schedule_center_window(dialog, self.root)
         dialog.grab_set()
         dialog.resizable(False, False)
         try:
@@ -1739,6 +1743,7 @@ class WindowManagerApp:
         self._tools_window = win
         win.title(tr("Outils et maintenance"))
         win.transient(self.root)
+        schedule_center_window(win, self.root)
         win.resizable(True, True)
         win.geometry("520x620")
         win.minsize(480, 520)
@@ -2249,6 +2254,7 @@ class WindowManagerApp:
         self.display_simulation_window = win
         win.title(tr("Simulation de l’affichage"))
         win.transient(self.root)
+        schedule_center_window(win, self.root)
         win.resizable(False, False)
         content = TtkFrame(win, padding=14)
         content.pack(fill="both", expand=True)
@@ -3013,6 +3019,7 @@ class WindowManagerApp:
         win = Toplevel(self.root)
         win.title(tr("Équipe et emplacements"))
         win.transient(self.root)
+        schedule_center_window(win, self.root)
         content = TtkFrame(win, padding=12)
         content.pack(fill="both", expand=True)
         TtkLabel(content, text=tr("Les emplacements fixes servent aux raccourcis directs et au Stream Deck."), wraplength=540).pack(anchor="w", pady=(0, 8))
@@ -3230,6 +3237,7 @@ class WindowManagerApp:
         win = Toplevel(self.root)
         win.title("Gérer les profils")
         win.transient(self.root)
+        schedule_center_window(win, self.root)
         win.grab_set()
         win.resizable(False, False)
 
@@ -3361,6 +3369,7 @@ class WindowManagerApp:
         win.title("Aperçu Stream Deck multi-modèles")
         win.resizable(False, False)
         win.transient(self.root)
+        schedule_center_window(win, self.root)
 
         content = TtkFrame(win, padding=14)
         content.pack(fill="both", expand=True)
@@ -3682,6 +3691,7 @@ class WindowManagerApp:
         win = Toplevel(self.root)
         win.title("Diagnostic")
         win.transient(self.root)
+        schedule_center_window(win, self.root)
         win.resizable(False, False)
 
         content = TtkFrame(win, padding=12)
@@ -3953,6 +3963,7 @@ class WindowManagerApp:
         win = Toplevel(self.root)
         win.title("Sauvegarde et restauration")
         win.transient(self.root)
+        schedule_center_window(win, self.root)
         win.resizable(False, False)
 
         content = TtkFrame(win, padding=12)
@@ -5368,6 +5379,7 @@ class WindowManagerApp:
         win = Toplevel(self.root)
         win.title(f"Personnaliser — {window.pseudo}")
         win.transient(self.root)
+        schedule_center_window(win, self.root)
         win.grab_set()
         win.resizable(False, False)
         content = TtkFrame(win, padding=14)
@@ -5587,6 +5599,7 @@ class WindowManagerApp:
         win.bind("<Destroy>", resume_after_settings, add="+")
         win.title("Paramètres")
         win.transient(self.root)
+        schedule_center_window(win, self.root)
         win.grab_set()
         win.resizable(True, True)
         game_hotkeys = BooleanVar(value=self.settings.hotkey_scope == "game")
@@ -6514,6 +6527,7 @@ class WindowManagerApp:
             dialog = Toplevel(win)
             dialog.title(tr("Capturer un raccourci"))
             dialog.transient(win)
+            schedule_center_window(dialog, win)
             dialog.grab_set()
             dialog.resizable(False, False)
             body = TtkFrame(dialog, padding=16)
