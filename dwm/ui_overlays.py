@@ -324,12 +324,19 @@ class OverlayUI:
         return self.persistent_enabled or self.compact_is_open
 
     def set_palette(self, palette: Mapping[str, str]) -> None:
-        self.palette = dict(DEFAULT_PALETTE)
-        self.palette.update(palette)
+        next_palette = dict(DEFAULT_PALETTE)
+        next_palette.update(palette)
+        if next_palette == self.palette:
+            return
+
+        self.palette = next_palette
         if self.persistent_window is not None:
-            self._destroy_persistent()
+            try:
+                self.persistent_window.configure(background=self.palette["line"])
+            except Exception:
+                pass
             if self.persistent_enabled:
-                self._ensure_persistent()
+                # Re-render in place so OBS keeps the same capturable HWND.
                 self._render_persistent()
         if self.compact_window is not None:
             try:
@@ -619,32 +626,83 @@ class OverlayUI:
         show_portrait: bool = True,
         show_badge: bool = True,
     ) -> None:
-        recreate = self.persistent_locked != bool(locked)
-        self.persistent_enabled = bool(enabled)
-        self.persistent_x = int(x)
-        self.persistent_y = int(y)
-        self.persistent_opacity = clamp_overlay_opacity(opacity)
-        self.persistent_locked = bool(locked)
-        self.persistent_layout = normalize_overlay_layout(layout)
-        self.persistent_monitor = monitor
-        self.persistent_anchor = anchor
-        self.persistent_orientation = normalize_overlay_orientation(orientation)
-        self.persistent_width = max(DISPLAY_MIN_WIDTH, min(DISPLAY_MAX_WIDTH, int(width)))
-        self.persistent_auto_width = bool(auto_width)
+        next_enabled = bool(enabled)
+        next_x = int(x)
+        next_y = int(y)
+        next_opacity = clamp_overlay_opacity(opacity)
+        next_locked = bool(locked)
+        next_layout = normalize_overlay_layout(layout)
+        next_monitor = monitor
+        next_anchor = anchor
+        next_orientation = normalize_overlay_orientation(orientation)
+        next_width = max(DISPLAY_MIN_WIDTH, min(DISPLAY_MAX_WIDTH, int(width)))
+        next_auto_width = bool(auto_width)
         requested_height = int(height)
-        self.persistent_height = 0 if requested_height <= 0 else max(80, min(1600, requested_height))
-        self.persistent_show_title = bool(show_title)
-        self.persistent_show_reorder_buttons = bool(show_reorder_buttons)
-        self.show_portraits = bool(show_portrait)
-        self.show_badges = bool(show_badge)
+        next_height = 0 if requested_height <= 0 else max(80, min(1600, requested_height))
+        next_show_title = bool(show_title)
+        next_show_reorder_buttons = bool(show_reorder_buttons)
+        next_show_portrait = bool(show_portrait)
+        next_show_badge = bool(show_badge)
+
+        previous_enabled = self.persistent_enabled
+        previous_locked = self.persistent_locked
+        changed = (
+            next_enabled != self.persistent_enabled
+            or next_x != self.persistent_x
+            or next_y != self.persistent_y
+            or next_opacity != self.persistent_opacity
+            or next_locked != self.persistent_locked
+            or next_layout != self.persistent_layout
+            or next_monitor != self.persistent_monitor
+            or next_anchor != self.persistent_anchor
+            or next_orientation != self.persistent_orientation
+            or next_width != self.persistent_width
+            or next_auto_width != self.persistent_auto_width
+            or next_height != self.persistent_height
+            or next_show_title != self.persistent_show_title
+            or next_show_reorder_buttons != self.persistent_show_reorder_buttons
+            or next_show_portrait != self.show_portraits
+            or next_show_badge != self.show_badges
+        )
+
+        self.persistent_enabled = next_enabled
+        self.persistent_x = next_x
+        self.persistent_y = next_y
+        self.persistent_opacity = next_opacity
+        self.persistent_locked = next_locked
+        self.persistent_layout = next_layout
+        self.persistent_monitor = next_monitor
+        self.persistent_anchor = next_anchor
+        self.persistent_orientation = next_orientation
+        self.persistent_width = next_width
+        self.persistent_auto_width = next_auto_width
+        self.persistent_height = next_height
+        self.persistent_show_title = next_show_title
+        self.persistent_show_reorder_buttons = next_show_reorder_buttons
+        self.show_portraits = next_show_portrait
+        self.show_badges = next_show_badge
 
         if not self.persistent_enabled:
-            self._destroy_persistent()
+            if previous_enabled or self.persistent_window is not None:
+                self._destroy_persistent()
             return
-        if recreate:
-            self._destroy_persistent()
+
+        had_window = (
+            self.persistent_window is not None
+            and bool(self.persistent_window.winfo_exists())
+        )
         self._ensure_persistent()
-        self._render_persistent()
+
+        if had_window and previous_locked != self.persistent_locked:
+            # Click-through can be toggled without replacing the top-level
+            # window. Keeping the HWND stable avoids OBS WGC reacquisition.
+            _apply_non_activating_style(
+                self.persistent_window,
+                click_through=self.persistent_locked,
+            )
+
+        if changed or not had_window:
+            self._render_persistent()
         if self._monitor_job is None:
             self._monitor_job = self.root.after(2000, self._check_monitors)
 
