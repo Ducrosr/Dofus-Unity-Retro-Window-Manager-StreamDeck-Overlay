@@ -27,6 +27,7 @@ def choose_game_dialog(
     from tkinter import ttk
     from dwm.services.i18n import set_language, tr
     from dwm.services.themes import normalize_theme, theme_palette
+    from dwm.ui_design import UI
     from dwm.ui_windowing import apply_windows_dark_titlebar, center_window_on_parent
 
     set_language(language)
@@ -40,7 +41,7 @@ def choose_game_dialog(
     root = tk.Tk()
     root.title(tr("Choisir le jeu"))
     root.resizable(False, False)
-    root.geometry("520x300")
+    root.geometry("560x330")
 
     palette = theme_palette(normalize_theme(theme_name, gm))
     style = ttk.Style(root)
@@ -58,6 +59,7 @@ def choose_game_dialog(
         font=("Segoe UI", 10),
     )
     style.configure("TFrame", background=palette["bg"])
+    style.configure("StartupSurface.TFrame", background=palette["bg2"])
     style.configure("TLabel", background=palette["bg"], foreground=palette["fg"])
     style.configure(
         "StartupHeader.TLabel",
@@ -93,7 +95,38 @@ def choose_game_dialog(
         ],
     )
     style.configure("TRadiobutton", background=palette["bg"], foreground=palette["fg"])
+    style.configure(
+        "StartupChoice.TRadiobutton",
+        background=palette["bg2"],
+        foreground=palette["fg"],
+        padding=(12, 9),
+        font=("Segoe UI", 10, "bold"),
+    )
+    style.map(
+        "StartupChoice.TRadiobutton",
+        background=[
+            ("selected", palette["header"]),
+            ("active", palette["bg3"]),
+        ],
+        foreground=[
+            ("selected", palette["on_dark"]),
+            ("active", palette["fg"]),
+        ],
+    )
+    style.configure(
+        "StartupCheck.TCheckbutton",
+        background=palette["bg"],
+        foreground=palette["muted"],
+        padding=(2, 4),
+    )
     style.configure("TCheckbutton", background=palette["bg"], foreground=palette["fg"])
+    style.configure(
+        "StartupSecondary.TButton",
+        background=palette["bg3"],
+        foreground=palette["on_dark"],
+        borderwidth=0,
+        padding=(12, 8),
+    )
 
     root.update_idletasks()
     center_window_on_parent(root, None)
@@ -102,7 +135,7 @@ def choose_game_dialog(
     mode_var = tk.StringVar(value=gm)
     remember_var = tk.BooleanVar(value=True)
 
-    frm = ttk.Frame(root, padding=22)
+    frm = ttk.Frame(root, padding=UI.window_padding)
     frm.pack(fill="both", expand=True)
 
     ttk.Label(
@@ -116,26 +149,29 @@ def choose_game_dialog(
         style="StartupMuted.TLabel",
     ).pack(anchor="w", pady=(4, 18))
 
-    choices = ttk.Frame(frm)
+    choices = ttk.Frame(frm, padding=6, style="StartupSurface.TFrame")
     choices.pack(fill="x")
     ttk.Radiobutton(
         choices,
         text="Dofus Unity",
         value="unity",
         variable=mode_var,
-    ).pack(anchor="w", pady=3)
+        style="StartupChoice.TRadiobutton",
+    ).pack(fill="x", pady=2)
     ttk.Radiobutton(
         choices,
         text="Dofus Retro",
         value="retro",
         variable=mode_var,
-    ).pack(anchor="w", pady=3)
+        style="StartupChoice.TRadiobutton",
+    ).pack(fill="x", pady=2)
 
     ttk.Checkbutton(
         frm,
         text=tr("Mémoriser ce choix (pré-sélection au prochain lancement)"),
         variable=remember_var,
-    ).pack(anchor="w", pady=(16, 18))
+        style="StartupCheck.TCheckbutton",
+    ).pack(anchor="w", pady=(14, 18))
 
     btns = ttk.Frame(frm)
     btns.pack(fill="x")
@@ -159,6 +195,7 @@ def choose_game_dialog(
         btns,
         text=tr("Annuler"),
         command=on_cancel,
+        style="StartupSecondary.TButton",
     ).pack(side="right", padx=(0, 8))
 
     root.bind("<Return>", lambda e: on_ok())
