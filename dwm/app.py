@@ -6019,10 +6019,10 @@ class WindowManagerApp:
         available_theme_ids = theme_ids_for_mode(self.game_mode)
         theme_labels = [THEME_LABELS[theme_id] for theme_id in available_theme_ids]
 
-        settings_footer = TtkFrame(win, padding=(12, 8))
+        settings_footer = TtkFrame(win, padding=(18, 12), style="ActionBar.TFrame")
         settings_footer.pack(side="bottom", fill="x")
         settings_notebook = Notebook(win)
-        settings_notebook.pack(fill="both", expand=True, padx=12, pady=(10, 0))
+        settings_notebook.pack(fill="both", expand=True, padx=18, pady=(12, 0))
         tab_canvases: dict[str, Canvas] = {}
 
         def create_scrollable_tab(label: str) -> TtkFrame:
@@ -6040,7 +6040,7 @@ class WindowManagerApp:
             canvas.configure(yscrollcommand=scrollbar.set)
             scrollbar.pack(side="right", fill="y")
             canvas.pack(side="left", fill="both", expand=True)
-            content = TtkFrame(canvas, padding=12)
+            content = TtkFrame(canvas, padding=16)
             content_window = canvas.create_window((0, 0), window=content, anchor="nw")
             content.bind(
                 "<Configure>",
@@ -7164,10 +7164,16 @@ class WindowManagerApp:
 
         TtkButton(
             settings_footer,
-            text="Réinitialiser l’affichage…",
+            text=tr("Réinitialiser l’affichage…"),
             command=reset_display_from_settings,
+            style="Quiet.TButton",
         ).pack(side="left")
-        TtkButton(settings_footer, text="Annuler", command=win.destroy).pack(side="right")
+        TtkButton(
+            settings_footer,
+            text=tr("Annuler"),
+            command=win.destroy,
+            style="Quiet.TButton",
+        ).pack(side="right")
         TtkButton(settings_footer, text="Appliquer", command=apply, style="Accent.TButton").pack(
             side="right", padx=(0, 6)
         )
