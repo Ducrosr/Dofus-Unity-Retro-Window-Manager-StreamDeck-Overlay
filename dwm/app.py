@@ -225,6 +225,7 @@ SWAP_POSITION_LABELS = {
     "bottom_right": "En bas à droite",
 }
 ROTATION_COALESCE_MS = 18
+MAIN_CONTENT_MAX_WIDTH = 1720
 OFFICIAL_REPOSITORY_URL = (
     "https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay"
 )
@@ -2024,7 +2025,12 @@ class WindowManagerApp:
             self.main_canvas.configure(scrollregion=bounds)
 
     def _on_main_canvas_configure(self, event) -> None:
-        self.main_canvas.itemconfigure(self._main_canvas_window, width=event.width)
+        # On ultrawide/maximized desktops, keep the information architecture
+        # readable instead of stretching tables and controls edge-to-edge.
+        content_width = max(1, min(int(event.width), MAIN_CONTENT_MAX_WIDTH))
+        left = max(0, (int(event.width) - content_width) // 2)
+        self.main_canvas.itemconfigure(self._main_canvas_window, width=content_width)
+        self.main_canvas.coords(self._main_canvas_window, left, 0)
 
     def _on_global_mousewheel(self, event):
         widget = self.root.winfo_containing(event.x_root, event.y_root)
