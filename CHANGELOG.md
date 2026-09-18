@@ -1,6 +1,6 @@
 # Historique
 
-## 2.20.0-beta.6 — 2026-09-17
+## 2.20.0-beta.7 — en cours
 
 ### OBS et overlay
 
@@ -12,6 +12,34 @@
 - Projection automatique de la position et de l’échelle de l’overlay et de la popup dans le canvas OBS.
 - Nouvel onglet **OBS** dans les paramètres, séparant connexion WebSocket, captures automatiques et repères de géométrie.
 - Interface principale allégée : les actions peu fréquentes sont regroupées dans **Outils et maintenance**.
+
+### Fiabilité
+
+- Les fenêtres secondaires et boîtes de dialogue DWM s’ouvrent centrées sur la fenêtre principale lorsqu’elle est visible ; les sous-dialogues restent centrés sur leur parent direct.
+- La molette ne change plus accidentellement la valeur des listes déroulantes ni des champs numériques (`Spinbox`) ; le défilement continue vers le conteneur lorsque le contrôle est fermé.
+- Prévisualisation des préréglages d’affichage désormais interactive même lorsque la fenêtre Paramètres est ouverte : le verrou modal est suspendu pendant l’aperçu puis restauré à sa fermeture.
+- Application des paramètres regroupée pour éviter les rafraîchissements successifs de l’intégration OBS.
+- Mise à jour de palette et verrouillage de l’overlay effectués sans remplacer son HWND ; les réglages identiques ne provoquent plus de rendu inutile, ce qui réduit fortement les clignotements lors de l’application.
+- La boucle principale de traitement reste active après une erreur de synchronisation de la zone de notification, ce qui préserve l’actualisation automatique lors de l’ouverture ou fermeture de fenêtres Dofus.
+
+
+### Refonte visuelle et ergonomie
+
+- Nouveau langage visuel desktop : hiérarchie typographique renforcée, espacements plus généreux, bordures adoucies, cartes plus légères et boutons différenciés par rôle (primaire, discret, dangereux).
+- Fenêtre principale mieux équilibrée sur les grands écrans : contenu plafonné et centré au lieu d’être étiré sur toute la largeur lorsque DWM est maximisé.
+- Fenêtres secondaires contraintes à la zone de travail du moniteur avec marge de sécurité afin d’éviter qu’un dialogue, notamment Paramètres, soit tronqué hors écran.
+- Barre de titre sombre demandée à Windows pour les fenêtres DWM afin d’uniformiser le chrome natif avec le thème de l’application.
+- Boîtes de dialogue DWM dédiées pour les confirmations, informations et saisies principales ; le contrôle de mise à jour et l’enregistrement d’un profil n’utilisent plus les boîtes blanches Windows.
+- Sélecteur Unity/Retro du démarrage entièrement aligné sur la palette sombre DWM.
+- Fenêtres **Outils et maintenance**, **Gérer les profils**, **Équipe et emplacements**, **Personnaliser**, **Sauvegarde/restauration**, **Diagnostic** et **Aperçu Stream Deck** harmonisées.
+- Paramètres modernisés : recherche plus discrète, onglets plus lisibles, marges augmentées et barre d’actions inférieure cohérente.
+- Assistant de configuration enrichi d’un repère visuel des six étapes sans modifier son parcours.
+- Simulation d’affichage repositionnée pour présenter son overlay d’aperçu à côté de la fenêtre de contrôle au lieu de la recouvrir.
+
+## 2.20.0-beta.6 — 2026-09-17
+
+### OBS et overlay
+
 - Overlay persistant et popup de changement de focus exposés comme fenêtres capturables séparément dans OBS.
 - Popup conservée ouverte avec un HWND stable pour éviter le délai de réacquisition ; surface magenta lorsqu’elle est inactive pour un Color Key OBS.
 - Repères OBS en lecture seule dans les paramètres : position X/Y relative à l’écran et dimensions réelles de l’overlay et de la popup.
@@ -19,13 +47,7 @@
 
 ### Fiabilité
 
-- Les fenêtres secondaires et boîtes de dialogue DWM s’ouvrent centrées sur la fenêtre principale lorsqu’elle est visible ; les sous-dialogues restent centrés sur leur parent direct.
-- La molette ne change plus accidentellement la valeur d’une liste déroulante fermée ; l’événement continue vers le conteneur afin que le défilement de la page reste naturel.
-- Prévisualisation des préréglages d’affichage désormais interactive même lorsque la fenêtre Paramètres est ouverte : le verrou modal est suspendu pendant l’aperçu puis restauré à sa fermeture.
-- Application des paramètres regroupée pour éviter les rafraîchissements successifs de l’intégration OBS.
-- Mise à jour de palette et verrouillage de l’overlay effectués sans remplacer son HWND ; les réglages identiques ne provoquent plus de rendu inutile, ce qui réduit fortement les clignotements lors de l’application.
 - Correction du `KeyError: 'popdown'` de Tkinter lors de l’utilisation des listes déroulantes.
-- La boucle principale de traitement reste active après une erreur de synchronisation de la zone de notification, ce qui préserve l’actualisation automatique lors de l’ouverture ou fermeture de fenêtres Dofus.
 
 ## 2.20.0-beta.5 — 2026-09-07
 
