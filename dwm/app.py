@@ -107,6 +107,7 @@ from .services.configuration_diff import compare_configuration, compare_profiles
 from .ui_configuration_preview import confirm_configuration_changes
 from .ui_settings_search import SettingsSearch
 from .ui_update_download import UpdateDownloadDialog
+from .ui_dialogs import ask_confirmation, ask_text, show_message
 from .ui_windowing import (
     apply_windows_dark_titlebar,
     install_combobox_wheel_guard,
@@ -1704,7 +1705,7 @@ class WindowManagerApp:
         )
         self.undo_order_button = TtkButton(navigation, text=tr("Annuler le déplacement"), command=self.undo_order_change, state="disabled")
         self.undo_order_button.grid(row=3, column=0, columnspan=2, sticky="ew", pady=2)
-        TtkButton(navigation, text=tr("Rétablir l’ordre du profil"), command=self.restore_profile_order).grid(row=4, column=0, columnspan=2, sticky="ew", pady=2)
+        TtkButton(navigation, text=tr("Rétablir l’ordre du profil"), command=self.restore_profile_order).grid(row=6, column=0, columnspan=2, sticky="ew", pady=(8, 2))
         TtkButton(navigation, text=tr("Équipe et emplacements…"), command=self.show_character_slots).grid(row=5, column=0, columnspan=2, sticky="ew", pady=2)
         TtkButton(navigation, textvariable=self.hotkey_pause_text, command=self.toggle_hotkeys_paused).grid(row=6, column=0, columnspan=2, sticky="ew", pady=2)
 
@@ -1744,10 +1745,10 @@ class WindowManagerApp:
             justify="left",
         ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(5, 7))
         TtkButton(selection, text="Ignorer", command=self.ignore_selected).grid(
-            row=3, column=0, sticky="ew", padx=(0, 3), pady=2
+            row=5, column=0, sticky="ew", padx=(0, 3), pady=2
         )
         TtkButton(selection, text="Réintégrer", command=self.unignore_selected).grid(
-            row=3, column=1, sticky="ew", padx=(3, 0), pady=2
+            row=5, column=1, sticky="ew", padx=(3, 0), pady=2
         )
 
         profiles = TtkLabelFrame(
@@ -2824,10 +2825,11 @@ class WindowManagerApp:
             return
         if self._update_check_inflight:
             if manual:
-                messagebox.showinfo(
-                    "Mise à jour",
-                    "Une recherche est déjà en cours.",
-                    parent=self.root,
+                show_message(
+                    self.root,
+                    tr("Mise à jour"),
+                    tr("Une recherche est déjà en cours."),
+                    heading=tr("Recherche déjà en cours"),
                 )
             return
 
@@ -2898,7 +2900,12 @@ class WindowManagerApp:
             self.logger.warn(f"Update check failed: {error}")
             if manual:
                 self._log(f"Mise à jour : {error}")
-                messagebox.showwarning("Mise à jour", error, parent=self.root)
+                show_message(
+                    self.root,
+                    tr("Mise à jour"),
+                    error,
+                    heading=tr("Recherche impossible"),
+                )
             return
 
         if result is None:
@@ -2922,7 +2929,12 @@ class WindowManagerApp:
                 detail = "Aucune version publiée compatible n’a été trouvée."
             else:
                 detail = f"Vous utilisez déjà la version la plus récente ({__release_tag__})."
-            messagebox.showinfo("Mise à jour", detail, parent=self.root)
+            show_message(
+                self.root,
+                tr("Mise à jour"),
+                detail,
+                heading=tr("Dofus Window Manager est à jour"),
+            )
 
     def _restore_update_button(self) -> None:
         if self._available_release is None:
@@ -2944,15 +2956,19 @@ class WindowManagerApp:
         release_label = release.tag
         if release.name and release.name != release.tag:
             release_label = f"{release.tag} — {release.name}"
-        open_release = messagebox.askyesno(
-            "Mise à jour disponible",
+        open_release = ask_confirmation(
+            self.root,
+            tr("Mise à jour disponible"),
             (
                 f"Version installée : {__version__} ({__release_tag__})\n"
                 f"Nouvelle version : {release_label}\n\n"
-                "Aucun fichier ne sera téléchargé automatiquement. "
-                "Ouvrir la Release officielle dans votre navigateur ?"
+                + tr(
+                    "Aucun fichier ne sera téléchargé automatiquement. "
+                    "Ouvrir la Release officielle dans votre navigateur ?"
+                )
             ),
-            parent=self.root,
+            confirm_text=tr("Ouvrir la Release"),
+            cancel_text=tr("Annuler"),
         )
         if not open_release:
             return
@@ -2962,10 +2978,13 @@ class WindowManagerApp:
             opened = False
             self.logger.warn(f"Official release page could not be opened: {exc}")
         if not opened:
-            messagebox.showwarning(
-                "Mise à jour",
-                "Le navigateur n’a pas pu être ouvert. Consultez la Release depuis le dépôt officiel.",
-                parent=self.root,
+            show_message(
+                self.root,
+                tr("Mise à jour"),
+                tr(
+                    "Le navigateur n’a pas pu être ouvert. Consultez la Release depuis le dépôt officiel."
+                ),
+                heading=tr("Ouverture impossible"),
             )
 
     def _open_trusted_web_page(self, url: str, label: str) -> None:
@@ -3254,20 +3273,28 @@ class WindowManagerApp:
 
     def save_profile_dialog(self):
         current_name = self.selected_profile.get().strip()
-        name = simpledialog.askstring(
-            "Enregistrer le profil",
-            "Nom du profil :",
-            initialvalue=current_name,
-            parent=self.root,
+        name = ask_text(
+            self.root,
+            tr("Enregistrer le profil"),
+            tr("Choisissez un nom clair pour retrouver facilement cette équipe."),
+            initial=current_name,
+            confirm_text=tr("Enregistrer"),
+            cancel_text=tr("Annuler"),
         )
         if not name:
             return
         name = name.strip()
         replacing_existing = name in self._get_profiles()
-        if replacing_existing and not messagebox.askyesno(
-            "Mettre à jour le profil",
-            tr("Le profil « {name} » existe déjà. Remplacer son ordre, ses alias, ses apparences et sa disposition d’overlay ?", name=name),
-            parent=self.root,
+        if replacing_existing and not ask_confirmation(
+            self.root,
+            tr("Mettre à jour le profil"),
+            tr(
+                "Le profil « {name} » existe déjà. Remplacer son ordre, ses alias, "
+                "ses apparences et sa disposition d’overlay ?",
+                name=name,
+            ),
+            confirm_text=tr("Mettre à jour"),
+            cancel_text=tr("Annuler"),
         ):
             return
         if replacing_existing:
@@ -3396,12 +3423,22 @@ class WindowManagerApp:
         win.grab_set()
         win.resizable(False, False)
 
-        content = TtkFrame(win, padding=12)
+        content = TtkFrame(win, padding=20)
         content.pack(fill="both", expand=True)
         content.columnconfigure(0, weight=1)
         content.columnconfigure(1, weight=1)
 
-        TtkLabel(content, text="Profil sélectionné").grid(row=0, column=0, columnspan=2, sticky="w")
+        TtkLabel(content, text=tr("Gérer les profils"), style="Header.TLabel").grid(
+            row=0, column=0, columnspan=2, sticky="w"
+        )
+        TtkLabel(
+            content,
+            text=tr("Importer, exporter ou supprimer les profils enregistrés."),
+            style="Muted.TLabel",
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(2, 16))
+        TtkLabel(content, text=tr("Profil sélectionné"), style="Eyebrow.TLabel").grid(
+            row=2, column=0, columnspan=2, sticky="w"
+        )
         manager_combo = Combobox(
             content,
             textvariable=self.selected_profile,
@@ -3409,7 +3446,7 @@ class WindowManagerApp:
             state="readonly",
             width=36,
         )
-        manager_combo.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(3, 10))
+        manager_combo.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(3, 10))
 
         TtkLabel(
             content,
@@ -3420,7 +3457,7 @@ class WindowManagerApp:
             style="Muted.TLabel",
             wraplength=380,
             justify="left",
-        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(0, 10))
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(0, 14))
 
         def refresh_values() -> None:
             values = self._get_profiles()
@@ -3441,12 +3478,20 @@ class WindowManagerApp:
         TtkButton(content, text="Exporter une copie…", command=self.export_profile_json).grid(
             row=3, column=1, sticky="ew", padx=(3, 0), pady=2
         )
-        TtkButton(content, text="Supprimer le profil", command=delete_selected_profile).grid(
+        TtkButton(
+            content,
+            text=tr("Supprimer le profil"),
+            command=delete_selected_profile,
+            style="Danger.TButton",
+        ).grid(
             row=4, column=0, columnspan=2, sticky="ew", pady=2
         )
-        TtkButton(content, text="Fermer", command=win.destroy).grid(
-            row=5, column=0, columnspan=2, sticky="e", pady=(10, 0)
-        )
+        TtkButton(
+            content,
+            text=tr("Fermer"),
+            command=win.destroy,
+            style="Quiet.TButton",
+        ).grid(row=7, column=0, columnspan=2, sticky="e", pady=(14, 0))
 
     def install_streamdeck_plugin(self) -> bool:
         try:
