@@ -1583,7 +1583,7 @@ class WindowManagerApp:
         self.root.bind_all("<MouseWheel>", self._on_global_mousewheel, add="+")
 
         header = TtkFrame(self.main_content)
-        header.pack(fill="x", padx=12, pady=(12, 6))
+        header.pack(fill="x", padx=18, pady=(16, 10))
 
         title_box = TtkFrame(header)
         title_box.pack(side="left")
@@ -1613,8 +1613,8 @@ class WindowManagerApp:
             self.language_buttons[language] = button
 
         search_box = TtkFrame(header)
-        search_box.pack(side="right", fill="x", expand=True, padx=(30, 0))
-        TtkLabel(search_box, text="Rechercher").pack(anchor="w")
+        search_box.pack(side="right", fill="x", expand=True, padx=(36, 0))
+        TtkLabel(search_box, text="Rechercher", style="Eyebrow.TLabel").pack(anchor="w")
         search_row = TtkFrame(search_box)
         search_row.pack(fill="x", pady=(2, 0))
         search = TtkEntry(search_row, textvariable=self.search_var)
@@ -1623,19 +1623,21 @@ class WindowManagerApp:
         TtkButton(search_row, text="Rafraîchir", command=self.refresh_windows).pack(side="right", padx=(6, 0))
 
         main = TtkFrame(self.main_content)
-        main.pack(fill="both", expand=True, padx=12, pady=(4, 10))
-        main.columnconfigure(0, weight=5, minsize=500)
-        main.columnconfigure(1, weight=3, minsize=310)
+        main.pack(fill="both", expand=True, padx=18, pady=(4, 14))
+        main.columnconfigure(0, weight=5, minsize=520)
+        main.columnconfigure(1, weight=3, minsize=340)
         main.rowconfigure(0, weight=1)
 
         left = TtkFrame(main)
         left.grid(row=0, column=0, sticky="nsew")
 
         right = TtkFrame(main)
-        right.grid(row=0, column=1, sticky="new", padx=(12, 0))
+        right.grid(row=0, column=1, sticky="new", padx=(16, 0))
 
         # Window tables
-        TtkLabel(left, text="Fenêtres gérées").pack(pady=(0, 5), anchor="w")
+        TtkLabel(left, text="Fenêtres gérées", style="Section.TLabel").pack(
+            pady=(0, 7), anchor="w"
+        )
         self.managed_tree = self._create_window_tree(left, height=10)
         self.managed_tree.bind("<ButtonPress-1>", lambda event: self._on_window_tree_press(event, self.managed_tree), add="+")
         self.managed_tree.bind(
@@ -1654,7 +1656,9 @@ class WindowManagerApp:
             text="Glissez un personnage pour modifier l’ordre ; glissez un en-tête pour déplacer une colonne.",
         ).pack(pady=(4, 0), anchor="w")
 
-        TtkLabel(left, text="Fenêtres ignorées").pack(pady=(10, 5), anchor="w")
+        TtkLabel(left, text="Fenêtres ignorées", style="Section.TLabel").pack(
+            pady=(16, 6), anchor="w"
+        )
         TtkLabel(left, textvariable=self.roster_status_var, wraplength=550, style="Muted.TLabel").pack(fill="x")
         self.ignored_tree = self._create_window_tree(left, height=5)
         self.ignored_tree.bind("<ButtonPress-1>", lambda event: self._on_window_tree_press(event, self.ignored_tree), add="+")
@@ -1671,8 +1675,10 @@ class WindowManagerApp:
         )
 
         # Right panel controls, grouped by frequency and purpose.
-        navigation = TtkLabelFrame(right, text="Navigation", padding=8)
-        navigation.pack(fill="x", pady=(0, 8))
+        navigation = TtkLabelFrame(
+            right, text="Navigation", padding=12, style="Card.TLabelframe"
+        )
+        navigation.pack(fill="x", pady=(0, 12))
         navigation.columnconfigure(0, weight=1)
         navigation.columnconfigure(1, weight=1)
         TtkButton(navigation, text="← Précédent", command=lambda: self.request_rotation("backward")).grid(
@@ -1702,8 +1708,10 @@ class WindowManagerApp:
         TtkButton(navigation, text=tr("Équipe et emplacements…"), command=self.show_character_slots).grid(row=5, column=0, columnspan=2, sticky="ew", pady=2)
         TtkButton(navigation, textvariable=self.hotkey_pause_text, command=self.toggle_hotkeys_paused).grid(row=6, column=0, columnspan=2, sticky="ew", pady=2)
 
-        selection = TtkLabelFrame(right, text="Fenêtre sélectionnée", padding=8)
-        selection.pack(fill="x", pady=(0, 8))
+        selection = TtkLabelFrame(
+            right, text="Fenêtre sélectionnée", padding=12, style="Card.TLabelframe"
+        )
+        selection.pack(fill="x", pady=(0, 12))
         selection.columnconfigure(0, weight=1)
         selection.columnconfigure(1, weight=1)
         character_preview = TtkFrame(selection)
@@ -1742,8 +1750,10 @@ class WindowManagerApp:
             row=3, column=1, sticky="ew", padx=(3, 0), pady=2
         )
 
-        profiles = TtkLabelFrame(right, text="Profils", padding=8)
-        profiles.pack(fill="x", pady=(0, 8))
+        profiles = TtkLabelFrame(
+            right, text="Profils", padding=12, style="Card.TLabelframe"
+        )
+        profiles.pack(fill="x", pady=(0, 12))
         profiles.columnconfigure(0, weight=1)
         profiles.columnconfigure(1, weight=1)
         self.profile_combo = Combobox(
@@ -1771,10 +1781,16 @@ class WindowManagerApp:
         TtkLabel(
             profiles,
             text=tr("Cette option prend effet avec Enregistrer. Décochée, le profil conserve l’affichage courant au chargement."),
-            wraplength=235,
-        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(2, 0))
+            wraplength=260,
+            style="Muted.TLabel",
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
-        application = TtkLabelFrame(right, text=tr("Application"), padding=8)
+        application = TtkLabelFrame(
+            right,
+            text=tr("Application"),
+            padding=12,
+            style="Card.TLabelframe",
+        )
         application.pack(fill="x")
         mode_row = TtkFrame(application)
         mode_row.pack(fill="x", pady=(1, 6))
@@ -1822,7 +1838,7 @@ class WindowManagerApp:
 
         # Status and logs
         bottom = TtkFrame(self.main_content)
-        bottom.pack(fill="both", expand=False, padx=12, pady=(0, 10))
+        bottom.pack(fill="both", expand=False, padx=18, pady=(0, 12))
 
         status_row = TtkFrame(bottom)
         status_row.pack(fill="x")
@@ -1864,9 +1880,9 @@ class WindowManagerApp:
         win.title(tr("Outils et maintenance"))
         win.transient(self.root)
         schedule_center_window(win, self.root)
-        win.resizable(True, True)
-        win.geometry("520x620")
-        win.minsize(480, 520)
+        win.resizable(False, False)
+        win.geometry("590x545")
+        win.minsize(560, 520)
 
         def clear_reference(event) -> None:
             if event.widget is win:
@@ -1874,13 +1890,29 @@ class WindowManagerApp:
 
         win.bind("<Destroy>", clear_reference, add="+")
 
-        body = TtkFrame(win, padding=12)
+        body = TtkFrame(win, padding=18)
         body.pack(fill="both", expand=True)
+
+        TtkLabel(
+            body,
+            text=tr("Outils et maintenance"),
+            style="Header.TLabel",
+        ).pack(anchor="w")
+        TtkLabel(
+            body,
+            text=tr(
+                "Les outils moins fréquents sont regroupés ici pour garder la fenêtre principale légère."
+            ),
+            style="Muted.TLabel",
+            wraplength=540,
+            justify="left",
+        ).pack(anchor="w", pady=(2, 16))
 
         stream_tools = TtkLabelFrame(
             body,
             text=tr("Affichage et stream"),
-            padding=10,
+            padding=12,
+            style="Card.TLabelframe",
         )
         stream_tools.pack(fill="x", pady=(0, 8))
         stream_tools.columnconfigure(0, weight=1)
@@ -1909,9 +1941,10 @@ class WindowManagerApp:
         configuration = TtkLabelFrame(
             body,
             text=tr("Configuration"),
-            padding=10,
+            padding=12,
+            style="Card.TLabelframe",
         )
-        configuration.pack(fill="x", pady=(0, 8))
+        configuration.pack(fill="x", pady=(0, 10))
         configuration.columnconfigure(0, weight=1)
         configuration.columnconfigure(1, weight=1)
         TtkButton(
@@ -1934,9 +1967,10 @@ class WindowManagerApp:
         maintenance = TtkLabelFrame(
             body,
             text=tr("Maintenance et sécurité"),
-            padding=10,
+            padding=12,
+            style="Card.TLabelframe",
         )
-        maintenance.pack(fill="x", pady=(0, 8))
+        maintenance.pack(fill="x", pady=(0, 10))
         maintenance.columnconfigure(0, weight=1)
         maintenance.columnconfigure(1, weight=1)
         self.update_button = TtkButton(
@@ -1978,6 +2012,7 @@ class WindowManagerApp:
             footer,
             text=tr("Fermer"),
             command=win.destroy,
+            style="Quiet.TButton",
         ).pack(side="right")
 
         self._localize_widget_tree(win)
