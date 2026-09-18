@@ -9,7 +9,7 @@ import time
 import webbrowser
 from datetime import datetime
 from pathlib import Path
-from tkinter import BooleanVar, Canvas, Label as TkLabel, StringVar, Text, Tk, Toplevel, filedialog, messagebox, simpledialog
+from tkinter import BooleanVar, Canvas, Label as TkLabel, StringVar, Text, Tk, Toplevel, filedialog, messagebox
 from tkinter.ttk import (
     Button as TtkButton,
     Checkbutton as TtkCheckbutton,
@@ -3299,7 +3299,7 @@ class WindowManagerApp:
         win.title(tr("Équipe et emplacements"))
         win.transient(self.root)
         schedule_center_window(win, self.root)
-        content = TtkFrame(win, padding=20)
+        content = TtkFrame(win, padding=UI.window_padding)
         content.pack(fill="both", expand=True)
         TtkLabel(
             content,
@@ -3354,7 +3354,19 @@ class WindowManagerApp:
             roster = self._ensure_character_roster()
             present = {character_key(window.pseudo) for window in self._all_windows.values()}
             absent = [name for name in roster.order if character_key(name) not in present]
-            if not absent or not ask_yes_no(tr("Retirer les personnages absents"), tr("Retirer {names} de l’équipe ? Les emplacements suivants seront renumérotés. Enregistrez ensuite le profil.", names=", ".join(absent)), parent=win):
+            if not absent:
+                return
+            if not ask_confirmation(
+                win,
+                tr("Retirer les personnages absents"),
+                tr(
+                    "Retirer {names} de l’équipe ? Les emplacements suivants seront renumérotés. Enregistrez ensuite le profil.",
+                    names=", ".join(absent),
+                ),
+                confirm_text=tr("Retirer"),
+                cancel_text=tr("Annuler"),
+                danger=True,
+            ):
                 return
             roster.order = [name for name in roster.order if character_key(name) in present]
             roster.slots = [name for name in roster.slots if character_key(name) in present]
@@ -3380,6 +3392,12 @@ class WindowManagerApp:
             style="Muted.TLabel",
             wraplength=560,
         ).pack(anchor="w", pady=(12, 0))
+        TtkButton(
+            content,
+            text=tr("Fermer"),
+            command=win.destroy,
+            style=SECONDARY_BUTTON_STYLE,
+        ).pack(anchor="e", pady=(12, 0))
         render()
 
     def _save_active_profile_customizations(self) -> bool:
@@ -4330,7 +4348,7 @@ class WindowManagerApp:
         schedule_center_window(win, self.root)
         win.resizable(False, False)
 
-        content = TtkFrame(win, padding=20)
+        content = TtkFrame(win, padding=UI.window_padding)
         content.pack(fill="both", expand=True)
         TtkLabel(content, text="Configuration de l’application", style="Header.TLabel").pack(anchor="w")
         TtkLabel(
@@ -4417,13 +4435,13 @@ class WindowManagerApp:
             content,
             text=tr("Réinitialiser les réglages…"),
             command=self.reset_settings,
-            style="Danger.TButton",
+            style=TERTIARY_BUTTON_STYLE,
         ).pack(fill="x", pady=(10, 3))
         TtkButton(
             content,
             text=tr("Fermer"),
             command=win.destroy,
-            style="Quiet.TButton",
+            style=SECONDARY_BUTTON_STYLE,
         ).pack(anchor="e", pady=(14, 0))
 
     def export_configuration(self) -> None:
@@ -5760,7 +5778,7 @@ class WindowManagerApp:
         schedule_center_window(win, self.root)
         win.grab_set()
         win.resizable(False, False)
-        content = TtkFrame(win, padding=20)
+        content = TtkFrame(win, padding=UI.window_padding)
         content.pack(fill="both", expand=True)
         content.columnconfigure(1, weight=1)
 
@@ -5771,7 +5789,7 @@ class WindowManagerApp:
         TtkLabel(
             content,
             text=f"{window.pseudo} · {window.character_class or 'classe inconnue'}",
-            style="Section.TLabel",
+            style="Header.TLabel",
         ).grid(row=0, column=1, columnspan=2, sticky="w", pady=(0, 10))
         TtkLabel(content, text="Alias").grid(row=1, column=1, sticky="w", padx=(0, 8), pady=3)
         TtkEntry(content, textvariable=alias_var, width=30).grid(row=1, column=2, sticky="ew", pady=3)
@@ -5833,7 +5851,7 @@ class WindowManagerApp:
             portrait_buttons,
             text=tr("Retirer"),
             command=remove_portrait,
-            style="Quiet.TButton",
+            style=TERTIARY_BUTTON_STYLE,
         ).pack(side="left", padx=(4, 0))
         class_portrait_combo = Combobox(
             content,
@@ -5905,9 +5923,9 @@ class WindowManagerApp:
             buttons,
             text=tr("Annuler"),
             command=win.destroy,
-            style="Quiet.TButton",
+            style=SECONDARY_BUTTON_STYLE,
         ).pack(side="right")
-        TtkButton(buttons, text="Appliquer", command=apply, style="Accent.TButton").pack(
+        TtkButton(buttons, text="Appliquer", command=apply, style=PRIMARY_BUTTON_STYLE).pack(
             side="right", padx=(0, 6)
         )
 
@@ -5919,15 +5937,18 @@ class WindowManagerApp:
         if not w:
             return
         current = self.aliases.get(w.pseudo, "")
-        new = simpledialog.askstring(
-            "Alias facultatif",
+        new = ask_text(
+            self.root,
+            tr("Alias facultatif"),
             (
                 f"Alias pour {w.pseudo} :\n\n"
                 "Exemples : Terre, Feu, Eau, Air, Mineur, Alchimiste…\n"
                 "Laissez le champ vide pour supprimer l’alias."
             ),
-            initialvalue=current,
-            parent=self.root,
+            initial=current,
+            confirm_text=tr("Appliquer"),
+            cancel_text=tr("Annuler"),
+            allow_empty=True,
         )
         if new is None:
             return
