@@ -277,6 +277,39 @@ class OverlayResponsivenessTests(unittest.TestCase):
         self.assertEqual(request.anchor, "top_right")
         self.assertEqual(request.duration_ms, 1200)
 
+    def test_palette_change_keeps_same_persistent_toplevel(self) -> None:
+        overlay = OverlayUI.__new__(OverlayUI)
+        overlay._closed = False
+        overlay.palette = {}
+        window = Mock()
+        overlay.persistent_window = window
+        overlay.persistent_enabled = True
+        overlay.compact_window = None
+        overlay._destroy_persistent = Mock()
+        overlay._render_persistent = Mock()
+        overlay._refresh_compact = Mock()
+
+        overlay.set_palette({"bg": "#111111"})
+
+        self.assertIs(overlay.persistent_window, window)
+        overlay._destroy_persistent.assert_not_called()
+        overlay._render_persistent.assert_called_once_with()
+
+    def test_close_all_is_terminal_and_idempotent(self) -> None:
+        overlay = OverlayUI.__new__(OverlayUI)
+        overlay._closed = False
+        overlay.hide_swap_notification = Mock()
+        overlay._destroy_persistent = Mock()
+        overlay.close_compact = Mock()
+
+        overlay.close_all()
+        overlay.close_all()
+
+        self.assertTrue(overlay._closed)
+        overlay.hide_swap_notification.assert_called_once_with()
+        overlay._destroy_persistent.assert_called_once_with()
+        overlay.close_compact.assert_called_once_with(show_root=False)
+
     def test_manual_resize_disables_automatic_width(self) -> None:
         overlay = OverlayUI.__new__(OverlayUI)
         overlay.persistent_window = Mock()
