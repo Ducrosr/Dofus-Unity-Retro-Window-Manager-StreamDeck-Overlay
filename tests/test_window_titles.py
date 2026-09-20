@@ -52,6 +52,20 @@ class WindowTitleTests(unittest.TestCase):
         self.assertEqual(result[0].pseudo, "Korra")
         self.assertEqual(result[0].character_class, "Féca")
 
+    def test_unity_scanner_rejects_unrelated_unity_window(self) -> None:
+        with patch.object(
+            windows,
+            "enum_top_level_windows",
+            return_value=[
+                (101, "Nealla - Pandawa - 3.4.1.17"),
+                (202, "Unrelated Unity Game"),
+            ],
+        ):
+            result = windows.list_unity_windows()
+
+        self.assertEqual([window.hwnd for window in result], [101])
+        self.assertEqual(result[0].pseudo, "Nealla")
+
     def test_extract_retro_pseudo_before_marker(self) -> None:
         self.assertEqual(extract_pseudo_retro("Eniripsa - Dofus Retro v1.44"), "Eniripsa")
 

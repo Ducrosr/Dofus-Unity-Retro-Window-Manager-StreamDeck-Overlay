@@ -3,7 +3,7 @@ import threading
 import unittest
 from unittest.mock import Mock, patch
 
-from dwm.storage.settings import Settings
+from dwm.storage.settings import Settings, UnsupportedSettingsSchemaError
 
 
 @unittest.skipUnless(os.name == "nt", "Windows application")
@@ -47,6 +47,42 @@ class ShutdownUITests(unittest.TestCase):
                 app.overlay_ui.close_all.assert_called_once()
         finally:
             release.set()
+
+    def test_close_continues_when_settings_cannot_be_written(self):
+        from dwm.app import WindowManagerApp
+
+        app = Mock()
+        app.settings = Settings()
+        app._stop_event = threading.Event()
+        app._rotation_request_job = "rotation-job"
+        app._pending_rotation_delta = 2
+        app.tray.is_running = False
+        finished_callbacks = []
+
+        def schedule(_delay, callback):
+            finished_callbacks.append(callback)
+            return "job"
+
+        app.root.after.side_effect = schedule
+
+        with patch(
+            "dwm.app.save_settings",
+            side_effect=UnsupportedSettingsSchemaError("future schema"),
+        ):
+            WindowManagerApp.on_close(app, force=True)
+
+        self.assertTrue(app._stop_event.is_set())
+        self.assertEqual(app._pending_rotation_delta, 0)
+        app.root.after_cancel.assert_called_once_with("rotation-job")
+        app.overlay_ui.close_all.assert_called_once_with()
+
+        # Service shutdown remains asynchronous and must still be able to
+        # complete even though persistence was rejected.
+        for _ in range(100):
+            if app.tray.stop.called:
+                break
+            threading.Event().wait(0.01)
+        self.assertTrue(app.tray.stop.called)
 
     def test_normal_close_still_minimizes_when_requested(self):
         from dwm.app import WindowManagerApp

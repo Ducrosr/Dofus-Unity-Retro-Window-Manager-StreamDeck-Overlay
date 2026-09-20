@@ -28,7 +28,9 @@ DEFAULT_ROTATION_OVERLAY_LAYOUT = {
 }
 
 _TK_GEOMETRY_PATTERN = re.compile(
-    r"^(?P<width>\d+)x(?P<height>\d+)(?P<x>[+-]\d+)(?P<y>[+-]\d+)$"
+    r"^(?P<width>\d+)x(?P<height>\d+)"
+    r"(?P<x_abs>\+-\d+|\+\d+|\-\d+)"
+    r"(?P<y_abs>\+-\d+|\+\d+|\-\d+)$"
 )
 
 
@@ -260,8 +262,17 @@ def place_inside_rect(
     return max(left, min(x, max_x)), max(top, min(y, max_y))
 
 
-def parse_tk_geometry(value: object) -> tuple[int, int, int, int] | None:
-    """Parse a complete Tk geometry string into width, height, x and y."""
+def parse_tk_geometry(
+    value: object,
+    *,
+    legacy_reference_rect: tuple[int, int, int, int] | None = None,
+) -> tuple[int, int, int, int] | None:
+    """Parse Tk geometry into absolute virtual-desktop coordinates.
+
+    New DWM geometries encode negative absolute coordinates as "+-1250".
+    Historical "-1250" syntax is Tk edge-relative, so it is converted only
+    when the caller supplies the virtual-desktop reference rectangle.
+    """
     match = _TK_GEOMETRY_PATTERN.fullmatch(str(value or "").strip())
     if match is None:
         return None
@@ -269,7 +280,29 @@ def parse_tk_geometry(value: object) -> tuple[int, int, int, int] | None:
     height = int(match.group("height"))
     if width <= 0 or height <= 0:
         return None
-    return width, height, int(match.group("x")), int(match.group("y"))
+
+    def decode(raw: str, *, size: int, high: int) -> int | None:
+        if raw.startswith("+-"):
+            return -int(raw[2:])
+        if raw.startswith("+"):
+            return int(raw[1:])
+        if legacy_reference_rect is None:
+            return None
+        offset = int(raw[1:])
+        return high - size - offset
+
+    x_raw = match.group("x_abs")
+    y_raw = match.group("y_abs")
+    if legacy_reference_rect is None:
+        x = decode(x_raw, size=width, high=0)
+        y = decode(y_raw, size=height, high=0)
+    else:
+        _left, _top, right, bottom = legacy_reference_rect
+        x = decode(x_raw, size=width, high=right)
+        y = decode(y_raw, size=height, high=bottom)
+    if x is None or y is None:
+        return None
+    return width, height, x, y
 
 
 def recover_window_position(
@@ -325,4 +358,5 @@ def recover_window_position(
 
 
 def format_tk_geometry(width: int, height: int, x: int, y: int) -> str:
-    return f"{int(width)}x{int(height)}{int(x):+d}{int(y):+d}"
+    """Encode absolute coordinates, including monitors left/above the origin."""
+    return f"{int(width)}x{int(height)}+{int(x)}+{int(y)}"
