@@ -4155,11 +4155,9 @@ class WindowManagerApp:
         self.shell_attention = None
 
     def refresh_windows(self, quiet: bool = False, force: bool = False) -> bool:
-        """Scan game windows in a background thread.
-
-        - quiet=True avoids extra logs (useful for auto-refresh).
-        - force=True bypasses debounce.
-        """
+        """Scan game windows in a background thread."""
+        if self._stop_event.is_set():
+            return False
         if self._refresh_inflight:
             if force:
                 self._refresh_again_requested = True
@@ -4174,19 +4172,35 @@ class WindowManagerApp:
         self._refresh_inflight = True
         self._scan_started_monotonic = now
         mode_revision = self._game_mode_revision
+        structure_generation = self._structure_generation
         scan_mode = self.game_mode
         game_label = self.game_label
+        retro_title_keyword = self.settings.retro_title_keyword
+        retro_process_keyword = self.settings.retro_process_keyword
         if not quiet:
             self._log(f"Scan des fenêtres {game_label}...")
 
-        def worker():
+        def worker() -> None:
             try:
-                wins = list_game_windows(scan_mode, self.settings.retro_title_keyword, self.settings.retro_process_keyword)
+                wins = list_game_windows(
+                    scan_mode,
+                    retro_title_keyword,
+                    retro_process_keyword,
+                )
                 enum_error = get_last_enum_error()
                 if not wins and enum_error:
-                    self._queue.put(("error", mode_revision, f"Erreur scan Win32: {enum_error}"))
+                    self._queue.put(
+                        (
+                            "error",
+                            mode_revision,
+                            structure_generation,
+                            f"Erreur scan Win32: {enum_error}",
+                        )
+                    )
                 else:
-                    self._queue.put(("windows", mode_revision, wins))
+                    self._queue.put(
+                        ("windows", mode_revision, structure_generation, wins)
+                    )
                     if not wins:
                         candidates = list_visible_dofus_candidates()
                         if candidates:
@@ -4198,18 +4212,26 @@ class WindowManagerApp:
                                 (
                                     "notice",
                                     mode_revision,
+                                    structure_generation,
                                     "Fenêtre(s) Dofus visible(s), mais non reconnue(s) par le mode "
                                     f"{game_label}: {sample}",
                                 )
                             )
-            except Exception as e:
-                self._queue.put(("error", mode_revision, f"Erreur scan: {e}"))
+            except Exception as exc:
+                self._queue.put(
+                    (
+                        "error",
+                        mode_revision,
+                        structure_generation,
+                        f"Erreur scan: {exc}",
+                    )
+                )
 
-        threading.Thread(target=worker, daemon=True).start()
+        threading.Thread(target=worker, name="DWMWindowScan", daemon=True).start()
         return True
 
     def _finish_refresh(self) -> None:
-        """Publish scan completion and run one explicitly queued refresh."""
+        """Publish completion and coalesce one requested catch-up scan."""
         if self._scan_started_monotonic is not None:
             self.runtime_metrics.record_scan(
                 time.monotonic() - self._scan_started_monotonic
@@ -4218,32 +4240,55 @@ class WindowManagerApp:
         self._refresh_inflight = False
         self._scan_revision += 1
         self._publish_streamdeck_state()
-        if self._refresh_again_requested:
+        if self._refresh_again_requested and not self._stop_event.is_set():
             self._refresh_again_requested = False
-            self.root.after(0, lambda: self.refresh_windows(quiet=True, force=True))
+            self.root.after(
+                0,
+                lambda: self.refresh_windows(quiet=True, force=True),
+            )
 
     def _apply_windows(self, wins: list[GameWindow]):
-        # Update map
+        old_map = self._all_windows
         new_map = {w.hwnd: w for w in wins}
+        reused_hwnds = {
+            hwnd
+            for hwnd, window in new_map.items()
+            if hwnd in old_map and not same_window_identity(old_map[hwnd], window)
+        }
+
+        # A reused HWND belongs to a new identity. Never transfer runtime state
+        # (ignore/attention/order/active selection) from the previous character.
+        for hwnd in reused_hwnds:
+            self._ignored.discard(hwnd)
+            self.attention_state.clear(hwnd)
+            if self._active_game_hwnd == hwnd:
+                self._active_game_hwnd = None
+            if hwnd in self._managed_order:
+                self._managed_order.remove(hwnd)
+            if hwnd in self._streamdeck_order:
+                self._streamdeck_order.remove(hwnd)
+
         self._ignored = {
-            hwnd for hwnd in self._ignored
-            if hwnd in new_map and hwnd in self._all_windows
-            and character_key(new_map[hwnd].pseudo) == character_key(self._all_windows[hwnd].pseudo)
+            hwnd
+            for hwnd in self._ignored
+            if hwnd in new_map
+            and hwnd in old_map
+            and same_window_identity(old_map[hwnd], new_map[hwnd])
         }
         self._all_windows = new_map
         self.attention_state.discard_unknown(new_map.keys())
         if self._active_game_hwnd not in new_map:
             self._active_game_hwnd = None
 
-        # Compute a lightweight signature to detect whether the scan changed.
         new_sig = tuple(sorted((w.hwnd, w.title) for w in wins))
-        unchanged = new_sig == self._windows_sig
+        unchanged = new_sig == self._windows_sig and not reused_hwnds
         self._windows_sig = new_sig
 
-        # If nothing changed, just update the timestamp and skip rebuilding the UI.
         if unchanged:
             self.last_update_time.set(datetime.now().strftime("Dernier scan: %H:%M:%S"))
             return
+
+        self._structure_generation = getattr(self, "_structure_generation", 0) + 1
 
         # Heuristic: detect privilege mismatch (Dofus launched as admin but this tool isn't).
         # This can make focus/hotkeys feel "random" on some setups.
@@ -4292,99 +4337,282 @@ class WindowManagerApp:
     def _schedule_refresh(self):
         if self._stop_event.is_set():
             return
-        if self.auto_refresh_enabled.get():
-            self.refresh_windows(quiet=True)
-        hook = getattr(self, "win_events", None)
+        delay_seconds = max(2, int(getattr(self, "_scheduled_refresh_delay_seconds", 5)))
         try:
-            hook_healthy = bool(hook and hook.is_running())
-        except Exception:
-            hook_healthy = False
-        delay_seconds = adaptive_refresh_delay_seconds(
-            self.settings.refresh_seconds,
-            enabled=bool(getattr(self.settings, "adaptive_performance_enabled", True)),
-            event_hook_healthy=hook_healthy,
-            has_windows=bool(self._all_windows),
-        )
-        self._scheduled_refresh_delay_seconds = delay_seconds
-        self.root.after(delay_seconds * 1000, self._schedule_refresh)
+            if self.auto_refresh_enabled.get():
+                self.refresh_windows(quiet=True)
+            hook = getattr(self, "win_events", None)
+            try:
+                hook_healthy = bool(hook and hook.is_running())
+            except Exception:
+                hook_healthy = False
+            delay_seconds = adaptive_refresh_delay_seconds(
+                self.settings.refresh_seconds,
+                enabled=bool(
+                    getattr(self.settings, "adaptive_performance_enabled", True)
+                ),
+                event_hook_healthy=hook_healthy,
+                has_windows=bool(self._all_windows),
+            )
+            self._scheduled_refresh_delay_seconds = delay_seconds
+        except Exception as exc:
+            try:
+                self._log(f"Actualisation automatique : {exc}")
+            except Exception:
+                pass
+        finally:
+            if not self._stop_event.is_set():
+                self.root.after(delay_seconds * 1000, self._schedule_refresh)
 
     def _on_toggle_autorefresh(self):
         self.settings.auto_refresh = bool(self.auto_refresh_enabled.get())
         save_settings(self.settings_path, self.settings)
 
-    def _process_queue(self):
+    def _process_queue_item(self, item: object) -> None:
+        if not isinstance(item, tuple) or not item:
+            return
+        kind = item[0]
+
+        if kind == "windows":
+            mode_revision = int(item[1])
+            generation = int(item[2])
+            try:
+                if (
+                    mode_revision != self._game_mode_revision
+                    or generation != self._structure_generation
+                ):
+                    self._refresh_again_requested = True
+                    return
+                self._apply_windows(item[3])
+            finally:
+                self._finish_refresh()
+            return
+
+        if kind == "error":
+            mode_revision = int(item[1])
+            generation = int(item[2])
+            try:
+                if (
+                    mode_revision == self._game_mode_revision
+                    and generation == self._structure_generation
+                ):
+                    self._log(str(item[3]))
+                else:
+                    self._refresh_again_requested = True
+            finally:
+                self._finish_refresh()
+            return
+
+        if kind == "notice":
+            if int(item[1]) == self._game_mode_revision:
+                self._log(str(item[3]))
+            return
+
+        if kind == "streamdeck":
+            request = item[1]
+            if isinstance(request, _QueuedStreamDeckCommand):
+                if not request.try_start():
+                    return
+                try:
+                    result = self._execute_streamdeck_command(
+                        request.command,
+                        request.payload,
+                    )
+                except Exception as exc:
+                    result = _command_error(
+                        str(exc) or "Commande indisponible.",
+                        "command_failed",
+                        503,
+                        execution="started",
+                    )
+                request.complete(result)
+                return
+
+            # Backward-compatible handling for an in-process legacy producer.
+            response_queue = item[3]
+            try:
+                result = self._execute_streamdeck_command(str(item[1]), item[2])
+            except Exception as exc:
+                result = _command_error(
+                    str(exc) or "Commande indisponible.",
+                    "command_failed",
+                    503,
+                    execution="started",
+                )
+            try:
+                response_queue.put_nowait(result)
+            except queue.Full:
+                pass
+            return
+
+        if kind == "wevt":
+            if len(item) >= 5:
+                mode_revision = int(item[1])
+                hook_generation = int(item[2])
+                event_name = str(item[3])
+                hwnd = int(item[4])
+                if (
+                    mode_revision != self._game_mode_revision
+                    or hook_generation != self._event_hook_generation
+                ):
+                    return
+            else:
+                event_name = str(item[1])
+                hwnd = int(item[2])
+            self._apply_win_event(event_name, hwnd)
+            return
+
+        if kind == "tray":
+            self._handle_tray_action(
+                str(item[1]),
+                str(item[2]) if len(item) > 2 else "",
+            )
+            return
+
+        if kind == "update_check":
+            self._finish_update_check(
+                manual=bool(item[1]),
+                result=item[2] if isinstance(item[2], UpdateCheckResult) else None,
+                error=str(item[3] or ""),
+                checked_at=str(item[4] or ""),
+            )
+
+    def _reject_pending_streamdeck_commands(self) -> None:
         while True:
             try:
                 item = self._queue.get_nowait()
             except queue.Empty:
-                break
+                return
+            try:
+                if (
+                    isinstance(item, tuple)
+                    and item
+                    and item[0] == "streamdeck"
+                ):
+                    if len(item) >= 2 and isinstance(
+                        item[1], _QueuedStreamDeckCommand
+                    ):
+                        item[1].cancel_if_queued(
+                            "L'application est en cours de fermeture.",
+                            "closing",
+                            503,
+                        )
+                    elif len(item) >= 4:
+                        try:
+                            item[3].put_nowait(
+                                _command_error(
+                                    "L'application est en cours de fermeture.",
+                                    "closing",
+                                    503,
+                                )
+                            )
+                        except queue.Full:
+                            pass
+            finally:
+                self._queue.task_done()
 
-            kind = item[0]
-            if kind == "windows":
-                if int(item[1]) == self._game_mode_revision:
-                    self._apply_windows(item[2])
-                self._finish_refresh()
-            elif kind == "error":
-                if int(item[1]) == self._game_mode_revision:
-                    self._log(str(item[2]))
-                self._finish_refresh()
-            elif kind == "notice":
-                if int(item[1]) == self._game_mode_revision:
-                    self._log(str(item[2]))
-            elif kind == "streamdeck":
-                response_queue = item[3]
+    def _process_queue(self):
+        if self._stop_event.is_set():
+            self._reject_pending_streamdeck_commands()
+            return
+
+        processed = 0
+        while processed < QUEUE_BATCH_LIMIT:
+            try:
+                item = self._queue.get_nowait()
+            except queue.Empty:
+                break
+            processed += 1
+            try:
+                if self._stop_event.is_set():
+                    if (
+                        isinstance(item, tuple)
+                        and item
+                        and item[0] == "streamdeck"
+                        and len(item) >= 2
+                        and isinstance(item[1], _QueuedStreamDeckCommand)
+                    ):
+                        item[1].cancel_if_queued(
+                            "L'application est en cours de fermeture.",
+                            "closing",
+                            503,
+                        )
+                    continue
+                self._process_queue_item(item)
+            except Exception as exc:
                 try:
-                    result = self._execute_streamdeck_command(str(item[1]), item[2])
-                except Exception as exc:
-                    result = {"ok": False, "error": str(exc), "_status": 503}
-                try:
-                    response_queue.put_nowait(result)
-                except queue.Full:
-                    pass
-            elif kind == "wevt":
-                # Window event hook notifications (create/destroy/namechange)
-                try:
-                    _evt, _hwnd = item[1], int(item[2])
-                    self._apply_win_event(str(_evt), _hwnd)
+                    self._log(f"File d'événements : {exc}")
                 except Exception:
                     pass
-            elif kind == "tray":
-                self._handle_tray_action(str(item[1]), str(item[2]) if len(item) > 2 else "")
-            elif kind == "update_check":
-                self._finish_update_check(
-                    manual=bool(item[1]),
-                    result=item[2] if isinstance(item[2], UpdateCheckResult) else None,
-                    error=str(item[3] or ""),
-                    checked_at=str(item[4] or ""),
-                )
+            finally:
+                self._queue.task_done()
 
-            self._queue.task_done()
-            if self._stop_event.is_set():
-                return
+        if self._stop_event.is_set():
+            self._reject_pending_streamdeck_commands()
+            return
 
-        if not self._stop_event.is_set():
-            try:
-                self._sync_tray_state()
-            except Exception:
-                # A tray/UI-state issue must never stop the main Tk queue.
-                # WinEvent notifications also pass through this queue, so losing
-                # the recurring callback would stop automatic Dofus window updates.
-                pass
-            self.root.after(100, self._process_queue)
+        try:
+            self._sync_tray_state()
+        except Exception:
+            pass
+
+        # Yield to Tk after a bounded batch so a continuously-fed queue cannot
+        # starve redraws, input or shutdown callbacks.
+        delay_ms = 0 if processed >= QUEUE_BATCH_LIMIT else 100
+        self.root.after(delay_ms, self._process_queue)
 
     # ---------------------------- Stream Deck bridge ----------------------------
 
-    def _dispatch_streamdeck_command(self, command: str, payload: dict[str, object]) -> dict[str, object]:
-        """Queue a bridge command so every Tk/Win32 mutation stays on the UI thread."""
+    def _dispatch_streamdeck_command(
+        self,
+        command: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        """Queue one atomic UI mutation with a deadline."""
         if self._stop_event.is_set():
-            return {"ok": False, "error": "L'application est en cours de fermeture.", "_status": 503}
+            return _command_error(
+                "L'application est en cours de fermeture.",
+                "closing",
+                503,
+            )
 
-        response_queue: "queue.Queue[dict[str, object]]" = queue.Queue(maxsize=1)
-        self._queue.put(("streamdeck", command, payload, response_queue))
+        clean_payload = dict(payload)
+        bridge_meta = clean_payload.pop("_bridge", {})
+        if not isinstance(bridge_meta, dict):
+            bridge_meta = {}
+        request_id = str(bridge_meta.get("request_id") or "")
         try:
-            return response_queue.get(timeout=2.0)
-        except queue.Empty as exc:
-            raise TimeoutError("Délai de réponse de l'interface dépassé.") from exc
+            deadline = float(bridge_meta.get("deadline_monotonic"))
+        except (TypeError, ValueError):
+            deadline = time.monotonic() + 1.7
+
+        request = _QueuedStreamDeckCommand(
+            command,
+            clean_payload,
+            request_id=request_id,
+            deadline=deadline,
+        )
+        self._queue.put(("streamdeck", request))
+
+        timeout = max(0.01, deadline - time.monotonic())
+        try:
+            return request.response.get(timeout=timeout)
+        except queue.Empty:
+            if request.cancel_if_queued(
+                "La commande a expiré avant son exécution.",
+                "command_expired",
+                504,
+            ):
+                try:
+                    return request.response.get_nowait()
+                except queue.Empty:
+                    pass
+            return _command_error(
+                "La commande a commencé mais sa réponse n'est pas arrivée à temps.",
+                "command_timeout_after_start",
+                504,
+                execution=request.state,
+            )
 
     def _execute_streamdeck_command(self, command: str, payload: dict[str, object]) -> dict[str, object]:
         if command == "show":
