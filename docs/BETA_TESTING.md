@@ -135,3 +135,58 @@ Les tests automatisés couvrent les transitions de contexte via des API Windows 
 - Accepter puis annuler le choix du fichier : aucun ZIP créé.
 - Accepter et enregistrer : vérifier le ZIP anonymisé et l’absence d’envoi réseau.
 - Ouvrir une deuxième instance : aucune fausse alerte sur la première encore ouverte.
+
+
+## Campagne de validation — durcissement après audit Astra
+
+Cette section concerne la branche de durcissement issue de l’audit de `v2.20.0-beta.6`. Elle ne constitue pas une nouvelle release. Identifiez toujours le test par son commit.
+
+### Runtime et fermeture
+
+- Pendant un scan, ouvrir une Combobox puis ouvrir/fermer rapidement plusieurs clients : l’interface et les actualisations suivantes doivent continuer.
+- Provoquer une rafale Suivant/Précédent puis quitter immédiatement : aucune rotation ne doit se produire après le début de la fermeture.
+- Quitter avec le plugin Stream Deck connecté et des commandes en cours, puis relancer immédiatement : aucune commande de l’ancienne instance ne doit agir sur la nouvelle.
+
+### Focus et identité des fenêtres
+
+- Tester un client déjà actif, minimisé et un cas où Windows refuse le focus ; le comportement de focus existant doit rester inchangé.
+- Fermer puis reconnecter un personnage, notamment pendant une actualisation : un HWND réutilisé ne doit jamais hériter de l’identité, de l’état ignoré ou d’une alerte du personnage précédent.
+- Répéter avec 0, 1 puis 8 clients Unity et Retro et vérifier ordre, emplacements fixes, profils et raccourcis.
+
+### OBS
+
+Conserver les sources Window Capture OBS déjà configurées pendant toute la séquence :
+
+1. changer la palette ;
+2. verrouiller/déverrouiller l’overlay ;
+3. modifier les dimensions automatiques/manuelles ;
+4. changer de mode Unity/Retro ;
+5. provoquer plusieurs popups de focus très rapprochés.
+
+L’overlay persistant et le popup doivent conserver leur fenêtre de capture lors des mises à jour ordinaires. La surface magenta inactive du popup est volontairement inchangée dans cette passe et doit être testée avec le Color Key existant.
+
+### Stream Deck
+
+- Démarrer le plugin avant le backend, démarrer DWM ensuite puis redémarrer DWM : la reconnexion automatique doit fonctionner.
+- Tester une requête volontairement retardée : une mutation `focus`, `rotate` ou `next-attention` ne doit produire qu’un seul effet.
+- Tester une cible fermée juste avant le focus et, si possible, Stream Deck/DWM à niveaux de privilèges différents.
+- Vérifier que changer de mode ou de profil entre l’affichage d’une touche et son activation provoque un refus de contexte, pas une mutation sur la nouvelle équipe.
+
+### Multi-écran et DPI
+
+- Tester un écran à gauche puis un écran au-dessus du principal ; les positions X/Y négatives doivent être conservées.
+- Débrancher/rebrancher l’écran choisi.
+- Tester 100 %, 125 %, 150 % et 200 %, puis deux écrans avec DPI différents si disponible.
+- Vérifier particulièrement le mode compact après sauvegarde puis relance sur une position négative.
+
+### Watcher Retro facultatif
+
+Le build principal ne doit pas recevoir les dépendances du watcher. Pour la variante facultative :
+
+- construire séparément avec `python build_exe.py --with-popup` ;
+- relever la version réellement résolue avec `\.\.venv-build-popup\Scripts\python.exe -m pip show windows-capture` ;
+- ouvrir/fermer/recréer rapidement deux fenêtres Retro ayant un titre identique ou changeant ;
+- quitter pendant une capture active ;
+- vérifier qu’une ancienne frame ou fermeture ne déclenche pas de focus sur la capture de remplacement.
+
+Un test mocké du watcher ne vaut pas validation de `windows-capture` ou de Windows Graphics Capture réel.
