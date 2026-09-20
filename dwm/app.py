@@ -2397,7 +2397,7 @@ class WindowManagerApp:
         )
 
     def _focus_hwnd_measured(self, hwnd: int) -> None:
-        if self._is_stopping():
+        if WindowManagerApp._is_stopping(self):
             raise FocusError("L'application est en cours de fermeture.")
         expected = self._all_windows.get(hwnd)
         if expected is None:
@@ -2541,7 +2541,7 @@ class WindowManagerApp:
             button.configure(state=("normal" if count else "disabled"))
 
     def _poll_active_game_window(self) -> None:
-        if self._is_stopping():
+        if WindowManagerApp._is_stopping(self):
             return
         overlay_ui = getattr(self, "overlay_ui", None)
         if overlay_ui is not None and overlay_ui.has_visible_character_list:
@@ -2563,7 +2563,7 @@ class WindowManagerApp:
         self._start_update_check(manual=True)
 
     def _start_update_check(self, *, manual: bool) -> None:
-        if self._is_stopping():
+        if WindowManagerApp._is_stopping(self):
             return
         if self._update_check_inflight:
             if manual:
@@ -2607,7 +2607,7 @@ class WindowManagerApp:
         threading.Thread(target=worker, name="DWMUpdateCheck", daemon=True).start()
 
         def poll_result() -> None:
-            if self._is_stopping():
+            if WindowManagerApp._is_stopping(self):
                 return
             try:
                 result, error, checked_at = results.get_nowait()
@@ -3633,7 +3633,7 @@ class WindowManagerApp:
         TtkButton(buttons, text="Fermer", command=win.destroy).pack(side="right")
 
     def offer_interrupted_session_diagnostic(self) -> None:
-        if self._is_stopping():
+        if WindowManagerApp._is_stopping(self):
             return
         self._log("La session précédente s’est terminée anormalement.")
         if messagebox.askyesno(
@@ -4044,7 +4044,7 @@ class WindowManagerApp:
 
     def switch_game_mode(self, game_mode: str) -> bool:
         """Switch Unity/Retro immediately without restarting the application."""
-        if self._is_stopping():
+        if WindowManagerApp._is_stopping(self):
             return False
         new_mode = normalize_game_mode(game_mode, self.game_mode)
         if new_mode == self.game_mode:
@@ -4177,7 +4177,7 @@ class WindowManagerApp:
         - quiet=True avoids extra logs (useful for auto-refresh).
         - force=True bypasses debounce.
         """
-        if self._is_stopping():
+        if WindowManagerApp._is_stopping(self):
             return False
         if self._refresh_inflight:
             if force:
@@ -4357,7 +4357,7 @@ class WindowManagerApp:
         self._update_popup_watcher_targets()
 
     def _schedule_refresh(self):
-        if self._is_stopping():
+        if WindowManagerApp._is_stopping(self):
             return
 
         delay_seconds = max(1, int(getattr(self.settings, "refresh_seconds", 10)))
@@ -4410,7 +4410,7 @@ class WindowManagerApp:
                 processed += 1
                 kind = item[0]
                 try:
-                    if self._is_stopping():
+                    if WindowManagerApp._is_stopping(self):
                         if kind == "streamdeck":
                             request = item[1]
                             if isinstance(request, _StreamDeckRequest):
@@ -4423,7 +4423,10 @@ class WindowManagerApp:
                                         "_status": 503,
                                     }
                                 )
-                        elif kind in {"windows", "error"}:
+                        elif (
+                            kind in {"windows", "error"}
+                            and bool(getattr(self, "_refresh_inflight", False))
+                        ):
                             self._finish_refresh()
                         continue
 
@@ -4516,7 +4519,7 @@ class WindowManagerApp:
                 finally:
                     self._queue.task_done()
         finally:
-            if self._is_stopping():
+            if WindowManagerApp._is_stopping(self):
                 return
             try:
                 self._sync_tray_state()
@@ -4532,7 +4535,7 @@ class WindowManagerApp:
 
     def _dispatch_streamdeck_command(self, command: str, payload: dict[str, object]) -> dict[str, object]:
         """Queue one command with an atomic deadline-aware lifecycle."""
-        if self._is_stopping():
+        if WindowManagerApp._is_stopping(self):
             return {
                 "ok": False,
                 "error": "L'application est en cours de fermeture.",
@@ -4569,7 +4572,7 @@ class WindowManagerApp:
             }
 
     def _execute_streamdeck_command(self, command: str, payload: dict[str, object]) -> dict[str, object]:
-        if self._is_stopping():
+        if WindowManagerApp._is_stopping(self):
             return {
                 "ok": False,
                 "error": "L'application est en cours de fermeture.",
@@ -4929,7 +4932,7 @@ class WindowManagerApp:
 
     def _request_ui_update(self):
         """Debounce UI rebuilds (listboxes) when many events arrive quickly."""
-        if self._is_stopping():
+        if WindowManagerApp._is_stopping(self):
             return
         if self._ui_update_pending:
             return
@@ -4938,7 +4941,7 @@ class WindowManagerApp:
 
     def _do_ui_update(self):
         self._ui_update_pending = False
-        if self._is_stopping():
+        if WindowManagerApp._is_stopping(self):
             return
         self.last_update_time.set(datetime.now().strftime("Maj: %H:%M:%S"))
         self.update_listboxes()
@@ -4949,7 +4952,7 @@ class WindowManagerApp:
 
         This avoids full scans: we only query the single hwnd's class/title.
         """
-        if self._is_stopping():
+        if WindowManagerApp._is_stopping(self):
             return
 
         evt = (evt or "").strip().lower()
@@ -5218,7 +5221,7 @@ class WindowManagerApp:
 
     def request_rotation(self, direction: str) -> bool:
         """Coalesce rapid UI/hotkey presses and focus only the final target."""
-        if self._is_stopping():
+        if WindowManagerApp._is_stopping(self):
             return False
         if direction not in {"forward", "backward"} or not self._managed_order:
             return False
@@ -5232,7 +5235,7 @@ class WindowManagerApp:
 
     def _flush_rotation_requests(self) -> None:
         self._rotation_request_job = None
-        if self._is_stopping():
+        if WindowManagerApp._is_stopping(self):
             self._pending_rotation_delta = 0
             return
         delta = self._pending_rotation_delta
@@ -6884,7 +6887,7 @@ class WindowManagerApp:
     def _process_popup_events(self):
         """Poll popup events emitted by the watcher; runs on Tk thread."""
         # If app is closing, stop polling
-        if self._is_stopping():
+        if WindowManagerApp._is_stopping(self):
             return
 
         while True:
@@ -6987,7 +6990,7 @@ class WindowManagerApp:
         self._log(tr("Raccourcis suspendus") if self._hotkeys_paused else tr("Raccourcis réactivés"))
 
     def _check_hotkey_errors(self):
-        if self._is_stopping():
+        if WindowManagerApp._is_stopping(self):
             return
 
         # Watchdog: restart the listener if it stopped.
@@ -7013,7 +7016,7 @@ class WindowManagerApp:
 # ---------------------------- Lifecycle ----------------------------
 
     def on_close(self, *, force: bool = False):
-        if self._is_stopping():
+        if WindowManagerApp._is_stopping(self):
             return
         if not force and self.settings.minimize_to_tray and self.tray.is_running:
             self._hide_main_window()
