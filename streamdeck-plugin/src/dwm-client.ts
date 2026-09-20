@@ -56,7 +56,7 @@ export type BridgeState = {
 
 type Listener = (state: BridgeState) => void;
 
-class DwmClient {
+export class DwmClient {
 	private readonly listeners = new Set<Listener>();
 	private state: BridgeState = { connected: false };
 	private timer?: NodeJS.Timeout;
