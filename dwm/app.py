@@ -6893,7 +6893,11 @@ class WindowManagerApp:
         self.root.after(50, self._process_popup_events)
 
     def _handle_popup_event(self, evt: PopupEvent) -> None:
-        if not self._popup_watch_enabled:
+        if not self._popup_watch_enabled or self._stop_event.is_set():
+            return
+
+        watcher = self.popup_watcher
+        if watcher is None or not watcher.is_current_event(evt):
             return
 
         hwnd = int(evt.hwnd)
@@ -6905,13 +6909,19 @@ class WindowManagerApp:
         if now < self._popup_global_cooldown_until:
             return
 
+        previous_rotation_index = self.rotation_index
         try:
-            self.rotation_index = self._managed_order.index(hwnd)
             self._focus_hwnd_measured(hwnd)
+            # Revalidate the watcher generation once more after the potentially
+            # slow Win32 focus operation.
+            if self.popup_watcher is None or not self.popup_watcher.is_current_event(evt):
+                self.rotation_index = previous_rotation_index
+                return
             self._record_character_focus(hwnd, notify=True)
             self._popup_global_cooldown_until = now + self._popup_global_cooldown_sec
             self._log(f"Popup détecté → focus {evt.title}")
-        except (FocusError, ValueError) as exc:
+        except FocusError as exc:
+            self.rotation_index = previous_rotation_index
             self._log(f"PopupWatch focus échoué: {exc}")
 
     def _register_hotkeys(self):
