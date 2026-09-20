@@ -711,6 +711,7 @@ class WindowManagerApp:
         # ---- Optional Retro in-game popup watcher (Groupe/Echange) ----
         # Works best when windows are stacked (off-screen capture via Windows Graphics Capture).
         self.popup_watcher = None
+        self._popup_watcher_generation = 0
         self._popup_event_pump_started = False
         self._popup_queue = queue.SimpleQueue()
         # Global cooldown to avoid ping-pong when multiple popups are detected at once
@@ -721,10 +722,12 @@ class WindowManagerApp:
         if self.game_mode == "retro" and _POPUP_WATCH_AVAILABLE and self._popup_watch_enabled:
             try:
                 # Emit into a thread-safe queue; handled on the Tk thread.
+                self._popup_watcher_generation += 1
                 self.popup_watcher = RetroPopupWatcher(
                     emit=lambda evt: self._popup_queue.put(evt),
                     max_fps_per_window=4.0,
                     cooldown_sec=2.0,
+                    generation_seed=self._popup_watcher_generation,
                 )
                 self.popup_watcher.set_enabled(self._popup_watch_enabled)
                 self._ensure_popup_event_pump()
@@ -6794,10 +6797,14 @@ class WindowManagerApp:
         # Lazy-init if user enables it later
         if self._popup_watch_enabled and self.popup_watcher is None and _POPUP_WATCH_AVAILABLE:
             try:
+                self._popup_watcher_generation = (
+                    getattr(self, "_popup_watcher_generation", 0) + 1
+                )
                 self.popup_watcher = RetroPopupWatcher(
                     emit=lambda evt: self._popup_queue.put(evt),
                     max_fps_per_window=4.0,
                     cooldown_sec=2.0,
+                    generation_seed=self._popup_watcher_generation,
                 )
                 self.popup_watcher.set_enabled(True)
                 self._ensure_popup_event_pump()
