@@ -193,16 +193,14 @@ class RetroPopupWatcher:
                 self._stop_controls([control])
 
     def _on_closed(self, hwnd: int, generation: int) -> None:
-        control: CaptureControl | None = None
         with self._lock:
             state = self._state.get(hwnd)
             if state is None or state.generation != generation:
                 return
-            control = self._detach_locked(hwnd)
-        # A callback may be running from the same capture thread. Do not call
-        # stop while holding the lock; best effort outside it is safe/idempotent.
-        if control is not None:
-            self._stop_controls([control])
+            # The capture is already closing and this callback can run on its
+            # capture thread. Invalidate it, but never call stop() recursively
+            # from the close callback itself.
+            self._detach_locked(hwnd)
 
     def shutdown(self) -> None:
         with self._lock:
