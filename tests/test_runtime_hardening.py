@@ -68,6 +68,32 @@ class RuntimeHardeningTests(unittest.TestCase):
             error="Résultat de scan périmé ignoré.",
         )
 
+    def test_expired_streamdeck_request_is_never_executed(self) -> None:
+        app = self.make_queue_app()
+        response = queue.Queue(maxsize=1)
+        request_type = __import__(
+            "dwm.app",
+            fromlist=["_QueuedStreamDeckRequest"],
+        )._QueuedStreamDeckRequest
+        request = request_type(
+            command="rotate",
+            payload={"direction": "forward"},
+            response_queue=response,
+            request_id="req-expired",
+            deadline=0.0,
+        )
+        app._queue.put(("streamdeck", request))
+        app._execute_streamdeck_command = Mock()
+
+        app._process_queue()
+
+        result = response.get_nowait()
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["code"], "request_expired")
+        self.assertEqual(result["request_id"], "req-expired")
+        self.assertEqual(request.state, "expired")
+        app._execute_streamdeck_command.assert_not_called()
+
     def test_shutdown_rejects_queued_streamdeck_command_without_mutating(self) -> None:
         app = self.make_queue_app()
         app._stop_event.set()
