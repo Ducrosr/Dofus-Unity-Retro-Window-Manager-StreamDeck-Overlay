@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import unittest
 
 from dwm.models import GameWindow
@@ -59,12 +60,37 @@ class DisplayOverlayTests(unittest.TestCase):
         self.assertEqual(clamp_notification_duration(9000), 5000)
         self.assertEqual(normalize_overlay_orientation("horizontal"), "horizontal")
         self.assertEqual(normalize_overlay_orientation("diagonal"), "vertical")
-        self.assertEqual(format_tk_geometry(320, 90, -25, 40), "320x90-25+40")
+        self.assertEqual(format_tk_geometry(320, 90, -25, 40), "320x90+-25+40")
 
-    def test_tk_geometry_parser_supports_negative_monitor_coordinates(self) -> None:
-        self.assertEqual(parse_tk_geometry("340x260-1250+40"), (340, 260, -1250, 40))
+    def test_tk_geometry_parser_supports_absolute_negative_monitor_coordinates(self) -> None:
+        self.assertEqual(
+            parse_tk_geometry("340x260+-1250+40"),
+            (340, 260, -1250, 40),
+        )
+        self.assertIsNone(parse_tk_geometry("340x260-1250+40"))
+        self.assertEqual(
+            parse_tk_geometry(
+                "340x260-1250+40",
+                legacy_bounds=(0, 0, 1920, 1080),
+            ),
+            (340, 260, 330, 40),
+        )
         self.assertIsNone(parse_tk_geometry("340x260"))
         self.assertIsNone(parse_tk_geometry("0x260+20+40"))
+
+    @unittest.skipUnless(os.name == "nt", "Tk window coordinates require Windows")
+    def test_tk_reports_explicit_negative_geometry_as_absolute(self) -> None:
+        from tkinter import Tk
+
+        root = Tk()
+        try:
+            root.geometry(format_tk_geometry(220, 100, -240, 70))
+            root.update_idletasks()
+            root.update()
+            self.assertEqual(root.winfo_x(), -240)
+            self.assertEqual(root.winfo_y(), 70)
+        finally:
+            root.destroy()
 
     def test_visible_position_on_secondary_monitor_is_preserved(self) -> None:
         displays = ((-1920, 0, 0, 1080), (0, 0, 1920, 1080))
