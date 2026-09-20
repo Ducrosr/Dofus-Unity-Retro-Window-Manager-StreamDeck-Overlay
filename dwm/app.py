@@ -4291,6 +4291,10 @@ class WindowManagerApp:
         for hwnd in replaced_hwnds:
             self._ignored.discard(hwnd)
             self.attention_state.clear(hwnd)
+            if hwnd in self._managed_order:
+                self._managed_order.remove(hwnd)
+            if hwnd in self._streamdeck_order:
+                self._streamdeck_order.remove(hwnd)
             if self._active_game_hwnd == hwnd:
                 self._active_game_hwnd = None
         self._ignored = {
@@ -5031,15 +5035,24 @@ class WindowManagerApp:
                 changed_structure = True
             elif prev.title != gw.title or prev.pseudo != gw.pseudo or prev.character_class != gw.character_class:
                 # A title change also requires updating an optional capture target.
-                if (
+                identity_changed = (
                     character_key(prev.pseudo) != character_key(gw.pseudo)
                     or (prev.pid and gw.pid and prev.pid != gw.pid)
-                ):
+                )
+                if identity_changed:
                     self._ignored.discard(hwnd)
                     self.attention_state.clear(hwnd)
+                    if hwnd in self._managed_order:
+                        self._managed_order.remove(hwnd)
+                    if hwnd in self._streamdeck_order:
+                        self._streamdeck_order.remove(hwnd)
                     if self._active_game_hwnd == hwnd:
                         self._active_game_hwnd = None
                 self._all_windows[hwnd] = gw
+                if hwnd not in self._streamdeck_order:
+                    self._streamdeck_order.append(hwnd)
+                if hwnd not in self._ignored and hwnd not in self._managed_order:
+                    self._managed_order.append(hwnd)
                 changed_structure = True
 
         else:
