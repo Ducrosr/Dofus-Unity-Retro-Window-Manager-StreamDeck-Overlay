@@ -28,7 +28,8 @@ DEFAULT_ROTATION_OVERLAY_LAYOUT = {
 }
 
 _TK_GEOMETRY_PATTERN = re.compile(
-    r"^(?P<width>\d+)x(?P<height>\d+)(?P<x>[+-]\d+)(?P<y>[+-]\d+)$"
+    r"^(?P<width>\d+)x(?P<height>\d+)"
+    r"(?P<x>\+-\d+|[+-]\d+)(?P<y>\+-\d+|[+-]\d+)$"
 )
 
 
@@ -260,8 +261,18 @@ def place_inside_rect(
     return max(left, min(x, max_x)), max(top, min(y, max_y))
 
 
+def _parse_absolute_geometry_axis(token: str) -> int:
+    """Decode DWM absolute coordinates, including the canonical Tk '+-N' form."""
+    if token.startswith("+-"):
+        return -int(token[2:])
+    # Plain '-N' is accepted only as the legacy DWM serialization. Historically
+    # DWM stored absolute negative coordinates this way even though Tk interprets
+    # that spelling as an offset from the right/bottom edge.
+    return int(token)
+
+
 def parse_tk_geometry(value: object) -> tuple[int, int, int, int] | None:
-    """Parse a complete Tk geometry string into width, height, x and y."""
+    """Parse DWM geometry into absolute width, height, x and y coordinates."""
     match = _TK_GEOMETRY_PATTERN.fullmatch(str(value or "").strip())
     if match is None:
         return None
@@ -269,7 +280,12 @@ def parse_tk_geometry(value: object) -> tuple[int, int, int, int] | None:
     height = int(match.group("height"))
     if width <= 0 or height <= 0:
         return None
-    return width, height, int(match.group("x")), int(match.group("y"))
+    return (
+        width,
+        height,
+        _parse_absolute_geometry_axis(match.group("x")),
+        _parse_absolute_geometry_axis(match.group("y")),
+    )
 
 
 def recover_window_position(
@@ -324,5 +340,14 @@ def recover_window_position(
     return recovered_x, recovered_y
 
 
+def _format_absolute_geometry_axis(value: int) -> str:
+    coordinate = int(value)
+    return f"+{coordinate}" if coordinate < 0 else f"+{coordinate:d}"
+
+
 def format_tk_geometry(width: int, height: int, x: int, y: int) -> str:
-    return f"{int(width)}x{int(height)}{int(x):+d}{int(y):+d}"
+    """Serialize absolute coordinates without triggering Tk edge anchoring."""
+    return (
+        f"{int(width)}x{int(height)}"
+        f"{_format_absolute_geometry_axis(x)}{_format_absolute_geometry_axis(y)}"
+    )
