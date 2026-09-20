@@ -114,6 +114,25 @@ class RuntimeReliabilityTests(unittest.TestCase):
 
         app._apply_win_event.assert_not_called()
 
+    def test_expired_queued_streamdeck_request_is_not_executed(self) -> None:
+        app = self.make_app()
+        response = queue.Queue(maxsize=1)
+        request_state = {
+            "request_id": "r-expired",
+            "state": "queued",
+            "deadline": 0.0,
+            "lock": threading.Lock(),
+        }
+
+        app._process_streamdeck_queue_item(
+            ("streamdeck", "rotate", {"direction": "forward"}, response, request_state)
+        )
+
+        app._execute_streamdeck_command.assert_not_called()
+        result = response.get_nowait()
+        self.assertEqual(result["error_code"], "request_expired")
+        self.assertEqual(result["request_id"], "r-expired")
+
     def test_cancelled_streamdeck_request_never_starts(self) -> None:
         app = self.make_app()
         response = queue.Queue(maxsize=1)
