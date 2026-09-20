@@ -83,6 +83,23 @@ class MonitorLayoutTests(unittest.TestCase):
             self.assertGreater(monitor.area[2], monitor.area[0])
             self.assertGreater(monitor.area[3], monitor.area[1])
 
+    @unittest.skipUnless(sys.platform == "win32", "Native Windows Tk geometry")
+    def test_tk_applies_absolute_negative_geometry(self):
+        import tkinter as tk
+        from dwm.services.display_overlay import format_tk_geometry
+
+        root = tk.Tk()
+        root.withdraw()
+        window = tk.Toplevel(root)
+        try:
+            window.geometry(format_tk_geometry(220, 120, -80, 45))
+            window.update_idletasks()
+            self.assertEqual(window.winfo_x(), -80)
+            self.assertEqual(window.winfo_y(), 45)
+        finally:
+            window.destroy()
+            root.destroy()
+
     @unittest.skipUnless(sys.platform == "win32", "Native Windows overlay window")
     def test_real_overlay_reanchors_after_work_area_change_and_stops_timer(self):
         import tkinter as tk
