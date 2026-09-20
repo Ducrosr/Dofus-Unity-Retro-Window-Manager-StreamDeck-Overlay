@@ -26,6 +26,7 @@ from .services.display_overlay import (
     normalize_overlay_orientation,
     parse_tk_geometry,
     place_inside_rect,
+    tk_geometry_uses_relative_negative_offset,
     recover_window_position,
 )
 from .services.character_visuals import build_avatar_image, build_badge_tile_image
@@ -448,6 +449,17 @@ class OverlayUI:
         fallback_height = max(140, min(380, 54 + len(self.entries) * 31))
         requested = parse_tk_geometry(geometry) or (340, fallback_height, 40, 120)
         width, height, x, y = requested
+        legacy_geometry = bool(geometry) and tk_geometry_uses_relative_negative_offset(geometry)
+        if legacy_geometry:
+            # Resolve old Tk edge-relative '-N' offsets once, then persist the
+            # resulting absolute virtual-desktop coordinates.
+            try:
+                window.geometry(str(geometry))
+                window.update_idletasks()
+                x = int(window.winfo_x())
+                y = int(window.winfo_y())
+            except Exception:
+                pass
         recovered_x, recovered_y = recover_window_position(
             width,
             height,
@@ -462,7 +474,9 @@ class OverlayUI:
             recovered_y,
         )
         window.geometry(recovered_geometry)
-        if geometry and (recovered_x, recovered_y) != (x, y):
+        if geometry and (
+            legacy_geometry or (recovered_x, recovered_y) != (x, y)
+        ):
             self.save_compact_geometry(recovered_geometry)
 
         toolbar = TtkFrame(window, padding=(6, 6, 6, 0))
