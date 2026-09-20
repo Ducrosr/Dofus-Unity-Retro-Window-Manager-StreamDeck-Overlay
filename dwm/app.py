@@ -7,6 +7,7 @@ import queue
 import threading
 import time
 import webbrowser
+import uuid
 from datetime import datetime
 from pathlib import Path
 from tkinter import BooleanVar, Canvas, Label as TkLabel, StringVar, Text, Tk, Toplevel, filedialog, messagebox, simpledialog
@@ -34,8 +35,10 @@ from .services.windows import (
     extract_character_class,
     extract_pseudo_retro,
     extract_pseudo_unity,
+    identify_game_window,
     list_game_windows,
     list_visible_dofus_candidates,
+    same_game_window_identity,
     suspect_privilege_mismatch,
 )
 from .services.focus import FocusError, focus_hwnd, get_foreground_hwnd, is_window
@@ -540,6 +543,9 @@ class WindowManagerApp:
         self._available_release: ReleaseInfo | None = None
         self._scan_revision = 0
         self._game_mode_revision = 0
+        self._structure_generation = 0
+        self._win_event_generation = 0
+        self._queue_batch_limit = 64
         self.streamdeck_bridge: StreamDeckBridge | None = None
         self.shell_attention: ShellAttentionHook | None = None
         self._start_minimized = bool(start_minimized)
@@ -3971,6 +3977,7 @@ class WindowManagerApp:
         self._apply_runtime_theme(selected_theme)
         self._apply_display_preferences()
         self._game_mode_revision += 1
+        self._structure_generation += 1
         self.game_mode_var.set(self.game_label)
         self.game_subtitle_var.set(
             tr("Mode {game} · gestion locale des fenêtres", game=self.game_label)
@@ -4022,10 +4029,15 @@ class WindowManagerApp:
         if not getattr(self.settings, "event_hook_enabled", True):
             return
         self._stop_win_event_hook()
+        self._win_event_generation += 1
+        hook_generation = self._win_event_generation
+        hook_mode = self.game_mode
         try:
             classes, keyword_map = win_event_filter(self.game_mode, self.settings.retro_title_keyword)
             self.win_events = WinEventHook(
-                lambda evt, hwnd: self._queue.put(("wevt", evt, hwnd)),
+                lambda evt, hwnd, generation=hook_generation, mode=hook_mode: self._queue.put(
+                    ("wevt", generation, mode, evt, hwnd)
+                ),
                 class_names=classes,
                 title_keyword_by_class=keyword_map,
             )
@@ -4034,7 +4046,9 @@ class WindowManagerApp:
             if error:
                 self._log(f"WinEventHook: {error}")
             self.shell_attention = ShellAttentionHook(
-                lambda evt, hwnd: self._queue.put(("wevt", evt, hwnd))
+                lambda evt, hwnd, generation=hook_generation, mode=hook_mode: self._queue.put(
+                    ("wevt", generation, mode, evt, hwnd)
+                )
             )
             self.shell_attention.start()
             shell_error = self.shell_attention.get_last_error()
@@ -4045,6 +4059,7 @@ class WindowManagerApp:
             self.win_events = None
 
     def _stop_win_event_hook(self) -> None:
+        self._win_event_generation += 1
         hook = getattr(self, "win_events", None)
         if hook is not None:
             try:
@@ -4061,11 +4076,9 @@ class WindowManagerApp:
         self.shell_attention = None
 
     def refresh_windows(self, quiet: bool = False, force: bool = False) -> bool:
-        """Scan game windows in a background thread.
-
-        - quiet=True avoids extra logs (useful for auto-refresh).
-        - force=True bypasses debounce.
-        """
+        """Scan game windows in a background thread without applying stale results."""
+        if self._stop_event.is_set():
+            return False
         if self._refresh_inflight:
             if force:
                 self._refresh_again_requested = True
@@ -4080,19 +4093,28 @@ class WindowManagerApp:
         self._refresh_inflight = True
         self._scan_started_monotonic = now
         mode_revision = self._game_mode_revision
+        structure_generation = self._structure_generation
         scan_mode = self.game_mode
         game_label = self.game_label
+        retro_title_keyword = self.settings.retro_title_keyword
+        retro_process_keyword = self.settings.retro_process_keyword
         if not quiet:
             self._log(f"Scan des fenêtres {game_label}...")
 
         def worker():
             try:
-                wins = list_game_windows(scan_mode, self.settings.retro_title_keyword, self.settings.retro_process_keyword)
+                wins = list_game_windows(
+                    scan_mode,
+                    retro_title_keyword,
+                    retro_process_keyword,
+                )
                 enum_error = get_last_enum_error()
                 if not wins and enum_error:
-                    self._queue.put(("error", mode_revision, f"Erreur scan Win32: {enum_error}"))
+                    self._queue.put(
+                        ("error", mode_revision, structure_generation, f"Erreur scan Win32: {enum_error}")
+                    )
                 else:
-                    self._queue.put(("windows", mode_revision, wins))
+                    self._queue.put(("windows", mode_revision, structure_generation, wins))
                     if not wins:
                         candidates = list_visible_dofus_candidates()
                         if candidates:
@@ -4104,18 +4126,19 @@ class WindowManagerApp:
                                 (
                                     "notice",
                                     mode_revision,
+                                    structure_generation,
                                     "Fenêtre(s) Dofus visible(s), mais non reconnue(s) par le mode "
                                     f"{game_label}: {sample}",
                                 )
                             )
             except Exception as e:
-                self._queue.put(("error", mode_revision, f"Erreur scan: {e}"))
+                self._queue.put(("error", mode_revision, structure_generation, f"Erreur scan: {e}"))
 
         threading.Thread(target=worker, daemon=True).start()
         return True
 
-    def _finish_refresh(self) -> None:
-        """Publish scan completion and run one explicitly queued refresh."""
+    def _finish_refresh(self, *, applied: bool = True) -> None:
+        """Finalize one scan attempt and coalesce any required catch-up scan."""
         if self._scan_started_monotonic is not None:
             self.runtime_metrics.record_scan(
                 time.monotonic() - self._scan_started_monotonic
@@ -4123,8 +4146,13 @@ class WindowManagerApp:
         self._scan_started_monotonic = None
         self._refresh_inflight = False
         self._scan_revision += 1
-        self._publish_streamdeck_state()
-        if self._refresh_again_requested:
+        try:
+            self._publish_streamdeck_state()
+        except Exception as exc:
+            self._log(f"Publication Stream Deck après scan impossible : {exc}")
+        if not applied:
+            self._refresh_again_requested = True
+        if self._refresh_again_requested and not self._stop_event.is_set():
             self._refresh_again_requested = False
             self.root.after(0, lambda: self.refresh_windows(quiet=True, force=True))
 
@@ -4198,21 +4226,27 @@ class WindowManagerApp:
     def _schedule_refresh(self):
         if self._stop_event.is_set():
             return
-        if self.auto_refresh_enabled.get():
-            self.refresh_windows(quiet=True)
-        hook = getattr(self, "win_events", None)
+        delay_seconds = max(2, int(getattr(self.settings, "refresh_seconds", 5)))
         try:
-            hook_healthy = bool(hook and hook.is_running())
-        except Exception:
-            hook_healthy = False
-        delay_seconds = adaptive_refresh_delay_seconds(
-            self.settings.refresh_seconds,
-            enabled=bool(getattr(self.settings, "adaptive_performance_enabled", True)),
-            event_hook_healthy=hook_healthy,
-            has_windows=bool(self._all_windows),
-        )
-        self._scheduled_refresh_delay_seconds = delay_seconds
-        self.root.after(delay_seconds * 1000, self._schedule_refresh)
+            if self.auto_refresh_enabled.get():
+                self.refresh_windows(quiet=True)
+            hook = getattr(self, "win_events", None)
+            try:
+                hook_healthy = bool(hook and hook.is_running())
+            except Exception:
+                hook_healthy = False
+            delay_seconds = adaptive_refresh_delay_seconds(
+                self.settings.refresh_seconds,
+                enabled=bool(getattr(self.settings, "adaptive_performance_enabled", True)),
+                event_hook_healthy=hook_healthy,
+                has_windows=bool(self._all_windows),
+            )
+            self._scheduled_refresh_delay_seconds = delay_seconds
+        except Exception as exc:
+            self._log(f"Rafraîchissement automatique : {exc}")
+        finally:
+            if not self._stop_event.is_set():
+                self.root.after(delay_seconds * 1000, self._schedule_refresh)
 
     def _on_toggle_autorefresh(self):
         self.settings.auto_refresh = bool(self.auto_refresh_enabled.get())
