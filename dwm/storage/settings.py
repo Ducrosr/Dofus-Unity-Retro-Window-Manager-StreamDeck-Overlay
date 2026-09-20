@@ -26,6 +26,12 @@ from .atomic import atomic_write_text
 
 
 SETTINGS_SCHEMA_VERSION = 25
+
+
+class SettingsSchemaTooNewError(ValueError):
+    """Raised when a settings file belongs to a newer, unsupported DWM schema."""
+
+
 MODERN_DARK_THEME = UNITY_STANDARD_THEME  # Backward-compatible public name.
 DEFAULT_WINDOW_COLUMN_ORDER = ("class", "name", "alias", "hwnd")
 
@@ -486,6 +492,11 @@ class Settings:
     def from_dict(d: dict) -> "Settings":
         # Backward compatible: schema v1 had no game info.
         schema = int(d.get("schema_version", 1) or 1)
+        if schema > SETTINGS_SCHEMA_VERSION:
+            raise SettingsSchemaTooNewError(
+                f"Schéma de paramètres {schema} plus récent que la version prise en charge "
+                f"({SETTINGS_SCHEMA_VERSION})."
+            )
 
         # Migration: old defaults were too broad ("dofus"), leading to false positives.
         retro_title = (d.get("retro_title_keyword") or "").strip().lower()
@@ -606,12 +617,23 @@ def _read_settings(path: Path) -> Settings:
 
 
 def load_settings(path: Path) -> Settings:
-    for candidate in (path, settings_backup_path(path)):
+    backup = settings_backup_path(path)
+    if path.exists():
         try:
-            if candidate.exists():
-                return _read_settings(candidate)
+            return _read_settings(path)
+        except SettingsSchemaTooNewError:
+            # A future schema is not corruption and must never be replaced by
+            # defaults or by an older backup.
+            raise
         except Exception:
-            continue
+            pass
+    if backup.exists():
+        try:
+            return _read_settings(backup)
+        except SettingsSchemaTooNewError:
+            raise
+        except Exception:
+            pass
     return Settings()
 
 
@@ -619,13 +641,17 @@ def save_settings(path: Path, settings: Settings) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     serialized = json.dumps(settings.to_dict(), indent=2, ensure_ascii=False)
 
-    try:
-        current = path.read_text(encoding="utf-8")
-        if not isinstance(json.loads(current), dict):
-            raise ValueError("settings root must be a JSON object")
-    except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
-        pass
-    else:
-        atomic_write_text(settings_backup_path(path), current)
+    if path.exists():
+        try:
+            # Promote only a semantically loadable current file to .bak.
+            _read_settings(path)
+            current = path.read_text(encoding="utf-8")
+        except SettingsSchemaTooNewError:
+            # Never overwrite configuration produced by a newer DWM.
+            raise
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError, TypeError):
+            current = ""
+        if current:
+            atomic_write_text(settings_backup_path(path), current)
 
     atomic_write_text(path, serialized)
