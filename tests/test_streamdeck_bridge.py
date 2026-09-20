@@ -102,6 +102,28 @@ class StreamDeckBridgeTests(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual(self.commands, [("next_attention", {})])
 
+    def test_backend_timeout_returns_structured_error_code(self) -> None:
+        def timeout_dispatch(_command: str, _payload: dict[str, object]):
+            raise TimeoutError("late")
+
+        self.bridge.stop()
+        self.bridge = StreamDeckBridge(timeout_dispatch, port=0)
+        self.bridge.start()
+        self.base_url = f"http://127.0.0.1:{self.bridge.port}"
+
+        request = Request(
+            self.base_url + "/v1/rotate",
+            data=json.dumps({"direction": "forward"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with self.assertRaises(HTTPError) as caught:
+            urlopen(request, timeout=2)
+
+        self.assertEqual(caught.exception.code, 504)
+        payload = json.loads(caught.exception.read().decode("utf-8"))
+        self.assertEqual(payload["code"], "backend_timeout")
+
     def test_post_rejects_non_json_content(self) -> None:
         request = Request(self.base_url + "/v1/refresh", data=b"{}", method="POST")
 
