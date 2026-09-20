@@ -103,11 +103,18 @@ class DwmClient {
 	}
 
 	async rotate(direction: "forward" | "backward"): Promise<void> {
-		await this.focusCommand("rotate", { direction });
+		await this.focusCommand("rotate", {
+			direction,
+			game_mode: this.state.status?.game_mode,
+			profile: this.state.status?.profile,
+		});
 	}
 
 	async nextAttention(): Promise<void> {
-		await this.focusCommand("next-attention", {});
+		await this.focusCommand("next-attention", {
+			game_mode: this.state.status?.game_mode,
+			profile: this.state.status?.profile,
+		});
 	}
 
 	async show(): Promise<void> {
