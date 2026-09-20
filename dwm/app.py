@@ -6720,7 +6720,13 @@ class WindowManagerApp:
             if not title:
                 continue
 
-            targets.append(WatchedWindow(hwnd=int(hwnd), title=title))
+            targets.append(
+                WatchedWindow(
+                    hwnd=int(hwnd),
+                    title=title,
+                    generation=self._structure_generation,
+                )
+            )
 
         try:
             self.popup_watcher.update_targets(targets)
@@ -6764,7 +6770,9 @@ class WindowManagerApp:
         self.root.after(50, self._process_popup_events)
 
     def _handle_popup_event(self, evt: PopupEvent) -> None:
-        if not self._popup_watch_enabled:
+        if not self._popup_watch_enabled or self._stop_event.is_set():
+            return
+        if int(getattr(evt, "generation", self._structure_generation)) != self._structure_generation:
             return
 
         hwnd = int(evt.hwnd)
