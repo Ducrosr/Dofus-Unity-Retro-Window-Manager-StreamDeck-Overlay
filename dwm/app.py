@@ -2160,6 +2160,7 @@ class WindowManagerApp:
             reorder_character=lambda _hwnd, _destination: None,
             focus_next_attention=lambda: False,
             palette=resolved_theme_palette(self.root, preview_settings.theme),
+            window_role="simulation",
         )
         self._display_simulation_ui = simulation_ui
         active_index = 0
