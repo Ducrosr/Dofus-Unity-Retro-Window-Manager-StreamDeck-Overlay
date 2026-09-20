@@ -4556,14 +4556,13 @@ class WindowManagerApp:
                 "_status": 503,
             }
         if command in {"focus", "rotate", "next_attention"}:
-            requested_mode = payload.get("game_mode", self.game_mode)
-            requested_profile = payload.get(
-                "profile",
-                getattr(self, "_active_profile_name", ""),
-            )
+            current_mode = getattr(self, "game_mode", "")
+            current_profile = getattr(self, "_active_profile_name", "")
+            requested_mode = payload.get("game_mode", current_mode)
+            requested_profile = payload.get("profile", current_profile)
             if (
-                requested_mode != self.game_mode
-                or requested_profile != getattr(self, "_active_profile_name", "")
+                requested_mode != current_mode
+                or requested_profile != current_profile
             ):
                 return {
                     "ok": False,
@@ -5009,8 +5008,16 @@ class WindowManagerApp:
                 title,
                 self.game_mode,
                 class_name=cn,
-                retro_title_keyword=self.settings.retro_title_keyword,
-                retro_process_keyword=self.settings.retro_process_keyword,
+                retro_title_keyword=getattr(
+                    self.settings,
+                    "retro_title_keyword",
+                    "dofus retro v",
+                ),
+                retro_process_keyword=getattr(
+                    self.settings,
+                    "retro_process_keyword",
+                    "",
+                ),
             )
             if gw is None:
                 return
