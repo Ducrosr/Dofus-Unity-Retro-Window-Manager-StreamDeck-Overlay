@@ -2354,6 +2354,18 @@ class WindowManagerApp:
         started_at = time.monotonic()
         succeeded = False
         try:
+            expected = self._all_windows.get(int(hwnd))
+            if expected is not None:
+                current = revalidate_game_window(
+                    expected,
+                    retro_title_keyword=self.settings.retro_title_keyword,
+                    retro_process_keyword=self.settings.retro_process_keyword,
+                )
+                if current is None or not same_game_window_identity(expected, current):
+                    self._refresh_after_identity_mismatch(int(hwnd))
+                    raise FocusError("La fenêtre ciblée a changé depuis le dernier scan.")
+                if current != expected or current.identity_fingerprint != expected.identity_fingerprint:
+                    self._all_windows[int(hwnd)] = current
             focus_hwnd(hwnd)
             succeeded = True
         finally:
@@ -3976,6 +3988,7 @@ class WindowManagerApp:
         self._apply_runtime_theme(selected_theme)
         self._apply_display_preferences()
         self._game_mode_revision += 1
+        self._structure_generation += 1
         self.game_mode_var.set(self.game_label)
         self.game_subtitle_var.set(
             tr("Mode {game} · gestion locale des fenêtres", game=self.game_label)
@@ -4029,8 +4042,17 @@ class WindowManagerApp:
         self._stop_win_event_hook()
         try:
             classes, keyword_map = win_event_filter(self.game_mode, self.settings.retro_title_keyword)
+            hook_mode_revision = self._game_mode_revision
             self.win_events = WinEventHook(
-                lambda evt, hwnd: self._queue.put(("wevt", evt, hwnd)),
+                lambda evt, hwnd: self._queue.put(
+                    (
+                        "wevt",
+                        hook_mode_revision,
+                        self._structure_generation,
+                        evt,
+                        hwnd,
+                    )
+                ),
                 class_names=classes,
                 title_keyword_by_class=keyword_map,
             )
@@ -4039,7 +4061,15 @@ class WindowManagerApp:
             if error:
                 self._log(f"WinEventHook: {error}")
             self.shell_attention = ShellAttentionHook(
-                lambda evt, hwnd: self._queue.put(("wevt", evt, hwnd))
+                lambda evt, hwnd: self._queue.put(
+                    (
+                        "wevt",
+                        hook_mode_revision,
+                        self._structure_generation,
+                        evt,
+                        hwnd,
+                    )
+                )
             )
             self.shell_attention.start()
             shell_error = self.shell_attention.get_last_error()
@@ -4085,19 +4115,35 @@ class WindowManagerApp:
         self._refresh_inflight = True
         self._scan_started_monotonic = now
         mode_revision = self._game_mode_revision
+        structure_generation = self._structure_generation
         scan_mode = self.game_mode
         game_label = self.game_label
+        retro_title_keyword = self.settings.retro_title_keyword
+        retro_process_keyword = self.settings.retro_process_keyword
         if not quiet:
             self._log(f"Scan des fenêtres {game_label}...")
 
         def worker():
             try:
-                wins = list_game_windows(scan_mode, self.settings.retro_title_keyword, self.settings.retro_process_keyword)
+                wins = list_game_windows(
+                    scan_mode,
+                    retro_title_keyword,
+                    retro_process_keyword,
+                )
                 enum_error = get_last_enum_error()
                 if not wins and enum_error:
-                    self._queue.put(("error", mode_revision, f"Erreur scan Win32: {enum_error}"))
+                    self._queue.put(
+                        (
+                            "error",
+                            mode_revision,
+                            structure_generation,
+                            f"Erreur scan Win32: {enum_error}",
+                        )
+                    )
                 else:
-                    self._queue.put(("windows", mode_revision, wins))
+                    self._queue.put(
+                        ("windows", mode_revision, structure_generation, wins)
+                    )
                     if not wins:
                         candidates = list_visible_dofus_candidates()
                         if candidates:
@@ -4109,12 +4155,20 @@ class WindowManagerApp:
                                 (
                                     "notice",
                                     mode_revision,
+                                    structure_generation,
                                     "Fenêtre(s) Dofus visible(s), mais non reconnue(s) par le mode "
                                     f"{game_label}: {sample}",
                                 )
                             )
             except Exception as e:
-                self._queue.put(("error", mode_revision, f"Erreur scan: {e}"))
+                self._queue.put(
+                    (
+                        "error",
+                        mode_revision,
+                        structure_generation,
+                        f"Erreur scan: {e}",
+                    )
+                )
 
         threading.Thread(target=worker, daemon=True).start()
         return True
@@ -4200,6 +4254,7 @@ class WindowManagerApp:
         else:
             self.rotation_index = 0
 
+        self._structure_generation += 1
         self.last_update_time.set(datetime.now().strftime("Dernier scan: %H:%M:%S"))
         self._log(f"{len(self._managed_order)} gérées, {len(self._ignored)} ignorées")
         self.update_listboxes()
@@ -4268,10 +4323,19 @@ class WindowManagerApp:
         if kind == "windows":
             success = False
             error = ""
+            mode_revision = int(item[1])
+            generation = int(item[2])
+            wins = item[3]
             try:
-                if int(item[1]) == self._game_mode_revision:
-                    self._apply_windows(item[2])
+                if (
+                    mode_revision == self._game_mode_revision
+                    and generation == self._structure_generation
+                ):
+                    self._apply_windows(wins)
                     success = True
+                else:
+                    error = "Résultat de scan périmé ignoré."
+                    self._refresh_again_requested = True
             except Exception as exc:
                 error = str(exc)
                 try:
@@ -4281,14 +4345,25 @@ class WindowManagerApp:
             finally:
                 self._finish_refresh(success=success, error=error)
         elif kind == "error":
+            mode_revision = int(item[1])
+            generation = int(item[2])
+            error = str(item[3])
             try:
-                if int(item[1]) == self._game_mode_revision:
-                    self._log(str(item[2]))
+                if (
+                    mode_revision == self._game_mode_revision
+                    and generation == self._structure_generation
+                ):
+                    self._log(error)
+                else:
+                    self._refresh_again_requested = True
             finally:
-                self._finish_refresh(success=False, error=str(item[2]))
+                self._finish_refresh(success=False, error=error)
         elif kind == "notice":
-            if int(item[1]) == self._game_mode_revision:
-                self._log(str(item[2]))
+            if (
+                int(item[1]) == self._game_mode_revision
+                and int(item[2]) == self._structure_generation
+            ):
+                self._log(str(item[3]))
         elif kind == "streamdeck":
             response_queue = item[3]
             try:
@@ -4305,8 +4380,14 @@ class WindowManagerApp:
             except queue.Full:
                 pass
         elif kind == "wevt":
-            _evt, _hwnd = item[1], int(item[2])
-            self._apply_win_event(str(_evt), _hwnd)
+            mode_revision = int(item[1])
+            generation = int(item[2])
+            if (
+                mode_revision == self._game_mode_revision
+                and generation == self._structure_generation
+            ):
+                _evt, _hwnd = item[3], int(item[4])
+                self._apply_win_event(str(_evt), _hwnd)
         elif kind == "tray":
             self._handle_tray_action(str(item[1]), str(item[2]) if len(item) > 2 else "")
         elif kind == "update_check":
@@ -4733,6 +4814,30 @@ class WindowManagerApp:
         self.update_listboxes()
         self._update_popup_watcher_targets()
 
+    def _purge_window_identity_state(self, hwnd: int) -> None:
+        self._all_windows.pop(hwnd, None)
+        self.attention_state.clear(hwnd)
+        self._ignored.discard(hwnd)
+        if self._active_game_hwnd == hwnd:
+            self._active_game_hwnd = None
+        if hwnd in self._streamdeck_order:
+            self._streamdeck_order = [item for item in self._streamdeck_order if item != hwnd]
+        if hwnd in self._managed_order:
+            self._managed_order = [item for item in self._managed_order if item != hwnd]
+        if self._managed_order:
+            self.rotation_index %= len(self._managed_order)
+        else:
+            self.rotation_index = 0
+        self._structure_generation += 1
+
+    def _refresh_after_identity_mismatch(self, hwnd: int) -> None:
+        self._purge_window_identity_state(hwnd)
+        if self._refresh_inflight:
+            self._refresh_again_requested = True
+        else:
+            self.refresh_windows(quiet=True, force=True)
+        self._request_ui_update()
+
     def _apply_win_event(self, evt: str, hwnd: int):
         """Apply a single window event (create/destroy/namechange) incrementally.
 
@@ -4793,30 +4898,16 @@ class WindowManagerApp:
             title = get_window_title(hwnd)
             if not title:
                 return
-
-            if self.game_mode == "unity":
-                if cn != "UnityWndClass":
-                    return
-                pseudo = extract_pseudo_unity(title)
-                gw = GameWindow(
-                    hwnd=hwnd,
-                    title=title,
-                    pseudo=pseudo,
-                    character_class=extract_character_class(title, pseudo),
-                )
-            else:
-                if cn != "Chrome_WidgetWin_1":
-                    return
-                kw = (self.settings.retro_title_keyword or "dofus retro v").lower().strip()
-                if kw and kw not in title.lower():
-                    return
-                pseudo = extract_pseudo_retro(title)
-                gw = GameWindow(
-                    hwnd=hwnd,
-                    title=title,
-                    pseudo=pseudo,
-                    character_class=extract_character_class(title, pseudo),
-                )
+            gw = recognize_game_window(
+                hwnd,
+                title,
+                self.game_mode,
+                class_name=cn,
+                retro_title_keyword=self.settings.retro_title_keyword,
+                retro_process_keyword=self.settings.retro_process_keyword,
+            )
+            if gw is None:
+                return
 
             prev = self._all_windows.get(hwnd)
             if prev is None:
@@ -4826,11 +4917,21 @@ class WindowManagerApp:
                 if hwnd not in self._ignored and hwnd not in self._managed_order:
                     self._managed_order.append(hwnd)
                 changed_structure = True
-            elif prev.title != gw.title or prev.pseudo != gw.pseudo or prev.character_class != gw.character_class:
-                # A title change also requires updating an optional capture target.
-                if character_key(prev.pseudo) != character_key(gw.pseudo):
-                    self._ignored.discard(hwnd)
-                    self.attention_state.clear(hwnd)
+            elif not same_game_window_identity(prev, gw):
+                # The HWND now belongs to another Dofus identity. Never inherit
+                # ignored/attention/order state from the previous character.
+                self._purge_window_identity_state(hwnd)
+                self._all_windows[hwnd] = gw
+                if hwnd not in self._managed_order:
+                    self._managed_order.append(hwnd)
+                if hwnd not in self._streamdeck_order:
+                    self._streamdeck_order.append(hwnd)
+                changed_structure = True
+            elif (
+                prev.title != gw.title
+                or prev.pseudo != gw.pseudo
+                or prev.character_class != gw.character_class
+            ):
                 self._all_windows[hwnd] = gw
                 changed_structure = True
 
@@ -4840,6 +4941,7 @@ class WindowManagerApp:
         if not changed_structure:
             return
 
+        self._structure_generation += 1
         self._reconcile_character_roster()
         self._schedule_smart_profile_match()
 
