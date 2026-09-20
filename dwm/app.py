@@ -7036,21 +7036,30 @@ class WindowManagerApp:
         self.root.after(50, self._process_popup_events)
 
     def _handle_popup_event(self, evt: PopupEvent) -> None:
-        if not self._popup_watch_enabled:
+        if self._stop_event.is_set() or not self._popup_watch_enabled:
+            return
+
+        watcher = self.popup_watcher
+        generation = int(getattr(evt, "generation", 0) or 0)
+        validator = getattr(watcher, "is_current_event", None)
+        if generation and callable(validator) and not validator(evt):
             return
 
         hwnd = int(evt.hwnd)
         if hwnd not in self._managed_order or hwnd in self._ignored:
             return
 
-        # Avoid ping-pong when several clients display a popup together.
+        # Revalidate the target after visual detection and immediately before
+        # focus. _focus_hwnd_measured performs the identity check.
         now = time.monotonic()
         if now < self._popup_global_cooldown_until:
             return
 
         try:
-            self.rotation_index = self._managed_order.index(hwnd)
+            target_index = self._managed_order.index(hwnd)
             self._focus_hwnd_measured(hwnd)
+            # Do not move the rotation cursor until focus really succeeded.
+            self.rotation_index = target_index
             self._record_character_focus(hwnd, notify=True)
             self._popup_global_cooldown_until = now + self._popup_global_cooldown_sec
             self._log(f"Popup détecté → focus {evt.title}")
