@@ -2397,6 +2397,8 @@ class WindowManagerApp:
         )
 
     def _focus_hwnd_measured(self, hwnd: int) -> None:
+        if self._stop_event.is_set():
+            raise FocusError("L'application est en cours de fermeture.")
         expected = self._all_windows.get(hwnd)
         if expected is None:
             raise FocusError("La fenêtre Dofus n'est plus connue.")
@@ -4042,6 +4044,8 @@ class WindowManagerApp:
 
     def switch_game_mode(self, game_mode: str) -> bool:
         """Switch Unity/Retro immediately without restarting the application."""
+        if self._stop_event.is_set():
+            return False
         new_mode = normalize_game_mode(game_mode, self.game_mode)
         if new_mode == self.game_mode:
             self.game_mode_var.set(self.game_label)
@@ -4173,6 +4177,8 @@ class WindowManagerApp:
         - quiet=True avoids extra logs (useful for auto-refresh).
         - force=True bypasses debounce.
         """
+        if self._stop_event.is_set():
+            return False
         if self._refresh_inflight:
             if force:
                 self._refresh_again_requested = True
@@ -4919,6 +4925,8 @@ class WindowManagerApp:
 
     def _request_ui_update(self):
         """Debounce UI rebuilds (listboxes) when many events arrive quickly."""
+        if self._stop_event.is_set():
+            return
         if self._ui_update_pending:
             return
         self._ui_update_pending = True
@@ -4926,6 +4934,8 @@ class WindowManagerApp:
 
     def _do_ui_update(self):
         self._ui_update_pending = False
+        if self._stop_event.is_set():
+            return
         self.last_update_time.set(datetime.now().strftime("Maj: %H:%M:%S"))
         self.update_listboxes()
         self._update_popup_watcher_targets()
@@ -7006,35 +7016,37 @@ class WindowManagerApp:
             return
 
         self._stop_event.set()
-        if self._rotation_request_job is not None:
+        if self._refresh_inflight:
+            self._finish_refresh()
+        if getattr(self, "_rotation_request_job", None) is not None:
             try:
                 self.root.after_cancel(self._rotation_request_job)
             except Exception:
                 pass
             self._rotation_request_job = None
         self._pending_rotation_delta = 0
-        while True:
-            try:
-                pending_item = self._queue.get_nowait()
-            except queue.Empty:
-                break
-            try:
-                if pending_item[0] == "streamdeck" and isinstance(
-                    pending_item[1], _StreamDeckRequest
-                ):
-                    pending_item[1].cancel_if_not_started()
-                    pending_item[1].complete(
-                        {
-                            "ok": False,
-                            "error": "L'application est en cours de fermeture.",
-                            "error_code": "closing",
-                            "_status": 503,
-                        }
-                    )
-                elif pending_item[0] in {"windows", "error"}:
-                    self._finish_refresh()
-            finally:
-                self._queue.task_done()
+        pending_queue = getattr(self, "_queue", None)
+        if isinstance(pending_queue, queue.Queue):
+            while True:
+                try:
+                    pending_item = pending_queue.get_nowait()
+                except queue.Empty:
+                    break
+                try:
+                    if pending_item[0] == "streamdeck" and isinstance(
+                        pending_item[1], _StreamDeckRequest
+                    ):
+                        pending_item[1].cancel_if_not_started()
+                        pending_item[1].complete(
+                            {
+                                "ok": False,
+                                "error": "L'application est en cours de fermeture.",
+                                "error_code": "closing",
+                                "_status": 503,
+                            }
+                        )
+                finally:
+                    pending_queue.task_done()
         self.status_var.set(tr("Fermeture en cours…"))
         try:
             self.settings.auto_refresh = bool(self.auto_refresh_enabled.get())
