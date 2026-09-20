@@ -4196,8 +4196,18 @@ class WindowManagerApp:
         new_map = {w.hwnd: w for w in wins}
         for hwnd, new_window in new_map.items():
             previous = old_map.get(hwnd)
-            if previous is not None and character_key(previous.pseudo) != character_key(new_window.pseudo):
+            if previous is None:
+                continue
+            identity_changed = bool(
+                previous.window_class
+                or previous.game_mode
+                or previous.pid
+                or previous.process_path
+            ) and not same_game_window_identity(previous, new_window)
+            pseudo_changed = character_key(previous.pseudo) != character_key(new_window.pseudo)
+            if identity_changed or pseudo_changed:
                 self.attention_state.clear(hwnd)
+            if pseudo_changed:
                 self._ignored.discard(hwnd)
         self._ignored = {
             hwnd for hwnd in self._ignored
@@ -4904,13 +4914,25 @@ class WindowManagerApp:
                 if hwnd not in self._ignored and hwnd not in self._managed_order:
                     self._managed_order.append(hwnd)
                 changed_structure = True
-            elif prev.title != gw.title or prev.pseudo != gw.pseudo or prev.character_class != gw.character_class:
-                # A title change also requires updating an optional capture target.
-                if character_key(prev.pseudo) != character_key(gw.pseudo):
-                    self._ignored.discard(hwnd)
-                    self.attention_state.clear(hwnd)
-                self._all_windows[hwnd] = gw
-                changed_structure = True
+            else:
+                fingerprinted = bool(
+                    prev.window_class or prev.game_mode or prev.pid or prev.process_path
+                )
+                identity_changed = fingerprinted and not same_game_window_identity(prev, gw)
+                pseudo_changed = character_key(prev.pseudo) != character_key(gw.pseudo)
+                details_changed = (
+                    prev.title != gw.title
+                    or prev.pseudo != gw.pseudo
+                    or prev.character_class != gw.character_class
+                )
+                if identity_changed or details_changed:
+                    # A title/identity change also refreshes optional capture targets.
+                    if identity_changed or pseudo_changed:
+                        self.attention_state.clear(hwnd)
+                    if pseudo_changed:
+                        self._ignored.discard(hwnd)
+                    self._all_windows[hwnd] = gw
+                    changed_structure = True
 
         else:
             return
