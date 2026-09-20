@@ -57,14 +57,21 @@ export type BridgeState = {
 type Listener = (state: BridgeState) => void;
 
 export class DwmCommandError extends Error {
+	readonly status: number;
+	readonly code?: string;
+	readonly requestId?: string;
+
 	constructor(
 		message: string,
-		readonly status: number,
-		readonly code?: string,
-		readonly requestId?: string,
+		status: number,
+		code?: string,
+		requestId?: string,
 	) {
 		super(message);
 		this.name = "DwmCommandError";
+		this.status = status;
+		this.code = code;
+		this.requestId = requestId;
 	}
 }
 
