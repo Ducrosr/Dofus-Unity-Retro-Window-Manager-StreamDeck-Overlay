@@ -382,7 +382,7 @@ class OverlayUI:
         return self.persistent_enabled or self.compact_is_open
 
     def set_palette(self, palette: Mapping[str, str]) -> None:
-        if self._closed:
+        if getattr(self, "_closed", False):
             return
         self.palette = dict(DEFAULT_PALETTE)
         self.palette.update(palette)
@@ -689,7 +689,7 @@ class OverlayUI:
         show_portrait: bool = True,
         show_badge: bool = True,
     ) -> None:
-        if self._closed:
+        if getattr(self, "_closed", False):
             return
         self.persistent_enabled = bool(enabled)
         self.persistent_x = int(x)
@@ -1238,7 +1238,7 @@ class OverlayUI:
         show_portrait: bool = True,
         show_badge: bool = True,
     ) -> None:
-        if self._closed:
+        if getattr(self, "_closed", False):
             return
         self._toast_request = _SwapNotificationRequest(
             entry=entry,
@@ -1267,7 +1267,7 @@ class OverlayUI:
             self._show_swap_notification_now(request)
 
     def _show_swap_notification_now(self, request: _SwapNotificationRequest) -> None:
-        if self._closed:
+        if getattr(self, "_closed", False):
             return
         self._hide_visible_toast()
         entry = request.entry
@@ -1389,7 +1389,7 @@ class OverlayUI:
         self._toast_images.clear()
         if window is None:
             return
-        if self._obs_capture_enabled and not self._closed:
+        if getattr(self, "_obs_capture_enabled", False) and not getattr(self, "_closed", False):
             self._set_toast_idle(window)
             return
         self.toast_window = None
@@ -1409,7 +1409,7 @@ class OverlayUI:
         self._hide_visible_toast()
 
     def close_all(self) -> None:
-        if self._closed:
+        if getattr(self, "_closed", False):
             return
         self._closed = True
         self.hide_swap_notification()
