@@ -30,6 +30,28 @@ MODERN_DARK_THEME = UNITY_STANDARD_THEME  # Backward-compatible public name.
 DEFAULT_WINDOW_COLUMN_ORDER = ("class", "name", "alias", "hwnd")
 
 
+class FutureSettingsSchemaError(ValueError):
+    """Raised when settings belong to a newer application schema."""
+
+
+def _validate_settings_mapping(data: object) -> dict:
+    if not isinstance(data, dict):
+        raise ValueError("settings root must be a JSON object")
+    raw_version = data.get("schema_version", 0)
+    try:
+        version = int(raw_version or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("settings schema_version must be an integer") from exc
+    if version > SETTINGS_SCHEMA_VERSION:
+        raise FutureSettingsSchemaError(
+            f"settings schema {version} is newer than supported schema {SETTINGS_SCHEMA_VERSION}"
+        )
+    # Running the historical migration/sanitization path is part of semantic
+    # validation; a merely parseable JSON object is not enough for backup use.
+    Settings.from_dict(data)
+    return data
+
+
 def _default_display_preferences() -> dict[str, object]:
     return {
         "compact_window_geometry": "",
@@ -600,8 +622,7 @@ def settings_backup_path(path: Path) -> Path:
 
 def _read_settings(path: Path) -> Settings:
     data = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        raise ValueError("settings root must be a JSON object")
+    _validate_settings_mapping(data)
     return Settings.from_dict(data)
 
 
@@ -610,7 +631,11 @@ def load_settings(path: Path) -> Settings:
         try:
             if candidate.exists():
                 return _read_settings(candidate)
-        except Exception:
+        except FutureSettingsSchemaError:
+            # A future schema is compatible data we do not understand, not
+            # corruption. Never silently replace it with an older backup/default.
+            raise
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
             continue
     return Settings()
 
@@ -621,11 +646,17 @@ def save_settings(path: Path, settings: Settings) -> None:
 
     try:
         current = path.read_text(encoding="utf-8")
-        if not isinstance(json.loads(current), dict):
-            raise ValueError("settings root must be a JSON object")
+        current_data = json.loads(current)
+        _validate_settings_mapping(current_data)
+    except FileNotFoundError:
+        current = ""
+    except FutureSettingsSchemaError:
+        # Never overwrite a newer schema automatically.
+        raise
     except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
-        pass
-    else:
+        # Invalid primary data is not promoted over a valid recovery copy.
+        current = ""
+    if current:
         atomic_write_text(settings_backup_path(path), current)
 
     atomic_write_text(path, serialized)
