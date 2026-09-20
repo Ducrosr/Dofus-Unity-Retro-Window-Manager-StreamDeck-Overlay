@@ -1,5 +1,3 @@
-import { releaseStreamDeckForeground } from "./streamdeck-foreground";
-
 const BASE_URL = "http://127.0.0.1:32145/v1";
 const POLL_INTERVAL_MS = 750;
 const REQUEST_TIMEOUT_MS = 600;
@@ -91,11 +89,18 @@ class DwmClient {
 	}
 
 	async rotate(direction: "forward" | "backward"): Promise<void> {
-		await this.focusCommand("rotate", { direction });
+		await this.focusCommand("rotate", {
+			direction,
+			game_mode: this.state.status?.game_mode,
+			profile: this.state.status?.profile,
+		});
 	}
 
 	async nextAttention(): Promise<void> {
-		await this.focusCommand("next-attention", {});
+		await this.focusCommand("next-attention", {
+			game_mode: this.state.status?.game_mode,
+			profile: this.state.status?.profile,
+		});
 	}
 
 	async show(): Promise<void> {
@@ -103,7 +108,11 @@ class DwmClient {
 	}
 
 	async reorder(direction: "up" | "down"): Promise<void> {
-		await this.command("reorder", { direction });
+		await this.command("reorder", {
+			direction,
+			game_mode: this.state.status?.game_mode,
+			profile: this.state.status?.profile,
+		});
 		await this.poll();
 	}
 
@@ -119,7 +128,10 @@ class DwmClient {
 	}
 
 	async toggleIgnore(): Promise<ToggleIgnoreResult> {
-		const result = await this.command<ToggleIgnoreResult>("toggle-ignore", {});
+		const result = await this.command<ToggleIgnoreResult>("toggle-ignore", {
+			game_mode: this.state.status?.game_mode,
+			profile: this.state.status?.profile,
+		});
 		await this.poll();
 		return result;
 	}
@@ -167,26 +179,26 @@ class DwmClient {
 			body: JSON.stringify(payload),
 			signal: AbortSignal.timeout(2000),
 		});
-		const result = (await response.json().catch(() => ({}))) as TResult & { error?: string };
+		const result = (await response.json().catch(() => ({}))) as TResult & {
+			error?: string;
+			error_code?: string;
+			execution?: string;
+		};
 		if (response.ok) return result;
-		throw new Error(result.error || `HTTP ${response.status}`);
+		const detail = result.error_code
+			? `${result.error || `HTTP ${response.status}`} [${result.error_code}]`
+			: result.error || `HTTP ${response.status}`;
+		throw new Error(detail);
 	}
 
-	private async focusCommand(path: "focus" | "rotate" | "next-attention", payload: Record<string, unknown>): Promise<void> {
-		try {
-			await this.command(path, payload);
-			return;
-		} catch (initialError) {
-			// If Stream Deck runs at a higher integrity level than DWM, Windows can
-			// reject every minimization request coming from the Python process. The
-			// plugin inherits Stream Deck's level, so it can release its own desktop
-			// window and retry the exact command once.
-			if (!(await releaseStreamDeckForeground())) throw initialError;
-			await delay(160);
-			await this.command(path, payload);
-		}
+	private async focusCommand(
+		path: "focus" | "rotate" | "next-attention",
+		payload: Record<string, unknown>,
+	): Promise<void> {
+		// Mutating commands are deliberately sent exactly once. A timed-out HTTP
+		// response does not prove that the backend mutation failed.
+		await this.command(path, payload);
 	}
-
 	private notify(): void {
 		for (const listener of this.listeners) listener(this.state);
 	}
