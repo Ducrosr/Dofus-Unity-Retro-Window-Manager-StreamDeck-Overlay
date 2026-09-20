@@ -67,7 +67,7 @@ class CharacterLifecycleTests(unittest.TestCase):
 
     @patch("dwm.app.get_foreground_hwnd", return_value=101)
     @patch("dwm.app.is_window", return_value=True)
-    @patch("dwm.app.get_class_name", return_value="UnityWndClass")
+    @patch("dwm.services.windows.get_class_name", return_value="UnityWndClass")
     @patch("dwm.app.get_window_title", return_value="Nat - Eniripsa - Dofus 3.0")
     def test_event_reconnect_uses_same_roster_as_scans(self, *_mocks):
         app = self.make_app()
