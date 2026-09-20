@@ -28,7 +28,7 @@ DEFAULT_ROTATION_OVERLAY_LAYOUT = {
 }
 
 _TK_GEOMETRY_PATTERN = re.compile(
-    r"^(?P<width>\d+)x(?P<height>\d+)(?P<x>[+-]\d+)(?P<y>[+-]\d+)$"
+    r"^(?P<width>\d+)x(?P<height>\d+)(?P<x>\+-?\d+|-\d+)(?P<y>\+-?\d+|-\d+)$"
 )
 
 
