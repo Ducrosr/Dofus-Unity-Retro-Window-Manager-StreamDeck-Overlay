@@ -579,6 +579,7 @@ class WindowManagerApp:
         self._last_scan_error = ""
         self._game_mode_revision = 0
         self._structure_generation = 0
+        self._hook_generation = 0
         self.streamdeck_bridge: StreamDeckBridge | None = None
         self.shell_attention: ShellAttentionHook | None = None
         self._start_minimized = bool(start_minimized)
@@ -4091,12 +4092,13 @@ class WindowManagerApp:
         try:
             classes, keyword_map = win_event_filter(self.game_mode, self.settings.retro_title_keyword)
             hook_mode_revision = self._game_mode_revision
+            hook_generation = int(getattr(self, "_hook_generation", 0))
             self.win_events = WinEventHook(
                 lambda evt, hwnd: self._queue.put(
                     (
                         "wevt",
                         hook_mode_revision,
-                        int(getattr(self, "_structure_generation", 0)),
+                        hook_generation,
                         evt,
                         hwnd,
                     )
@@ -4113,7 +4115,7 @@ class WindowManagerApp:
                     (
                         "wevt",
                         hook_mode_revision,
-                        int(getattr(self, "_structure_generation", 0)),
+                        hook_generation,
                         evt,
                         hwnd,
                     )
@@ -4128,6 +4130,7 @@ class WindowManagerApp:
             self.win_events = None
 
     def _stop_win_event_hook(self) -> None:
+        self._hook_generation = int(getattr(self, "_hook_generation", 0)) + 1
         hook = getattr(self, "win_events", None)
         if hook is not None:
             try:
@@ -4448,10 +4451,10 @@ class WindowManagerApp:
                 pass
         elif kind == "wevt":
             mode_revision = int(item[1])
-            generation = int(item[2])
+            hook_generation = int(item[2])
             if (
                 mode_revision == self._game_mode_revision
-                and generation == int(getattr(self, "_structure_generation", 0))
+                and hook_generation == int(getattr(self, "_hook_generation", 0))
             ):
                 _evt, _hwnd = item[3], int(item[4])
                 self._apply_win_event(str(_evt), _hwnd)
