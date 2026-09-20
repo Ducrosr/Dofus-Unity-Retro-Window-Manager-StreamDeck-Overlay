@@ -4839,6 +4839,8 @@ class WindowManagerApp:
                     "theme": self.settings.theme,
                     "language": self.settings.language,
                     "scan_revision": self._scan_revision,
+                    "scan_ok": bool(getattr(self, "_last_scan_ok", True)),
+                    "scan_error": str(getattr(self, "_last_scan_error", "")),
                     "show_character_portraits": bool(self.settings.show_character_portraits),
                     "show_character_badges": bool(self.settings.show_character_badges),
                     "attention_blink_enabled": self._attention_blink_active(),
