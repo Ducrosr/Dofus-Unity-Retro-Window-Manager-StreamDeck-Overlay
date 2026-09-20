@@ -2390,16 +2390,29 @@ class WindowManagerApp:
         succeeded = False
         try:
             expected = self._all_windows.get(int(hwnd))
-            if expected is not None:
+            has_identity = bool(
+                expected is not None
+                and (
+                    expected.pid
+                    or expected.window_class
+                    or expected.game_mode
+                    or expected.process_image
+                )
+            )
+            settings = getattr(self, "settings", None)
+            if has_identity and settings is not None:
                 current = revalidate_game_window(
                     expected,
-                    retro_title_keyword=self.settings.retro_title_keyword,
-                    retro_process_keyword=self.settings.retro_process_keyword,
+                    retro_title_keyword=settings.retro_title_keyword,
+                    retro_process_keyword=settings.retro_process_keyword,
                 )
                 if current is None or not same_game_window_identity(expected, current):
                     self._refresh_after_identity_mismatch(int(hwnd))
                     raise FocusError("La fenêtre ciblée a changé depuis le dernier scan.")
-                if current != expected or current.identity_fingerprint != expected.identity_fingerprint:
+                if (
+                    current != expected
+                    or current.identity_fingerprint != expected.identity_fingerprint
+                ):
                     self._all_windows[int(hwnd)] = current
             focus_hwnd(hwnd)
             succeeded = True
@@ -4023,7 +4036,7 @@ class WindowManagerApp:
         self._apply_runtime_theme(selected_theme)
         self._apply_display_preferences()
         self._game_mode_revision += 1
-        self._structure_generation += 1
+        self._advance_structure_generation()
         self.game_mode_var.set(self.game_label)
         self.game_subtitle_var.set(
             tr("Mode {game} · gestion locale des fenêtres", game=self.game_label)
@@ -4083,7 +4096,7 @@ class WindowManagerApp:
                     (
                         "wevt",
                         hook_mode_revision,
-                        self._structure_generation,
+                        int(getattr(self, "_structure_generation", 0)),
                         evt,
                         hwnd,
                     )
@@ -4100,7 +4113,7 @@ class WindowManagerApp:
                     (
                         "wevt",
                         hook_mode_revision,
-                        self._structure_generation,
+                        int(getattr(self, "_structure_generation", 0)),
                         evt,
                         hwnd,
                     )
@@ -4150,7 +4163,7 @@ class WindowManagerApp:
         self._refresh_inflight = True
         self._scan_started_monotonic = now
         mode_revision = self._game_mode_revision
-        structure_generation = self._structure_generation
+        structure_generation = int(getattr(self, "_structure_generation", 0))
         scan_mode = self.game_mode
         game_label = self.game_label
         retro_title_keyword = self.settings.retro_title_keyword
@@ -4289,7 +4302,7 @@ class WindowManagerApp:
         else:
             self.rotation_index = 0
 
-        self._structure_generation += 1
+        self._advance_structure_generation()
         self.last_update_time.set(datetime.now().strftime("Dernier scan: %H:%M:%S"))
         self._log(f"{len(self._managed_order)} gérées, {len(self._ignored)} ignorées")
         self.update_listboxes()
@@ -4366,7 +4379,7 @@ class WindowManagerApp:
             try:
                 if (
                     mode_revision == self._game_mode_revision
-                    and generation == self._structure_generation
+                    and generation == int(getattr(self, "_structure_generation", 0))
                 ):
                     self._apply_windows(wins)
                     success = True
@@ -4388,7 +4401,7 @@ class WindowManagerApp:
             try:
                 if (
                     mode_revision == self._game_mode_revision
-                    and generation == self._structure_generation
+                    and generation == int(getattr(self, "_structure_generation", 0))
                 ):
                     self._log(error)
                 else:
@@ -4398,7 +4411,7 @@ class WindowManagerApp:
         elif kind == "notice":
             if (
                 int(item[1]) == self._game_mode_revision
-                and int(item[2]) == self._structure_generation
+                and int(item[2]) == int(getattr(self, "_structure_generation", 0))
             ):
                 self._log(str(item[3]))
         elif kind == "streamdeck":
@@ -4438,7 +4451,7 @@ class WindowManagerApp:
             generation = int(item[2])
             if (
                 mode_revision == self._game_mode_revision
-                and generation == self._structure_generation
+                and generation == int(getattr(self, "_structure_generation", 0))
             ):
                 _evt, _hwnd = item[3], int(item[4])
                 self._apply_win_event(str(_evt), _hwnd)
@@ -4502,7 +4515,7 @@ class WindowManagerApp:
 
     def _dispatch_streamdeck_command(self, command: str, payload: dict[str, object]) -> dict[str, object]:
         """Queue one mutation with a deadline and an atomic queued/started state."""
-        if self._stop_event.is_set():
+        if self._is_stopping():
             return {
                 "ok": False,
                 "error": "L'application est en cours de fermeture.",
@@ -4531,7 +4544,7 @@ class WindowManagerApp:
             ) from exc
 
     def _execute_streamdeck_command(self, command: str, payload: dict[str, object]) -> dict[str, object]:
-        if self._stop_event.is_set():
+        if self._is_stopping():
             return {
                 "ok": False,
                 "error": "L'application est en cours de fermeture.",
@@ -4915,7 +4928,7 @@ class WindowManagerApp:
             self.rotation_index %= len(self._managed_order)
         else:
             self.rotation_index = 0
-        self._structure_generation += 1
+        self._advance_structure_generation()
 
     def _refresh_after_identity_mismatch(self, hwnd: int) -> None:
         self._purge_window_identity_state(hwnd)
@@ -5028,7 +5041,7 @@ class WindowManagerApp:
         if not changed_structure:
             return
 
-        self._structure_generation += 1
+        self._advance_structure_generation()
         self._reconcile_character_roster()
         self._schedule_smart_profile_match()
 
@@ -5202,9 +5215,18 @@ class WindowManagerApp:
         except ValueError:
             return None
 
+    def _is_stopping(self) -> bool:
+        stop_event = getattr(self, "_stop_event", None)
+        return bool(stop_event is not None and stop_event.is_set())
+
+    def _advance_structure_generation(self) -> int:
+        generation = int(getattr(self, "_structure_generation", 0)) + 1
+        self._structure_generation = generation
+        return generation
+
     def request_rotation(self, direction: str) -> bool:
         """Coalesce rapid UI/hotkey presses and focus only the final target."""
-        if self._stop_event.is_set():
+        if self._is_stopping():
             return False
         if direction not in {"forward", "backward"} or not self._managed_order:
             return False
@@ -5220,7 +5242,7 @@ class WindowManagerApp:
         delta = self._pending_rotation_delta
         self._pending_rotation_delta = 0
         self._rotation_request_job = None
-        if self._stop_event.is_set():
+        if self._is_stopping():
             return
         if delta:
             self._rotate_by_delta(delta)
@@ -5231,7 +5253,7 @@ class WindowManagerApp:
         return self._rotate_by_delta(1 if direction == "forward" else -1)
 
     def _rotate_by_delta(self, delta: int) -> bool:
-        if self._stop_event.is_set():
+        if self._is_stopping():
             return False
         if not self._managed_order or not delta:
             return False
@@ -6893,7 +6915,7 @@ class WindowManagerApp:
         self.root.after(50, self._process_popup_events)
 
     def _handle_popup_event(self, evt: PopupEvent) -> None:
-        if not self._popup_watch_enabled or self._stop_event.is_set():
+        if not self._popup_watch_enabled or self._is_stopping():
             return
 
         watcher = self.popup_watcher
