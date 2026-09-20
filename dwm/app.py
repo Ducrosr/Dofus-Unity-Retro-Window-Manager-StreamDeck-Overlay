@@ -31,9 +31,6 @@ from PIL import Image, ImageTk
 from . import __release_tag__, __version__
 from .models import GameWindow
 from .services.windows import (
-    extract_character_class,
-    extract_pseudo_retro,
-    extract_pseudo_unity,
     inspect_game_window,
     list_game_windows,
     list_visible_dofus_candidates,
@@ -157,7 +154,7 @@ from .services.window_order import (
     move_window_to_index,
 )
 from .services.window_table import window_table_values
-from .services.win32_enum import get_class_name, get_last_enum_error, get_window_title
+from .services.win32_enum import get_last_enum_error, get_window_title
 from .services.win_event_hook import WinEventHook
 from .ui_overlays import OverlayUI
 
