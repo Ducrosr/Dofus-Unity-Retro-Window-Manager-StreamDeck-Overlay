@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import unittest
 
 from dwm.models import GameWindow
@@ -18,6 +19,7 @@ from dwm.services.display_overlay import (
     parse_tk_geometry,
     place_inside_rect,
     recover_window_position,
+    tk_geometry_uses_relative_negative_offset,
 )
 
 
@@ -59,12 +61,41 @@ class DisplayOverlayTests(unittest.TestCase):
         self.assertEqual(clamp_notification_duration(9000), 5000)
         self.assertEqual(normalize_overlay_orientation("horizontal"), "horizontal")
         self.assertEqual(normalize_overlay_orientation("diagonal"), "vertical")
-        self.assertEqual(format_tk_geometry(320, 90, -25, 40), "320x90-25+40")
+        self.assertEqual(format_tk_geometry(320, 90, -25, 40), "320x90+-25+40")
 
     def test_tk_geometry_parser_supports_negative_monitor_coordinates(self) -> None:
-        self.assertEqual(parse_tk_geometry("340x260-1250+40"), (340, 260, -1250, 40))
+        self.assertEqual(
+            parse_tk_geometry("340x260+-1250+40"),
+            (340, 260, -1250, 40),
+        )
+        self.assertEqual(
+            parse_tk_geometry("340x260-1250+40"),
+            (340, 260, -1250, 40),
+        )
+        self.assertFalse(
+            tk_geometry_uses_relative_negative_offset("340x260+-1250+40")
+        )
+        self.assertTrue(
+            tk_geometry_uses_relative_negative_offset("340x260-1250+40")
+        )
         self.assertIsNone(parse_tk_geometry("340x260"))
         self.assertIsNone(parse_tk_geometry("0x260+20+40"))
+
+    @unittest.skipUnless(sys.platform == "win32", "Native Tk geometry")
+    def test_absolute_negative_geometry_is_really_applied_by_tk(self) -> None:
+        import tkinter as tk
+
+        root = tk.Tk()
+        root.withdraw()
+        window = tk.Toplevel(root)
+        try:
+            window.geometry(format_tk_geometry(160, 90, -120, 40))
+            window.update_idletasks()
+            self.assertEqual(window.winfo_x(), -120)
+            self.assertEqual(window.winfo_y(), 40)
+        finally:
+            window.destroy()
+            root.destroy()
 
     def test_visible_position_on_secondary_monitor_is_preserved(self) -> None:
         displays = ((-1920, 0, 0, 1080), (0, 0, 1920, 1080))
