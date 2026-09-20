@@ -349,6 +349,8 @@ class OverlayUI:
         *,
         attention_count: int | None = None,
     ) -> None:
+        if self._closed:
+            return
         next_entries = list(entries)
         next_attention_count = (
             max(0, int(attention_count))
@@ -666,6 +668,8 @@ class OverlayUI:
 
     def _check_monitors(self):
         self._monitor_job = None
+        if self._closed:
+            return
         if not self.persistent_enabled or self.persistent_window is None:
             return
         monitors = list_monitors(self.root)
@@ -1348,14 +1352,8 @@ class OverlayUI:
             except Exception:
                 pass
             self.toast_job = None
-        window = self.toast_window
-        self.toast_window = None
         self._toast_images.clear()
-        if window is not None:
-            try:
-                window.destroy()
-            except Exception:
-                pass
+        self._deactivate_toast_window()
 
     def hide_swap_notification(self) -> None:
         if self.toast_show_job is not None:
