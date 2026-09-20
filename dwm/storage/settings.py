@@ -26,6 +26,11 @@ from .atomic import atomic_write_text
 
 
 SETTINGS_SCHEMA_VERSION = 25
+
+
+class UnsupportedSettingsSchemaError(ValueError):
+    """Raised when settings were written by a newer, unsupported DWM schema."""
+
 MODERN_DARK_THEME = UNITY_STANDARD_THEME  # Backward-compatible public name.
 DEFAULT_WINDOW_COLUMN_ORDER = ("class", "name", "alias", "hwnd")
 
@@ -484,8 +489,15 @@ class Settings:
 
     @staticmethod
     def from_dict(d: dict) -> "Settings":
+        if not isinstance(d, dict):
+            raise ValueError("settings root must be a JSON object")
         # Backward compatible: schema v1 had no game info.
         schema = int(d.get("schema_version", 1) or 1)
+        if schema > SETTINGS_SCHEMA_VERSION:
+            raise UnsupportedSettingsSchemaError(
+                f"settings schema {schema} is newer than supported schema "
+                f"{SETTINGS_SCHEMA_VERSION}"
+            )
 
         # Migration: old defaults were too broad ("dofus"), leading to false positives.
         retro_title = (d.get("retro_title_keyword") or "").strip().lower()
@@ -606,12 +618,23 @@ def _read_settings(path: Path) -> Settings:
 
 
 def load_settings(path: Path) -> Settings:
-    for candidate in (path, settings_backup_path(path)):
+    backup = settings_backup_path(path)
+    if path.exists():
         try:
-            if candidate.exists():
-                return _read_settings(candidate)
-        except Exception:
-            continue
+            return _read_settings(path)
+        except UnsupportedSettingsSchemaError:
+            # A newer version is not corruption: never silently replace it.
+            raise
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
+            pass
+
+    if backup.exists():
+        try:
+            return _read_settings(backup)
+        except UnsupportedSettingsSchemaError:
+            raise
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
+            pass
     return Settings()
 
 
@@ -619,13 +642,21 @@ def save_settings(path: Path, settings: Settings) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     serialized = json.dumps(settings.to_dict(), indent=2, ensure_ascii=False)
 
-    try:
-        current = path.read_text(encoding="utf-8")
-        if not isinstance(json.loads(current), dict):
-            raise ValueError("settings root must be a JSON object")
-    except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
-        pass
-    else:
-        atomic_write_text(settings_backup_path(path), current)
+    if path.exists():
+        try:
+            current = path.read_text(encoding="utf-8")
+            data = json.loads(current)
+            if not isinstance(data, dict):
+                raise ValueError("settings root must be a JSON object")
+            # Validate semantics and schema before promoting the current main file.
+            Settings.from_dict(data)
+        except UnsupportedSettingsSchemaError:
+            # Never overwrite data created by a newer application version.
+            raise
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError, TypeError):
+            # Invalid main file is deliberately not promoted over a valid backup.
+            pass
+        else:
+            atomic_write_text(settings_backup_path(path), current)
 
     atomic_write_text(path, serialized)
