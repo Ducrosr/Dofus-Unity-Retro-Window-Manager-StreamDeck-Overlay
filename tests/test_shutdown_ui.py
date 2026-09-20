@@ -1,5 +1,7 @@
 import os
+import queue
 import threading
+import time
 import unittest
 from unittest.mock import Mock, patch
 
@@ -7,6 +9,9 @@ from dwm.storage.settings import Settings
 
 
 @unittest.skipUnless(os.name == "nt", "Windows application")
+from dwm.app import _StreamDeckRequest
+
+
 class ShutdownUITests(unittest.TestCase):
     def test_shutdown_keeps_tk_running_while_service_waits_and_is_idempotent(self):
         from dwm.app import WindowManagerApp
@@ -47,6 +52,37 @@ class ShutdownUITests(unittest.TestCase):
                 app.overlay_ui.close_all.assert_called_once()
         finally:
             release.set()
+
+    def test_shutdown_cancels_rotation_and_answers_pending_streamdeck_request(self):
+        from dwm.app import WindowManagerApp
+
+        app = Mock()
+        app.settings = Settings(minimize_to_tray=False)
+        app._stop_event = threading.Event()
+        app._refresh_inflight = False
+        app._rotation_request_job = "rotation-job"
+        app._pending_rotation_delta = 3
+        app._queue = queue.Queue()
+        response: "queue.Queue[dict[str, object]]" = queue.Queue(maxsize=1)
+        request = _StreamDeckRequest(
+            request_id="closing-request",
+            command="rotate",
+            payload={"direction": "forward"},
+            deadline=time.monotonic() + 10,
+            response_queue=response,
+        )
+        app._queue.put(("streamdeck", request))
+        app.tray.is_running = False
+
+        with patch("dwm.app.save_settings"):
+            WindowManagerApp.on_close(app, force=True)
+
+        result = response.get(timeout=1)
+        self.assertEqual(result["error_code"], "closing")
+        self.assertEqual(result["request_id"], "closing-request")
+        self.assertEqual(app._pending_rotation_delta, 0)
+        self.assertIsNone(app._rotation_request_job)
+        app.root.after_cancel.assert_called_once_with("rotation-job")
 
     def test_normal_close_still_minimizes_when_requested(self):
         from dwm.app import WindowManagerApp
