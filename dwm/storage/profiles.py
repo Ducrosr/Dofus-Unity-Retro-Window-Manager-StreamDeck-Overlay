@@ -16,6 +16,28 @@ from .settings import normalize_profile_overlays
 PROFILE_SCHEMA_VERSION = 4
 
 
+class UnsupportedProfileSchemaError(ValueError):
+    """Raised when a profile comes from a newer incompatible DWM version."""
+
+
+def _validated_profile_dict(path: Path) -> dict:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("profile root must be a JSON object")
+    try:
+        schema = int(data.get("schema_version", 1) or 1)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("profile schema_version must be an integer") from exc
+    if schema > PROFILE_SCHEMA_VERSION:
+        raise UnsupportedProfileSchemaError(
+            f"profile schema {schema} is newer than supported schema "
+            f"{PROFILE_SCHEMA_VERSION}"
+        )
+    # Parse once as semantic validation while preserving all historical migrations.
+    Profile.from_dict(data)
+    return data
+
+
 class _LegacyProfileUnpickler(pickle.Unpickler):
     """Load primitive legacy profile data without allowing global objects."""
 
@@ -106,7 +128,7 @@ def list_profiles(profiles_dir: Path) -> List[str]:
 
 def load_profile(profiles_dir: Path, name: str) -> Profile:
     p = profile_path(profiles_dir, name)
-    data = json.loads(p.read_text(encoding="utf-8"))
+    data = _validated_profile_dict(p)
     pr = Profile.from_dict(data)
     if not pr.name:
         pr.name = p.stem
@@ -120,6 +142,9 @@ def save_profile(profiles_dir: Path, profile: Profile) -> None:
         profile.created_at = now
     profile.updated_at = now
     path = profile_path(profiles_dir, profile.name)
+    if path.exists():
+        # Never overwrite a profile written by a future DWM schema.
+        _validated_profile_dict(path)
     atomic_write_text(
         path,
         json.dumps(profile.to_dict(), indent=2, ensure_ascii=False),
