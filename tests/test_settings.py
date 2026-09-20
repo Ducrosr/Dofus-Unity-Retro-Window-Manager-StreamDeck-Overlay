@@ -10,6 +10,7 @@ from dwm.storage.settings import (
     DEFAULT_WINDOW_COLUMN_ORDER,
     MODERN_DARK_THEME,
     Settings,
+    UnsupportedSettingsSchemaError,
     load_settings,
     save_settings,
     settings_backup_path,
@@ -236,6 +237,34 @@ class SettingsTests(unittest.TestCase):
 
             self.assertEqual(path.read_text(encoding="utf-8"), "original")
             self.assertEqual(list(Path(tmp).glob("*.tmp")), [])
+
+    def test_invalid_main_is_not_promoted_over_valid_backup_after_recovery(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            save_settings(path, Settings(language="en", refresh_seconds=6))
+            save_settings(path, Settings(language="es", refresh_seconds=12))
+            backup = settings_backup_path(path)
+            valid_backup = backup.read_text(encoding="utf-8")
+
+            path.write_text('{"schema_version": 25, "refresh_seconds": "oops"}', encoding="utf-8")
+            recovered = load_settings(path)
+            self.assertEqual(recovered.language, "en")
+
+            save_settings(path, recovered)
+            self.assertEqual(backup.read_text(encoding="utf-8"), valid_backup)
+
+    def test_future_settings_schema_is_not_replaced_or_downgraded(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            future = '{"schema_version": 999, "language": "fr"}'
+            path.write_text(future, encoding="utf-8")
+
+            with self.assertRaises(UnsupportedSettingsSchemaError):
+                load_settings(path)
+            with self.assertRaises(UnsupportedSettingsSchemaError):
+                save_settings(path, Settings(language="en"))
+
+            self.assertEqual(path.read_text(encoding="utf-8"), future)
 
     def test_overlay_values_are_clamped(self) -> None:
         settings = Settings(
