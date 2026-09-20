@@ -309,9 +309,19 @@ def identify_game_window(
     else:
         if window_class != "UnityWndClass":
             return None
-        # Known Unity titles contain a Dofus marker; requiring it prevents an
-        # unrelated Unity application from being adopted merely by class name.
-        if "dofus" not in lowered:
+        # Preserve known Dofus title forms, including historical builds where
+        # the product name was omitted but class + version metadata remained.
+        parts = [part.strip() for part in _UNITY_TITLE_SEPARATOR.split(title) if part.strip()]
+        has_class_anchor = any(
+            word in _CLASS_BY_WORD
+            for part in parts
+            for word in _normalized_words(part)
+        )
+        has_version_metadata = any(
+            re.fullmatch(r"v?\d+(?:\.\d+)+", part, flags=re.IGNORECASE)
+            for part in parts
+        )
+        if "dofus" not in lowered and not (has_class_anchor and has_version_metadata):
             return None
         pseudo = extract_pseudo_unity(title)
         mode = "unity"
