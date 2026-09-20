@@ -55,6 +55,18 @@ class RuntimeHardeningTests(unittest.TestCase):
         self.assertEqual(app._queue.unfinished_tasks, 0)
         app.root.after.assert_called_once_with(100, app._process_queue)
 
+    def test_queue_yields_to_tk_after_bounded_batch(self) -> None:
+        app = self.make_queue_app()
+        for index in range(65):
+            app._queue.put(("notice", 4, 9, f"message-{index}"))
+
+        app._process_queue()
+
+        self.assertEqual(app._log.call_count, 64)
+        self.assertEqual(app._queue.qsize(), 1)
+        self.assertEqual(app._queue.unfinished_tasks, 1)
+        app.root.after.assert_called_once_with(0, app._process_queue)
+
     def test_event_from_previous_hook_generation_is_ignored(self) -> None:
         app = self.make_queue_app()
         app._hook_generation = 6
