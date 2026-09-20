@@ -4127,6 +4127,7 @@ class WindowManagerApp:
         self._apply_runtime_theme(selected_theme)
         self._apply_display_preferences()
         self._game_mode_revision += 1
+        self._structure_generation += 1
         self.game_mode_var.set(self.game_label)
         self.game_subtitle_var.set(
             tr("Mode {game} · gestion locale des fenêtres", game=self.game_label)
@@ -4179,9 +4180,16 @@ class WindowManagerApp:
             return
         self._stop_win_event_hook()
         try:
-            classes, keyword_map = win_event_filter(self.game_mode, self.settings.retro_title_keyword)
+            classes, keyword_map = win_event_filter(
+                self.game_mode,
+                self.settings.retro_title_keyword,
+            )
+            mode_revision = self._game_mode_revision
+            hook_generation = self._event_hook_generation
             self.win_events = WinEventHook(
-                lambda evt, hwnd: self._queue.put(("wevt", evt, hwnd)),
+                lambda evt, hwnd, mr=mode_revision, hg=hook_generation: self._queue.put(
+                    ("wevt", mr, hg, evt, hwnd)
+                ),
                 class_names=classes,
                 title_keyword_by_class=keyword_map,
             )
@@ -4190,7 +4198,9 @@ class WindowManagerApp:
             if error:
                 self._log(f"WinEventHook: {error}")
             self.shell_attention = ShellAttentionHook(
-                lambda evt, hwnd: self._queue.put(("wevt", evt, hwnd))
+                lambda evt, hwnd, mr=mode_revision, hg=hook_generation: self._queue.put(
+                    ("wevt", mr, hg, evt, hwnd)
+                )
             )
             self.shell_attention.start()
             shell_error = self.shell_attention.get_last_error()
@@ -4201,6 +4211,7 @@ class WindowManagerApp:
             self.win_events = None
 
     def _stop_win_event_hook(self) -> None:
+        self._event_hook_generation = getattr(self, "_event_hook_generation", 0) + 1
         hook = getattr(self, "win_events", None)
         if hook is not None:
             try:
@@ -4677,6 +4688,32 @@ class WindowManagerApp:
             )
 
     def _execute_streamdeck_command(self, command: str, payload: dict[str, object]) -> dict[str, object]:
+        stop_event = getattr(self, "_stop_event", None)
+        if stop_event is not None and stop_event.is_set():
+            return _command_error(
+                "L'application est en cours de fermeture.",
+                "closing",
+                503,
+            )
+
+        if command in {"focus", "rotate", "next_attention", "toggle_ignore", "reorder"}:
+            requested_mode = payload.get("game_mode")
+            current_mode = getattr(self, "game_mode", "")
+            requested_profile = payload.get("profile")
+            current_profile = getattr(self, "_active_profile_name", "")
+            if (
+                requested_mode is not None
+                and str(requested_mode) != str(current_mode)
+            ) or (
+                requested_profile is not None
+                and str(requested_profile) != str(current_profile)
+            ):
+                return _command_error(
+                    "Le mode ou le profil a changé. Actualisez le Stream Deck.",
+                    "context_changed",
+                    409,
+                )
+
         if command == "show":
             self._show_main_window()
             return {"ok": True}
@@ -4713,8 +4750,6 @@ class WindowManagerApp:
             return {"ok": True, "accepted": True, "direction": direction}
 
         if command == "focus":
-            if payload.get("game_mode", self.game_mode) != self.game_mode or payload.get("profile", getattr(self, "_active_profile_name", "")) != getattr(self, "_active_profile_name", ""):
-                return {"ok": False, "error": "Le profil a changé. Réessayez après actualisation.", "_status": 409}
             raw_hwnd = payload.get("hwnd")
             slot: int | None = None
             if raw_hwnd is not None:
@@ -7097,6 +7132,15 @@ class WindowManagerApp:
             return
 
         self._stop_event.set()
+        rotation_job = getattr(self, "_rotation_request_job", None)
+        if rotation_job is not None:
+            try:
+                self.root.after_cancel(rotation_job)
+            except Exception:
+                pass
+        self._rotation_request_job = None
+        self._pending_rotation_delta = 0
+        self._reject_pending_streamdeck_commands()
         self.status_var.set(tr("Fermeture en cours…"))
         try:
             self.settings.auto_refresh = bool(self.auto_refresh_enabled.get())
