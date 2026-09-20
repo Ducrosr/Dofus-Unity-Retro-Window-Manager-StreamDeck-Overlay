@@ -1,5 +1,3 @@
-import { releaseStreamDeckForeground } from "./streamdeck-foreground";
-
 const BASE_URL = "http://127.0.0.1:32145/v1";
 const POLL_INTERVAL_MS = 750;
 const REQUEST_TIMEOUT_MS = 600;
@@ -45,6 +43,20 @@ export type ToggleIgnoreResult = {
 	hwnd: number;
 	name: string;
 };
+
+export class DwmCommandError extends Error {
+	readonly code?: string;
+	readonly status: number;
+	readonly requestId?: string;
+
+	constructor(message: string, status: number, code?: string, requestId?: string) {
+		super(message);
+		this.name = "DwmCommandError";
+		this.status = status;
+		this.code = code;
+		this.requestId = requestId;
+	}
+}
 
 type RefreshResult = {
 	accepted?: boolean;
@@ -167,24 +179,27 @@ class DwmClient {
 			body: JSON.stringify(payload),
 			signal: AbortSignal.timeout(2000),
 		});
-		const result = (await response.json().catch(() => ({}))) as TResult & { error?: string };
+		const result = (await response.json().catch(() => ({}))) as TResult & {
+			error?: string;
+			error_code?: string;
+			request_id?: string;
+		};
 		if (response.ok) return result;
-		throw new Error(result.error || `HTTP ${response.status}`);
+		throw new DwmCommandError(
+			result.error || `HTTP ${response.status}`,
+			response.status,
+			result.error_code,
+			result.request_id,
+		);
 	}
 
-	private async focusCommand(path: "focus" | "rotate" | "next-attention", payload: Record<string, unknown>): Promise<void> {
-		try {
-			await this.command(path, payload);
-			return;
-		} catch (initialError) {
-			// If Stream Deck runs at a higher integrity level than DWM, Windows can
-			// reject every minimization request coming from the Python process. The
-			// plugin inherits Stream Deck's level, so it can release its own desktop
-			// window and retry the exact command once.
-			if (!(await releaseStreamDeckForeground())) throw initialError;
-			await delay(160);
-			await this.command(path, payload);
-		}
+	private async focusCommand(
+		path: "focus" | "rotate" | "next-attention",
+		payload: Record<string, unknown>,
+	): Promise<void> {
+		// These mutations are not idempotent. A timeout does not prove that DWM
+		// did not execute the command, so replaying it could apply the action twice.
+		await this.command(path, payload);
 	}
 
 	private notify(): void {
