@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 import types
 import unittest
 from types import SimpleNamespace
@@ -25,6 +26,7 @@ if os.name != "nt":
     sys.modules[hotkeys_stub.__name__] = hotkeys_stub
 
 from dwm.app import ROTATION_COALESCE_MS, WindowManagerApp  # noqa: E402
+from dwm.services.focus import FocusError  # noqa: E402
 
 
 class FakeRoot:
@@ -167,6 +169,63 @@ class FocusResponsivenessTests(unittest.TestCase):
         focus.assert_called_once_with(103)
         app._record_character_focus.assert_called_once_with(103, notify=True)
         app.update_listboxes.assert_not_called()
+
+    def test_reused_hwnd_is_invalidated_before_focus(self) -> None:
+        app = WindowManagerApp.__new__(WindowManagerApp)
+        app._stop_event = threading.Event()
+        app._all_windows = {
+            101: GameWindow(
+                101,
+                "Korra - Féca - Dofus",
+                "Korra",
+                "Féca",
+                pid=100,
+                window_class="UnityWndClass",
+                game_mode="unity",
+            )
+        }
+        app.settings = SimpleNamespace(
+            retro_title_keyword="dofus retro v",
+            retro_process_keyword="",
+        )
+        app._invalidate_window_target = Mock()
+        app.refresh_windows = Mock()
+
+        with (
+            patch("dwm.app.revalidate_game_window", return_value=None),
+            patch("dwm.app.focus_hwnd") as focus,
+        ):
+            with self.assertRaises(FocusError):
+                app._focus_hwnd_measured(101)
+
+        focus.assert_not_called()
+        app._invalidate_window_target.assert_called_once_with(101)
+        app.refresh_windows.assert_called_once_with(quiet=True, force=True)
+
+    def test_popup_focus_failure_preserves_rotation_index(self) -> None:
+        app = WindowManagerApp.__new__(WindowManagerApp)
+        app._stop_event = threading.Event()
+        app._popup_watch_enabled = True
+        app.popup_watcher = Mock()
+        app.popup_watcher.is_current_event.return_value = True
+        app._managed_order = [101, 102]
+        app._ignored = set()
+        app.rotation_index = 0
+        app._popup_global_cooldown_until = 0.0
+        app._popup_global_cooldown_sec = 2.0
+        app._focus_hwnd_measured = Mock(side_effect=FocusError("blocked"))
+        app._record_character_focus = Mock()
+        app._log = Mock()
+        event = SimpleNamespace(
+            hwnd=102,
+            title="Nat - Dofus Retro v1.44",
+            generation=3,
+        )
+
+        app._handle_popup_event(event)
+
+        self.assertEqual(app.rotation_index, 0)
+        app._record_character_focus.assert_not_called()
 
     def test_streamdeck_rotation_joins_the_same_coalesced_queue(self) -> None:
         app = WindowManagerApp.__new__(WindowManagerApp)
