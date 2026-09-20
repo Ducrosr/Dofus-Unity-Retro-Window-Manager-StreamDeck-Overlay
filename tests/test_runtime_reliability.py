@@ -55,8 +55,11 @@ class RuntimeReliabilityTests(unittest.TestCase):
 
         self.assertEqual(app._apply_windows.call_count, 2)
         self.assertEqual(
-            [call.kwargs["applied"] for call in app._finish_refresh.call_args_list],
-            [False, True],
+            [
+                (call.kwargs["applied"], call.kwargs["catch_up"])
+                for call in app._finish_refresh.call_args_list
+            ],
+            [(False, True), (True, False)],
         )
         self.assertEqual(app._queue.unfinished_tasks, 0)
         self.assertTrue(app.root.after_calls)
@@ -68,7 +71,7 @@ class RuntimeReliabilityTests(unittest.TestCase):
         app._process_queue()
 
         app._apply_windows.assert_not_called()
-        app._finish_refresh.assert_called_once_with(applied=False)
+        app._finish_refresh.assert_called_once_with(applied=False, catch_up=True)
 
     def test_shutdown_rejects_pending_mutation_without_executing_it(self) -> None:
         app = self.make_app()
@@ -88,6 +91,28 @@ class RuntimeReliabilityTests(unittest.TestCase):
         result = response.get_nowait()
         self.assertEqual(result["error_code"], "app_closing")
         self.assertEqual(app._queue.unfinished_tasks, 0)
+
+    def test_shutdown_flush_discards_pending_rotation(self) -> None:
+        app = self.make_app()
+        app._pending_rotation_delta = 3
+        app._rotation_request_job = "job"
+        app._rotate_by_delta = Mock()
+        app._stop_event.set()
+
+        app._flush_rotation_requests()
+
+        self.assertEqual(app._pending_rotation_delta, 0)
+        self.assertIsNone(app._rotation_request_job)
+        app._rotate_by_delta.assert_not_called()
+
+    def test_stale_hook_event_is_ignored(self) -> None:
+        app = self.make_app()
+        app._apply_win_event = Mock()
+        app._queue.put(("wevt", 4, "unity", "create", 101))
+
+        app._process_queue()
+
+        app._apply_win_event.assert_not_called()
 
     def test_cancelled_streamdeck_request_never_starts(self) -> None:
         app = self.make_app()
