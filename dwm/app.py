@@ -4258,7 +4258,7 @@ class WindowManagerApp:
         self._scan_started_monotonic = None
         self._refresh_inflight = False
         self._scan_revision += 1
-        if not self._stop_event.is_set():
+        if not WindowManagerApp._is_stopping(self):
             self._publish_streamdeck_state()
 
         run_again = self._refresh_again_requested
@@ -4391,7 +4391,7 @@ class WindowManagerApp:
             except Exception:
                 pass
         finally:
-            if not self._stop_event.is_set():
+            if not WindowManagerApp._is_stopping(self):
                 self.root.after(
                     max(1, int(delay_seconds * 1000)),
                     self._schedule_refresh,
@@ -4532,7 +4532,7 @@ class WindowManagerApp:
                 self._sync_tray_state()
             except Exception:
                 pass
-            delay = 0 if not self._queue.empty() else 100
+            delay = 1 if not self._queue.empty() else 100
             self.root.after(delay, self._process_queue)
 
 
