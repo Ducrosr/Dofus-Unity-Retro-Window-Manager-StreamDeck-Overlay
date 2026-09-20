@@ -32,9 +32,6 @@ from PIL import Image, ImageTk
 from . import __release_tag__, __version__
 from .models import GameWindow
 from .services.windows import (
-    extract_character_class,
-    extract_pseudo_retro,
-    extract_pseudo_unity,
     identify_game_window,
     list_game_windows,
     list_visible_dofus_candidates,
@@ -158,7 +155,7 @@ from .services.window_order import (
     move_window_to_index,
 )
 from .services.window_table import window_table_values
-from .services.win32_enum import get_class_name, get_last_enum_error, get_window_title
+from .services.win32_enum import get_last_enum_error, get_window_title
 from .services.win_event_hook import WinEventHook
 from .ui_overlays import OverlayUI
 
@@ -2394,7 +2391,7 @@ class WindowManagerApp:
         if self._active_game_hwnd == hwnd:
             self._active_game_hwnd = None
         self.rotation_index = self.rotation_index % len(self._managed_order) if self._managed_order else 0
-        self._structure_generation += 1
+        self._structure_generation = getattr(self, "_structure_generation", 0) + 1
         self.update_listboxes()
 
     def _focus_from_auxiliary_display(self, hwnd: int) -> bool:
@@ -4009,7 +4006,7 @@ class WindowManagerApp:
         self._apply_runtime_theme(selected_theme)
         self._apply_display_preferences()
         self._game_mode_revision += 1
-        self._structure_generation += 1
+        self._structure_generation = getattr(self, "_structure_generation", 0) + 1
         self.game_mode_var.set(self.game_label)
         self.game_subtitle_var.set(
             tr("Mode {game} · gestion locale des fenêtres", game=self.game_label)
@@ -4212,7 +4209,7 @@ class WindowManagerApp:
         unchanged = new_sig == self._windows_sig
         self._windows_sig = new_sig
         if not unchanged:
-            self._structure_generation += 1
+            self._structure_generation = getattr(self, "_structure_generation", 0) + 1
 
         # If nothing changed, just update the timestamp and skip rebuilding the UI.
         if unchanged:
@@ -4461,7 +4458,7 @@ class WindowManagerApp:
             }
 
     def _execute_streamdeck_command(self, command: str, payload: dict[str, object]) -> dict[str, object]:
-        if self._stop_event.is_set():
+        if getattr(self, "_stop_event", None) is not None and self._stop_event.is_set():
             return self._closing_command_result()
         if command in {"focus", "rotate", "next_attention"}:
             requested_mode = payload.get("game_mode")
@@ -4916,7 +4913,7 @@ class WindowManagerApp:
         if not changed_structure:
             return
 
-        self._structure_generation += 1
+        self._structure_generation = getattr(self, "_structure_generation", 0) + 1
         self._reconcile_character_roster()
         self._schedule_smart_profile_match()
 
@@ -5092,7 +5089,7 @@ class WindowManagerApp:
 
     def request_rotation(self, direction: str) -> bool:
         """Coalesce rapid UI/hotkey presses and focus only the final target."""
-        if self._stop_event.is_set():
+        if getattr(self, "_stop_event", None) is not None and self._stop_event.is_set():
             return False
         if direction not in {"forward", "backward"} or not self._managed_order:
             return False
@@ -5108,7 +5105,7 @@ class WindowManagerApp:
         delta = self._pending_rotation_delta
         self._pending_rotation_delta = 0
         self._rotation_request_job = None
-        if self._stop_event.is_set():
+        if getattr(self, "_stop_event", None) is not None and self._stop_event.is_set():
             return
         if delta:
             self._rotate_by_delta(delta)
@@ -6740,7 +6737,7 @@ class WindowManagerApp:
                 WatchedWindow(
                     hwnd=int(hwnd),
                     title=title,
-                    generation=self._structure_generation,
+                    generation=getattr(self, "_structure_generation", 0),
                 )
             )
 
@@ -6788,7 +6785,8 @@ class WindowManagerApp:
     def _handle_popup_event(self, evt: PopupEvent) -> None:
         if not self._popup_watch_enabled or self._stop_event.is_set():
             return
-        if int(getattr(evt, "generation", self._structure_generation)) != self._structure_generation:
+        current_generation = getattr(self, "_structure_generation", 0)
+        if int(getattr(evt, "generation", current_generation)) != current_generation:
             return
 
         hwnd = int(evt.hwnd)
