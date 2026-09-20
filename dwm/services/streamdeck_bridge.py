@@ -127,7 +127,16 @@ class StreamDeckBridge:
                 if self.path == "/v1/status":
                     self._send_json(200, bridge.get_snapshot())
                     return
-                self._send_json(404, {"ok": False, "error": "Route inconnue."})
+                self._send_json(
+                    404,
+                    {
+                        "ok": False,
+                        "error": "Route inconnue.",
+                        "error_code": "route_not_found",
+                        "execution": "not_started",
+                        "retryable": False,
+                    },
+                )
 
             def do_POST(self) -> None:
                 bridge._record_request()
@@ -142,28 +151,73 @@ class StreamDeckBridge:
                 }
                 command = routes.get(self.path)
                 if command is None:
-                    self._send_json(404, {"ok": False, "error": "Route inconnue."})
+                    self._send_json(
+                        404,
+                        {
+                            "ok": False,
+                            "error": "Route inconnue.",
+                            "error_code": "route_not_found",
+                            "execution": "not_started",
+                            "retryable": False,
+                        },
+                    )
                     return
 
                 # Node.js does not send Origin for these calls. Rejecting it keeps
                 # browser pages from driving the local bridge.
                 if self.headers.get("Origin"):
-                    self._send_json(403, {"ok": False, "error": "Origine navigateur refusée."})
+                    self._send_json(
+                        403,
+                        {
+                            "ok": False,
+                            "error": "Origine navigateur refusée.",
+                            "error_code": "browser_origin_rejected",
+                            "execution": "not_started",
+                            "retryable": False,
+                        },
+                    )
                     return
 
                 try:
                     payload = self._read_json()
                 except ValueError as exc:
-                    self._send_json(400, {"ok": False, "error": str(exc)})
+                    self._send_json(
+                        400,
+                        {
+                            "ok": False,
+                            "error": str(exc),
+                            "error_code": "invalid_request",
+                            "execution": "not_started",
+                            "retryable": False,
+                        },
+                    )
                     return
 
                 try:
                     result = dict(bridge._dispatch(command, payload))
                 except TimeoutError:
-                    self._send_json(504, {"ok": False, "error": "L'application ne répond pas."})
+                    self._send_json(
+                        504,
+                        {
+                            "ok": False,
+                            "error": "L'application ne répond pas.",
+                            "error_code": "bridge_timeout",
+                            "execution": "unknown",
+                            "retryable": False,
+                        },
+                    )
                     return
                 except Exception:
-                    self._send_json(503, {"ok": False, "error": "Commande indisponible."})
+                    self._send_json(
+                        503,
+                        {
+                            "ok": False,
+                            "error": "Commande indisponible.",
+                            "error_code": "bridge_unavailable",
+                            "execution": "unknown",
+                            "retryable": False,
+                        },
+                    )
                     return
 
                 default_status = 200 if result.get("ok", False) else 409
