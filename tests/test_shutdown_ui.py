@@ -9,8 +9,6 @@ from dwm.storage.settings import Settings
 
 
 @unittest.skipUnless(os.name == "nt", "Windows application")
-from dwm.app import _StreamDeckRequest
-
 
 class ShutdownUITests(unittest.TestCase):
     def test_shutdown_keeps_tk_running_while_service_waits_and_is_idempotent(self):
@@ -54,7 +52,7 @@ class ShutdownUITests(unittest.TestCase):
             release.set()
 
     def test_shutdown_cancels_rotation_and_answers_pending_streamdeck_request(self):
-        from dwm.app import WindowManagerApp
+        from dwm.app import WindowManagerApp, _StreamDeckRequest
 
         app = Mock()
         app.settings = Settings(minimize_to_tray=False)
