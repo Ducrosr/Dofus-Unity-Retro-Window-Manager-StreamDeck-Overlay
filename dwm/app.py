@@ -301,8 +301,13 @@ class _QueuedStreamDeckCommand:
         with self._lock:
             if self._state != "started":
                 return
+            normalized = dict(result)
+            if not normalized.get("ok", False):
+                normalized.setdefault("error_code", "command_rejected")
+                normalized.setdefault("execution", "started")
+                normalized.setdefault("retryable", False)
             self._state = "completed"
-            self._respond_locked(result)
+            self._respond_locked(normalized)
 
 OFFICIAL_REPOSITORY_URL = (
     "https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay"
@@ -2439,7 +2444,64 @@ class WindowManagerApp:
             show_badge=self.settings.show_popup_badges,
         )
 
+    def _invalidate_window_target(self, hwnd: int) -> None:
+        """Drop runtime state attached to one stale/reused HWND only."""
+        existed = self._all_windows.pop(hwnd, None) is not None
+        self.attention_state.clear(hwnd)
+        self._ignored.discard(hwnd)
+        if hwnd in self._managed_order:
+            self._managed_order.remove(hwnd)
+        if hwnd in self._streamdeck_order:
+            self._streamdeck_order.remove(hwnd)
+        if self._active_game_hwnd == hwnd:
+            self._active_game_hwnd = None
+        if existed:
+            self._structure_generation = getattr(self, "_structure_generation", 0) + 1
+            self._windows_sig = tuple(
+                sorted((window.hwnd, window.title) for window in self._all_windows.values())
+            )
+            if self._managed_order:
+                self.rotation_index %= len(self._managed_order)
+            else:
+                self.rotation_index = 0
+            self._reconcile_character_roster()
+            self.update_listboxes()
+            self._update_popup_watcher_targets()
+
+    def _revalidate_focus_target(self, hwnd: int) -> GameWindow | None:
+        expected = self._all_windows.get(hwnd)
+        if expected is None:
+            return None
+        try:
+            if not is_window(hwnd):
+                current = None
+            elif not expected.window_class or not expected.game_mode:
+                # Compatibility path for synthetic/legacy in-memory entries.
+                return expected
+            else:
+                current = inspect_game_window(
+                    hwnd,
+                    self.game_mode,
+                    self.settings.retro_title_keyword,
+                    self.settings.retro_process_keyword,
+                )
+        except Exception:
+            current = None
+
+        if current is not None and same_window_identity(expected, current):
+            return current
+
+        self._log("La cible Dofus a changé d'identité ; elle est retirée localement.")
+        self._invalidate_window_target(hwnd)
+        self.refresh_windows(quiet=True, force=True)
+        return None
+
     def _focus_hwnd_measured(self, hwnd: int) -> None:
+        if getattr(self, "_stop_event", None) is not None and self._stop_event.is_set():
+            raise FocusError("L'application est en cours de fermeture.")
+        if self._revalidate_focus_target(hwnd) is None:
+            raise FocusError("La fenêtre Dofus ciblée n'est plus la fenêtre attendue.")
+
         started_at = time.monotonic()
         succeeded = False
         try:
@@ -5245,6 +5307,8 @@ class WindowManagerApp:
 
     def request_rotation(self, direction: str) -> bool:
         """Coalesce rapid UI/hotkey presses and focus only the final target."""
+        if getattr(self, "_stop_event", None) is not None and self._stop_event.is_set():
+            return False
         if direction not in {"forward", "backward"} or not self._managed_order:
             return False
         self._pending_rotation_delta += 1 if direction == "forward" else -1
@@ -5259,6 +5323,8 @@ class WindowManagerApp:
         delta = self._pending_rotation_delta
         self._pending_rotation_delta = 0
         self._rotation_request_job = None
+        if getattr(self, "_stop_event", None) is not None and self._stop_event.is_set():
+            return
         if delta:
             self._rotate_by_delta(delta)
 
@@ -5268,6 +5334,8 @@ class WindowManagerApp:
         return self._rotate_by_delta(1 if direction == "forward" else -1)
 
     def _rotate_by_delta(self, delta: int) -> bool:
+        if getattr(self, "_stop_event", None) is not None and self._stop_event.is_set():
+            return False
         if not self._managed_order or not delta:
             return False
 
