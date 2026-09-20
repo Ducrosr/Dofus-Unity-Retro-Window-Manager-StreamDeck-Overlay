@@ -143,6 +143,26 @@ class RuntimeHardeningTests(unittest.TestCase):
         self.assertIsNone(app._rotation_request_job)
         app._rotate_by_delta.assert_not_called()
 
+    def test_popup_focus_failure_preserves_rotation_index(self) -> None:
+        app = WindowManagerApp.__new__(WindowManagerApp)
+        app._stop_event = threading.Event()
+        app._popup_watch_enabled = True
+        app._popup_global_cooldown_until = 0.0
+        app._popup_global_cooldown_sec = 2.0
+        app._managed_order = [101, 202]
+        app._ignored = set()
+        app.rotation_index = 1
+        app.popup_watcher = SimpleNamespace(is_current_event=Mock(return_value=True))
+        app._focus_hwnd_measured = Mock(side_effect=FocusError("refus"))
+        app._record_character_focus = Mock()
+        app._log = Mock()
+        event = SimpleNamespace(hwnd=101, title="Nealla", generation=3)
+
+        app._handle_popup_event(event)
+
+        self.assertEqual(app.rotation_index, 1)
+        app._record_character_focus.assert_not_called()
+
     def test_reused_hwnd_is_rejected_immediately_before_focus(self) -> None:
         app = WindowManagerApp.__new__(WindowManagerApp)
         expected = GameWindow(
