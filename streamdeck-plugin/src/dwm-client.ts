@@ -31,6 +31,8 @@ export type DwmStatus = {
 	theme?: string;
 	language?: "fr" | "en" | "es";
 	scan_revision?: number;
+	scan_ok?: boolean;
+	scan_error?: string;
 	show_character_portraits?: boolean;
 	show_character_badges?: boolean;
 	attention_blink_enabled?: boolean;
