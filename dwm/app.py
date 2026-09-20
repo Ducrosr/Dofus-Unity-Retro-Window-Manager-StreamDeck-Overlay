@@ -213,6 +213,7 @@ SWAP_POSITION_LABELS = {
     "bottom_right": "En bas à droite",
 }
 ROTATION_COALESCE_MS = 18
+QUEUE_BATCH_LIMIT = 64
 OFFICIAL_REPOSITORY_URL = (
     "https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay"
 )
@@ -539,6 +540,8 @@ class WindowManagerApp:
         self._update_check_inflight = False
         self._available_release: ReleaseInfo | None = None
         self._scan_revision = 0
+        self._last_scan_ok = True
+        self._last_scan_error = ""
         self._game_mode_revision = 0
         self.streamdeck_bridge: StreamDeckBridge | None = None
         self.shell_attention: ShellAttentionHook | None = None
@@ -4114,8 +4117,8 @@ class WindowManagerApp:
         threading.Thread(target=worker, daemon=True).start()
         return True
 
-    def _finish_refresh(self) -> None:
-        """Publish scan completion and run one explicitly queued refresh."""
+    def _finish_refresh(self, *, success: bool = True, error: str = "") -> None:
+        """Finalize one scan attempt without leaving the refresh gate stuck."""
         if self._scan_started_monotonic is not None:
             self.runtime_metrics.record_scan(
                 time.monotonic() - self._scan_started_monotonic
@@ -4123,7 +4126,12 @@ class WindowManagerApp:
         self._scan_started_monotonic = None
         self._refresh_inflight = False
         self._scan_revision += 1
+        self._last_scan_ok = bool(success)
+        self._last_scan_error = "" if success else str(error or "Échec du scan")
         self._publish_streamdeck_state()
+        if self._stop_event.is_set():
+            self._refresh_again_requested = False
+            return
         if self._refresh_again_requested:
             self._refresh_again_requested = False
             self.root.after(0, lambda: self.refresh_windows(quiet=True, force=True))
@@ -4198,85 +4206,160 @@ class WindowManagerApp:
     def _schedule_refresh(self):
         if self._stop_event.is_set():
             return
-        if self.auto_refresh_enabled.get():
-            self.refresh_windows(quiet=True)
-        hook = getattr(self, "win_events", None)
+
         try:
-            hook_healthy = bool(hook and hook.is_running())
-        except Exception:
-            hook_healthy = False
-        delay_seconds = adaptive_refresh_delay_seconds(
-            self.settings.refresh_seconds,
-            enabled=bool(getattr(self.settings, "adaptive_performance_enabled", True)),
-            event_hook_healthy=hook_healthy,
-            has_windows=bool(self._all_windows),
-        )
-        self._scheduled_refresh_delay_seconds = delay_seconds
-        self.root.after(delay_seconds * 1000, self._schedule_refresh)
+            if self.auto_refresh_enabled.get():
+                self.refresh_windows(quiet=True)
+        except Exception as exc:
+            try:
+                self._log(f"Actualisation automatique échouée: {exc}")
+            except Exception:
+                pass
+        finally:
+            if self._stop_event.is_set():
+                return
+            hook = getattr(self, "win_events", None)
+            try:
+                hook_healthy = bool(hook and hook.is_running())
+            except Exception:
+                hook_healthy = False
+            delay_seconds = adaptive_refresh_delay_seconds(
+                self.settings.refresh_seconds,
+                enabled=bool(getattr(self.settings, "adaptive_performance_enabled", True)),
+                event_hook_healthy=hook_healthy,
+                has_windows=bool(self._all_windows),
+            )
+            self._scheduled_refresh_delay_seconds = delay_seconds
+            self.root.after(delay_seconds * 1000, self._schedule_refresh)
 
     def _on_toggle_autorefresh(self):
         self.settings.auto_refresh = bool(self.auto_refresh_enabled.get())
         save_settings(self.settings_path, self.settings)
 
+    def _reject_queued_item_during_shutdown(self, item: object) -> None:
+        if not isinstance(item, tuple) or not item:
+            return
+        if item[0] != "streamdeck" or len(item) < 4:
+            return
+        response_queue = item[3]
+        try:
+            response_queue.put_nowait(
+                {
+                    "ok": False,
+                    "error": "L'application est en cours de fermeture.",
+                    "code": "app_closing",
+                    "_status": 503,
+                }
+            )
+        except (AttributeError, queue.Full):
+            pass
+
+    def _process_queue_item(self, item: object) -> None:
+        if not isinstance(item, tuple) or not item:
+            return
+
+        if self._stop_event.is_set():
+            self._reject_queued_item_during_shutdown(item)
+            return
+
+        kind = item[0]
+        if kind == "windows":
+            success = False
+            error = ""
+            try:
+                if int(item[1]) == self._game_mode_revision:
+                    self._apply_windows(item[2])
+                    success = True
+            except Exception as exc:
+                error = str(exc)
+                try:
+                    self._log(f"Application du scan échouée: {exc}")
+                except Exception:
+                    pass
+            finally:
+                self._finish_refresh(success=success, error=error)
+        elif kind == "error":
+            try:
+                if int(item[1]) == self._game_mode_revision:
+                    self._log(str(item[2]))
+            finally:
+                self._finish_refresh(success=False, error=str(item[2]))
+        elif kind == "notice":
+            if int(item[1]) == self._game_mode_revision:
+                self._log(str(item[2]))
+        elif kind == "streamdeck":
+            response_queue = item[3]
+            try:
+                result = self._execute_streamdeck_command(str(item[1]), item[2])
+            except Exception as exc:
+                result = {
+                    "ok": False,
+                    "error": str(exc),
+                    "code": "backend_error",
+                    "_status": 503,
+                }
+            try:
+                response_queue.put_nowait(result)
+            except queue.Full:
+                pass
+        elif kind == "wevt":
+            _evt, _hwnd = item[1], int(item[2])
+            self._apply_win_event(str(_evt), _hwnd)
+        elif kind == "tray":
+            self._handle_tray_action(str(item[1]), str(item[2]) if len(item) > 2 else "")
+        elif kind == "update_check":
+            self._finish_update_check(
+                manual=bool(item[1]),
+                result=item[2] if isinstance(item[2], UpdateCheckResult) else None,
+                error=str(item[3] or ""),
+                checked_at=str(item[4] or ""),
+            )
+
     def _process_queue(self):
-        while True:
+        processed = 0
+        while processed < QUEUE_BATCH_LIMIT:
             try:
                 item = self._queue.get_nowait()
             except queue.Empty:
                 break
 
-            kind = item[0]
-            if kind == "windows":
-                if int(item[1]) == self._game_mode_revision:
-                    self._apply_windows(item[2])
-                self._finish_refresh()
-            elif kind == "error":
-                if int(item[1]) == self._game_mode_revision:
-                    self._log(str(item[2]))
-                self._finish_refresh()
-            elif kind == "notice":
-                if int(item[1]) == self._game_mode_revision:
-                    self._log(str(item[2]))
-            elif kind == "streamdeck":
-                response_queue = item[3]
+            try:
+                self._process_queue_item(item)
+            except Exception as exc:
                 try:
-                    result = self._execute_streamdeck_command(str(item[1]), item[2])
-                except Exception as exc:
-                    result = {"ok": False, "error": str(exc), "_status": 503}
-                try:
-                    response_queue.put_nowait(result)
-                except queue.Full:
-                    pass
-            elif kind == "wevt":
-                # Window event hook notifications (create/destroy/namechange)
-                try:
-                    _evt, _hwnd = item[1], int(item[2])
-                    self._apply_win_event(str(_evt), _hwnd)
+                    self._log(f"Message interne ignoré après erreur: {exc}")
                 except Exception:
                     pass
-            elif kind == "tray":
-                self._handle_tray_action(str(item[1]), str(item[2]) if len(item) > 2 else "")
-            elif kind == "update_check":
-                self._finish_update_check(
-                    manual=bool(item[1]),
-                    result=item[2] if isinstance(item[2], UpdateCheckResult) else None,
-                    error=str(item[3] or ""),
-                    checked_at=str(item[4] or ""),
-                )
+            finally:
+                self._queue.task_done()
+            processed += 1
 
-            self._queue.task_done()
-            if self._stop_event.is_set():
-                return
+        if self._stop_event.is_set():
+            # Reject any bridge commands that were already queued when shutdown
+            # started, while acknowledging every queue entry.
+            while True:
+                try:
+                    item = self._queue.get_nowait()
+                except queue.Empty:
+                    break
+                try:
+                    self._reject_queued_item_during_shutdown(item)
+                finally:
+                    self._queue.task_done()
+            return
 
-        if not self._stop_event.is_set():
-            try:
-                self._sync_tray_state()
-            except Exception:
-                # A tray/UI-state issue must never stop the main Tk queue.
-                # WinEvent notifications also pass through this queue, so losing
-                # the recurring callback would stop automatic Dofus window updates.
-                pass
-            self.root.after(100, self._process_queue)
+        try:
+            self._sync_tray_state()
+        except Exception:
+            # A tray/UI-state issue must never stop the main Tk queue.
+            # WinEvent notifications also pass through this queue, so losing
+            # the recurring callback would stop automatic Dofus window updates.
+            pass
+
+        # Yield to Tk after a bounded batch. Under sustained producer load this
+        # prevents the queue from monopolizing the UI thread.
+        delay_ms = 0 if not self._queue.empty() else 100
+        self.root.after(delay_ms, self._process_queue)
 
     # ---------------------------- Stream Deck bridge ----------------------------
 
@@ -4293,6 +4376,13 @@ class WindowManagerApp:
             raise TimeoutError("Délai de réponse de l'interface dépassé.") from exc
 
     def _execute_streamdeck_command(self, command: str, payload: dict[str, object]) -> dict[str, object]:
+        if self._stop_event.is_set():
+            return {
+                "ok": False,
+                "error": "L'application est en cours de fermeture.",
+                "code": "app_closing",
+                "_status": 503,
+            }
         if command == "show":
             self._show_main_window()
             return {"ok": True}
@@ -4923,6 +5013,8 @@ class WindowManagerApp:
 
     def request_rotation(self, direction: str) -> bool:
         """Coalesce rapid UI/hotkey presses and focus only the final target."""
+        if self._stop_event.is_set():
+            return False
         if direction not in {"forward", "backward"} or not self._managed_order:
             return False
         self._pending_rotation_delta += 1 if direction == "forward" else -1
@@ -4937,6 +5029,8 @@ class WindowManagerApp:
         delta = self._pending_rotation_delta
         self._pending_rotation_delta = 0
         self._rotation_request_job = None
+        if self._stop_event.is_set():
+            return
         if delta:
             self._rotate_by_delta(delta)
 
@@ -4946,6 +5040,8 @@ class WindowManagerApp:
         return self._rotate_by_delta(1 if direction == "forward" else -1)
 
     def _rotate_by_delta(self, delta: int) -> bool:
+        if self._stop_event.is_set():
+            return False
         if not self._managed_order or not delta:
             return False
 
@@ -6707,6 +6803,14 @@ class WindowManagerApp:
             return
 
         self._stop_event.set()
+        rotation_job = self._rotation_request_job
+        self._rotation_request_job = None
+        self._pending_rotation_delta = 0
+        if rotation_job is not None:
+            try:
+                self.root.after_cancel(rotation_job)
+            except Exception:
+                pass
         self.status_var.set(tr("Fermeture en cours…"))
         try:
             self.settings.auto_refresh = bool(self.auto_refresh_enabled.get())
