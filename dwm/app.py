@@ -229,6 +229,7 @@ LANGUAGE_FLAG_ASSETS = {
     "es": ("assets", "flags", "es.png"),
 }
 
+
 @dataclass
 class _QueuedStreamDeckRequest:
     command: str
