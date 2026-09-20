@@ -4184,8 +4184,8 @@ class WindowManagerApp:
                 self.game_mode,
                 self.settings.retro_title_keyword,
             )
-            mode_revision = self._game_mode_revision
-            hook_generation = self._event_hook_generation
+            mode_revision = getattr(self, "_game_mode_revision", 0)
+            hook_generation = getattr(self, "_event_hook_generation", 0)
             self.win_events = WinEventHook(
                 lambda evt, hwnd, mr=mode_revision, hg=hook_generation: self._queue.put(
                     ("wevt", mr, hg, evt, hwnd)
@@ -4244,8 +4244,8 @@ class WindowManagerApp:
         self._last_scan_monotonic = now
         self._refresh_inflight = True
         self._scan_started_monotonic = now
-        mode_revision = self._game_mode_revision
-        structure_generation = self._structure_generation
+        mode_revision = getattr(self, "_game_mode_revision", 0)
+        structure_generation = getattr(self, "_structure_generation", 0)
         scan_mode = self.game_mode
         game_label = self.game_label
         retro_title_keyword = self.settings.retro_title_keyword
@@ -4448,28 +4448,38 @@ class WindowManagerApp:
 
         if kind == "windows":
             mode_revision = int(item[1])
-            generation = int(item[2])
+            if len(item) >= 4:
+                generation = int(item[2])
+                payload = item[3]
+            else:
+                generation = getattr(self, "_structure_generation", 0)
+                payload = item[2]
             try:
                 if (
-                    mode_revision != self._game_mode_revision
-                    or generation != self._structure_generation
+                    mode_revision != getattr(self, "_game_mode_revision", 0)
+                    or generation != getattr(self, "_structure_generation", 0)
                 ):
                     self._refresh_again_requested = True
                     return
-                self._apply_windows(item[3])
+                self._apply_windows(payload)
             finally:
                 self._finish_refresh()
             return
 
         if kind == "error":
             mode_revision = int(item[1])
-            generation = int(item[2])
+            if len(item) >= 4:
+                generation = int(item[2])
+                message = item[3]
+            else:
+                generation = getattr(self, "_structure_generation", 0)
+                message = item[2]
             try:
                 if (
-                    mode_revision == self._game_mode_revision
-                    and generation == self._structure_generation
+                    mode_revision == getattr(self, "_game_mode_revision", 0)
+                    and generation == getattr(self, "_structure_generation", 0)
                 ):
-                    self._log(str(item[3]))
+                    self._log(str(message))
                 else:
                     self._refresh_again_requested = True
             finally:
@@ -4477,8 +4487,9 @@ class WindowManagerApp:
             return
 
         if kind == "notice":
-            if int(item[1]) == self._game_mode_revision:
-                self._log(str(item[3]))
+            message = item[3] if len(item) >= 4 else item[2]
+            if int(item[1]) == getattr(self, "_game_mode_revision", 0):
+                self._log(str(message))
             return
 
         if kind == "streamdeck":
