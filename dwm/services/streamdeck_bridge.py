@@ -160,10 +160,24 @@ class StreamDeckBridge:
                 try:
                     result = dict(bridge._dispatch(command, payload))
                 except TimeoutError:
-                    self._send_json(504, {"ok": False, "error": "L'application ne répond pas."})
+                    self._send_json(
+                        504,
+                        {
+                            "ok": False,
+                            "error": "L'application ne répond pas.",
+                            "error_code": "backend_timeout",
+                        },
+                    )
                     return
                 except Exception:
-                    self._send_json(503, {"ok": False, "error": "Commande indisponible."})
+                    self._send_json(
+                        503,
+                        {
+                            "ok": False,
+                            "error": "Commande indisponible.",
+                            "error_code": "backend_unavailable",
+                        },
+                    )
                     return
 
                 default_status = 200 if result.get("ok", False) else 409
