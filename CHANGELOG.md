@@ -1,5 +1,29 @@
 # Historique
 
+## Non publié — fiabilisation post-2.20.0-beta.6
+
+### Runtime et fenêtres
+
+- Pompe de messages Tk bornée et protégée message par message : une erreur d'application de scan n'interrompt plus l'acquittement, la finalisation ni le réarmement.
+- Résultats de scan et événements Win32 associés à des générations structurelles afin d'écarter les résultats périmés après changement de mode ou de structure.
+- Identité de cible enrichie (PID, classe, mode, personnage et chemin de processus lorsqu'il est accessible) et revalidation locale juste avant focus, sans rescanner toutes les fenêtres à chaque commande.
+- Arrêt renforcé : rotation différée annulée, mutations en file refusées et commandes Stream Deck en attente réveillées avec un état de fermeture.
+
+### OBS, écrans et popup Retro
+
+- Suppression du remplacement global temporaire de `Toplevel` pour le popup OBS ; la fenêtre de production est désormais explicitement possédée et réutilisée.
+- L'overlay persistant conserve son `Toplevel` lors des changements de palette et de verrouillage ; les simulations d'affichage sont isolées des surfaces OBS.
+- Coordonnées négatives sérialisées en coordonnées Tk absolues (`+-N`) tout en relisant explicitement l'ancien format DWM.
+- Watcher Retro lié à HWND + génération ; captures anciennes, callbacks tardifs et remplacements de HWND ne peuvent plus réattribuer une capture obsolète.
+
+### Stream Deck et données
+
+- Suppression du rejeu automatique des commandes non idempotentes `focus`, `rotate` et `next-attention` après un résultat ambigu.
+- Requêtes mutatrices dotées d'un identifiant, d'une échéance et d'un état atomique ; une commande expirée n'est annulée que si elle n'a pas commencé.
+- Validation du contexte mode/profil avant mutation.
+- Les paramètres invalides ne remplacent plus une sauvegarde valide et les schémas Settings/Profile plus récents que l'application sont refusés sans écrasement automatique.
+
+
 ## 2.20.0-beta.6 — 2026-09-17
 
 ### OBS et overlay
