@@ -4463,6 +4463,24 @@ class WindowManagerApp:
     def _execute_streamdeck_command(self, command: str, payload: dict[str, object]) -> dict[str, object]:
         if self._stop_event.is_set():
             return self._closing_command_result()
+        if command in {"focus", "rotate", "next_attention"}:
+            requested_mode = payload.get("game_mode")
+            requested_profile = payload.get("profile")
+            if requested_mode is not None and requested_mode != self.game_mode:
+                return {
+                    "ok": False,
+                    "error_code": "context_changed",
+                    "error": "Le mode de jeu a changé. Actualisez le Stream Deck.",
+                    "_status": 409,
+                }
+            active_profile = getattr(self, "_active_profile_name", "")
+            if requested_profile is not None and requested_profile != active_profile:
+                return {
+                    "ok": False,
+                    "error_code": "context_changed",
+                    "error": "Le profil a changé. Actualisez le Stream Deck.",
+                    "_status": 409,
+                }
         if command == "show":
             self._show_main_window()
             return {"ok": True}
@@ -4499,8 +4517,6 @@ class WindowManagerApp:
             return {"ok": True, "accepted": True, "direction": direction}
 
         if command == "focus":
-            if payload.get("game_mode", self.game_mode) != self.game_mode or payload.get("profile", getattr(self, "_active_profile_name", "")) != getattr(self, "_active_profile_name", ""):
-                return {"ok": False, "error": "Le profil a changé. Réessayez après actualisation.", "_status": 409}
             raw_hwnd = payload.get("hwnd")
             slot: int | None = None
             if raw_hwnd is not None:
