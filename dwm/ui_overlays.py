@@ -330,7 +330,7 @@ class OverlayUI:
         popup_title: str,
     ) -> None:
         """Enable stable production HWND ownership for OBS window capture."""
-        if self._closed or self.window_role != "production":
+        if getattr(self, "_closed", False) or getattr(self, "window_role", "production") != "production":
             return
         self._obs_capture_enabled = True
         self._obs_popup_idle = popup_idle
@@ -364,12 +364,12 @@ class OverlayUI:
         self._toast_images.clear()
 
     def _set_toast_idle(self, window: Toplevel) -> None:
-        if not self._obs_capture_enabled or self._closed:
+        if not getattr(self, "_obs_capture_enabled", False) or getattr(self, "_closed", False):
             return
-        callback = self._obs_popup_idle
+        callback = getattr(self, "_obs_popup_idle", None)
         if callback is not None:
             callback(window)
-        style = self._obs_popup_style
+        style = getattr(self, "_obs_popup_style", None)
         if style is not None:
             style(window)
 
@@ -1280,7 +1280,7 @@ class OverlayUI:
         window = self._ensure_toast_window()
         self._clear_toast_contents(window)
         window.withdraw()
-        if self._obs_popup_title:
+        if getattr(self, "_obs_popup_title", ""):
             try:
                 window.title(self._obs_popup_title)
             except Exception:
@@ -1370,8 +1370,9 @@ class OverlayUI:
         x, y = place_inside_rect(target_rect, (width, height), anchor)
         window.geometry(format_tk_geometry(width, height, x, y))
         _apply_non_activating_style(window, click_through=True)
-        if self._obs_popup_style is not None:
-            self._obs_popup_style(window)
+        popup_style = getattr(self, "_obs_popup_style", None)
+        if popup_style is not None:
+            popup_style(window)
         window.deiconify()
         self.toast_job = self.root.after(
             clamp_notification_duration(duration_ms),
