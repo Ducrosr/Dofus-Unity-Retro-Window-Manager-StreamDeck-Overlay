@@ -276,6 +276,7 @@ def identify_game_window(
     *,
     retro_title_keyword: str = "dofus retro v",
     retro_process_keyword: str = "",
+    window_class_hint: str = "",
 ) -> GameWindow | None:
     """Recognize one HWND and return its current Dofus identity.
 
@@ -289,7 +290,7 @@ def identify_game_window(
         return None
 
     mode = (game_mode or "unity").strip().lower()
-    window_class = get_class_name(hwnd)
+    window_class = window_class_hint or get_class_name(hwnd)
     lowered = title.casefold()
     process_path = _get_process_image_path(hwnd)
     pid = _get_pid(hwnd)
@@ -312,18 +313,15 @@ def identify_game_window(
         # Preserve known Dofus title forms, including historical builds where
         # the product name was omitted but class + version metadata remained.
         parts = [part.strip() for part in _UNITY_TITLE_SEPARATOR.split(title) if part.strip()]
-        has_class_anchor = any(
-            word in _CLASS_BY_WORD
-            for part in parts
-            for word in _normalized_words(part)
-        )
+        pseudo_candidate = extract_pseudo_unity(title)
+        has_class_anchor = bool(extract_character_class(title, pseudo_candidate))
         has_version_metadata = any(
             re.fullmatch(r"v?\d+(?:\.\d+)+", part, flags=re.IGNORECASE)
             for part in parts
         )
         if "dofus" not in lowered and not (has_class_anchor and has_version_metadata):
             return None
-        pseudo = extract_pseudo_unity(title)
+        pseudo = pseudo_candidate
         mode = "unity"
 
     if not pseudo:
@@ -368,7 +366,12 @@ def list_unity_windows(class_name: str = "UnityWndClass") -> List[GameWindow]:
         if hwnd in seen:
             continue
         seen.add(hwnd)
-        window = identify_game_window(hwnd, title, "unity")
+        window = identify_game_window(
+            hwnd,
+            title,
+            "unity",
+            window_class_hint=class_name,
+        )
         if window is None:
             continue
         out.append(window)
