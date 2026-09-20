@@ -52,11 +52,12 @@ class RetroPopupWatcher:
         cooldown_sec: float = 2.0,
         true_needed: int = 2,
         false_needed: int = 3,
+        generation_seed: int = 0,
     ):
         self._emit = emit
         self._enabled = False
         self._lock = threading.RLock()
-        self._next_generation = 0
+        self._next_generation = max(0, int(generation_seed)) << 32
 
         self._min_dt = 1.0 / max(0.5, float(max_fps_per_window))
         self._cooldown = float(cooldown_sec)
