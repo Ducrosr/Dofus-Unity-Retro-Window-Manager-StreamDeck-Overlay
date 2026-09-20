@@ -69,6 +69,40 @@ jobs:
       - name: Empaqueter le plugin
         run: npm run pack
 
+  packaging:
+    name: Packaging principal et popup facultatif
+    runs-on: windows-latest
+    steps:
+      - name: Récupérer les sources
+        uses: actions/checkout@v4
+
+      - name: Installer Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Compiler le build principal
+        run: python build_exe.py
+
+      - name: Vérifier le build principal
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "dist/DofusWindowManager.exe")) { throw "EXE principal absent" }
+          $bytes = [IO.File]::ReadAllBytes("dist/DofusWindowManager.exe")
+          if ($bytes.Length -lt 64 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw "EXE principal invalide" }
+
+      - name: Compiler le build popup facultatif
+        run: python build_exe.py --with-popup
+
+      - name: Relever la version windows-capture et vérifier le build popup
+        shell: pwsh
+        run: |
+          .\.venv-build-popup\Scripts\python.exe -m pip show windows-capture
+          if (-not (Test-Path "dist/DofusWindowManager.exe")) { throw "EXE popup absent" }
+          $bytes = [IO.File]::ReadAllBytes("dist/DofusWindowManager.exe")
+          if ($bytes.Length -lt 64 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw "EXE popup invalide" }
+
   test-build:
     name: Compiler le lot pour essais manuels
     needs: [python, streamdeck]
