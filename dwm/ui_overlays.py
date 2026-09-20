@@ -503,14 +503,27 @@ class OverlayUI:
         window.attributes("-topmost", True)
         window.minsize(280, 120)
         fallback_height = max(140, min(380, 54 + len(self.entries) * 31))
-        requested = parse_tk_geometry(geometry) or (340, fallback_height, 40, 120)
+        display_rects = _get_display_rects(self.root)
+        if display_rects:
+            legacy_rect = (
+                min(rect[0] for rect in display_rects),
+                min(rect[1] for rect in display_rects),
+                max(rect[2] for rect in display_rects),
+                max(rect[3] for rect in display_rects),
+            )
+        else:
+            legacy_rect = None
+        requested = parse_tk_geometry(
+            geometry,
+            legacy_reference_rect=legacy_rect,
+        ) or (340, fallback_height, 40, 120)
         width, height, x, y = requested
         recovered_x, recovered_y = recover_window_position(
             width,
             height,
             x,
             y,
-            _get_display_rects(self.root),
+            display_rects,
         )
         recovered_geometry = format_tk_geometry(
             width,
