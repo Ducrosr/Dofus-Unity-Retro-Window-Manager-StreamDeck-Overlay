@@ -102,6 +102,8 @@ def _set_popup_idle(window) -> None:
 
 def _ensure_obs_popup_window(overlay, ui_overlays):
     """Create one permanent popup HWND for OBS to keep attached to."""
+    if not getattr(overlay, "obs_capture_enabled", True) or getattr(overlay, "_closed", False):
+        return None
     window = overlay.toast_window
     if window is not None:
         try:
@@ -164,7 +166,8 @@ def enable_obs_overlay_capture() -> None:
 
         def init_obs_overlay(self, *args, **kwargs) -> None:
             init_original(self, *args, **kwargs)
-            _ensure_obs_popup_window(self, ui_overlays)
+            if getattr(self, "obs_capture_enabled", True):
+                _ensure_obs_popup_window(self, ui_overlays)
 
         init_obs_overlay._dwm_obs_capture_wrapper = True
         ui_overlays.OverlayUI.__init__ = init_obs_overlay
@@ -173,6 +176,9 @@ def enable_obs_overlay_capture() -> None:
     if not getattr(hide_original, "_dwm_obs_capture_wrapper", False):
 
         def hide_obs_focus_popup(self) -> None:
+            if not getattr(self, "obs_capture_enabled", True) or getattr(self, "_closed", False):
+                hide_original(self)
+                return
             if self.toast_job is not None:
                 try:
                     self.root.after_cancel(self.toast_job)
@@ -181,53 +187,30 @@ def enable_obs_overlay_capture() -> None:
                 self.toast_job = None
 
             window = _ensure_obs_popup_window(self, ui_overlays)
-            _set_popup_idle(window)
-            _clear_toolwindow_style(window)
+            if window is not None:
+                _set_popup_idle(window)
+                _clear_toolwindow_style(window)
             self._toast_images.clear()
 
         hide_obs_focus_popup._dwm_obs_capture_wrapper = True
         ui_overlays.OverlayUI._hide_visible_toast = hide_obs_focus_popup
 
-    popup_original = ui_overlays.OverlayUI._show_swap_notification_now
-    if not getattr(popup_original, "_dwm_obs_capture_wrapper", False):
+    create_original = ui_overlays.OverlayUI._create_toast_window
+    if not getattr(create_original, "_dwm_obs_capture_wrapper", False):
 
-        def show_obs_focus_popup(self, request) -> None:
-            window = _ensure_obs_popup_window(self, ui_overlays)
-            for child in tuple(window.winfo_children()):
-                try:
-                    child.destroy()
-                except Exception:
-                    pass
+        def create_obs_focus_popup(self):
+            if not getattr(self, "obs_capture_enabled", True):
+                return create_original(self)
+            return _ensure_obs_popup_window(self, ui_overlays)
 
-            toplevel_original = ui_overlays.Toplevel
-
-            def reuse_popup_window(_root):
-                return window
-
-            ui_overlays.Toplevel = reuse_popup_window
-            try:
-                popup_original(self, request)
-            finally:
-                ui_overlays.Toplevel = toplevel_original
-
-            _set_window_title(window, POPUP_WINDOW_TITLE)
-            _clear_toolwindow_style(window)
-
-        show_obs_focus_popup._dwm_obs_capture_wrapper = True
-        ui_overlays.OverlayUI._show_swap_notification_now = show_obs_focus_popup
+        create_obs_focus_popup._dwm_obs_capture_wrapper = True
+        ui_overlays.OverlayUI._create_toast_window = create_obs_focus_popup
 
     close_original = ui_overlays.OverlayUI.close_all
     if not getattr(close_original, "_dwm_obs_capture_wrapper", False):
 
         def close_obs_overlay(self) -> None:
-            window = self.toast_window
             close_original(self)
-            self.toast_window = None
-            if window is not None:
-                try:
-                    window.destroy()
-                except Exception:
-                    pass
 
         close_obs_overlay._dwm_obs_capture_wrapper = True
         ui_overlays.OverlayUI.close_all = close_obs_overlay

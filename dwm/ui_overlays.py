@@ -255,6 +255,7 @@ class OverlayUI:
         reorder_character: Callable[[int, str | int], None] | None = None,
         focus_next_attention: Callable[[], bool] | None = None,
         palette: Mapping[str, str] | None = None,
+        obs_capture_enabled: bool = True,
     ) -> None:
         self.root = root
         self.focus_character = focus_character
@@ -265,6 +266,8 @@ class OverlayUI:
         )
         self.reorder_character = reorder_character or (lambda _hwnd, _direction: None)
         self.focus_next_attention = focus_next_attention or (lambda: False)
+        self.obs_capture_enabled = bool(obs_capture_enabled)
+        self._closed = False
         self.palette = dict(DEFAULT_PALETTE)
         if palette:
             self.palette.update(palette)
@@ -327,9 +330,16 @@ class OverlayUI:
         self.palette = dict(DEFAULT_PALETTE)
         self.palette.update(palette)
         if self.persistent_window is not None:
-            self._destroy_persistent()
+            try:
+                self.persistent_window.configure(background=self.palette["line"])
+                self.persistent_window.attributes("-alpha", self.persistent_opacity / 100)
+                _apply_non_activating_style(
+                    self.persistent_window,
+                    click_through=self.persistent_locked,
+                )
+            except Exception:
+                pass
             if self.persistent_enabled:
-                self._ensure_persistent()
                 self._render_persistent()
         if self.compact_window is not None:
             try:
@@ -619,7 +629,6 @@ class OverlayUI:
         show_portrait: bool = True,
         show_badge: bool = True,
     ) -> None:
-        recreate = self.persistent_locked != bool(locked)
         self.persistent_enabled = bool(enabled)
         self.persistent_x = int(x)
         self.persistent_y = int(y)
@@ -641,9 +650,17 @@ class OverlayUI:
         if not self.persistent_enabled:
             self._destroy_persistent()
             return
-        if recreate:
-            self._destroy_persistent()
         self._ensure_persistent()
+        if self.persistent_window is not None:
+            try:
+                self.persistent_window.attributes("-alpha", self.persistent_opacity / 100)
+                self.persistent_window.configure(background=self.palette["line"])
+                _apply_non_activating_style(
+                    self.persistent_window,
+                    click_through=self.persistent_locked,
+                )
+            except Exception:
+                pass
         self._render_persistent()
         if self._monitor_job is None:
             self._monitor_job = self.root.after(2000, self._check_monitors)
@@ -658,6 +675,8 @@ class OverlayUI:
         self._monitor_job = self.root.after(2000, self._check_monitors)
 
     def _ensure_persistent(self) -> None:
+        if self._closed:
+            return
         if self.persistent_window is not None and self.persistent_window.winfo_exists():
             return
         window = Toplevel(self.root)
@@ -1195,7 +1214,21 @@ class OverlayUI:
         if request is not None:
             self._show_swap_notification_now(request)
 
+    def _create_toast_window(self):
+        """Create the popup window owned by this OverlayUI instance.
+
+        OBS capture support may replace this method with a local reuse policy;
+        callers never patch tkinter.Toplevel globally.
+        """
+        if self._closed:
+            return None
+        window = Toplevel(self.root)
+        self.toast_window = window
+        return window
+
     def _show_swap_notification_now(self, request: _SwapNotificationRequest) -> None:
+        if self._closed:
+            return
         self._hide_visible_toast()
         entry = request.entry
         anchor = request.anchor
@@ -1204,8 +1237,9 @@ class OverlayUI:
         layout = request.layout
         show_portrait = request.show_portrait
         show_badge = request.show_badge
-        window = Toplevel(self.root)
-        self.toast_window = window
+        window = self._create_toast_window()
+        if window is None:
+            return
         window.withdraw()
         window.overrideredirect(True)
         window.attributes("-topmost", True)
@@ -1322,6 +1356,9 @@ class OverlayUI:
         self._hide_visible_toast()
 
     def close_all(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
         self.hide_swap_notification()
         self._destroy_persistent()
         self.close_compact(show_root=False)

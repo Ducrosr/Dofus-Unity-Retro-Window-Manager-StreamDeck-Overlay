@@ -67,7 +67,7 @@ class CharacterLifecycleTests(unittest.TestCase):
 
     @patch("dwm.app.get_foreground_hwnd", return_value=101)
     @patch("dwm.app.is_window", return_value=True)
-    @patch("dwm.app.get_class_name", return_value="UnityWndClass")
+    @patch("dwm.services.windows.get_class_name", return_value="UnityWndClass")
     @patch("dwm.app.get_window_title", return_value="Nat - Eniripsa - Dofus 3.0")
     def test_event_reconnect_uses_same_roster_as_scans(self, *_mocks):
         app = self.make_app()
@@ -105,6 +105,43 @@ class CharacterLifecycleTests(unittest.TestCase):
         app._focus_from_auxiliary_display = Mock(return_value=False)
         self.assertFalse(app.focus_managed_position(3))
         self.assertEqual(app.rotation_index, 1)
+
+    def test_reused_hwnd_is_rejected_immediately_before_focus(self):
+        app = self.make_app()
+        app._structure_generation = 4
+        app._all_windows[101] = GameWindow(
+            101,
+            "Nealla - Pandawa - Dofus",
+            "Nealla",
+            "Pandawa",
+            pid=111,
+            window_class="UnityWndClass",
+            game_mode="unity",
+            process_path=r"C:\\Games\\Dofus.exe",
+        )
+        app.refresh_windows = Mock(return_value=True)
+        replacement = GameWindow(
+            101,
+            "Autre - Iop - Dofus",
+            "Autre",
+            "Iop",
+            pid=222,
+            window_class="UnityWndClass",
+            game_mode="unity",
+            process_path=r"C:\\Games\\Dofus.exe",
+        )
+
+        with (
+            patch("dwm.app.is_window", return_value=True),
+            patch("dwm.app.get_window_title", return_value=replacement.title),
+            patch("dwm.app.identify_game_window", return_value=replacement),
+        ):
+            result = app._revalidate_focus_target(101)
+
+        self.assertIsNone(result)
+        self.assertNotIn(101, app._all_windows)
+        self.assertNotIn(101, app._managed_order)
+        app.refresh_windows.assert_called_once_with(quiet=True, force=True)
 
     def test_stale_streamdeck_command_cannot_target_another_profile_or_name(self):
         app = self.make_app()

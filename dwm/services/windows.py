@@ -267,6 +267,94 @@ def _get_process_image_path(hwnd: int) -> str:
         return ""
 
 
+# -------------------------- Window identity / recognition --------------------------
+
+def identify_game_window(
+    hwnd: int,
+    title: str,
+    game_mode: str,
+    *,
+    retro_title_keyword: str = "dofus retro v",
+    retro_process_keyword: str = "",
+    window_class_hint: str = "",
+) -> GameWindow | None:
+    """Recognize one HWND and return its current Dofus identity.
+
+    The function intentionally validates only the supplied target. It does not
+    enumerate all windows and it treats inaccessible process metadata as
+    optional so elevated clients are not rejected solely for that reason.
+    """
+    hwnd = int(hwnd)
+    title = (title or "").strip()
+    if not hwnd or not title:
+        return None
+
+    mode = (game_mode or "unity").strip().lower()
+    window_class = window_class_hint or get_class_name(hwnd)
+    lowered = title.casefold()
+    process_path = _get_process_image_path(hwnd)
+    pid = _get_pid(hwnd)
+
+    if mode == "retro":
+        if window_class != "Chrome_WidgetWin_1":
+            return None
+        title_kw = (retro_title_keyword or "dofus retro v").strip().casefold()
+        process_kw = (retro_process_keyword or "").strip().casefold()
+        title_matches = bool(title_kw and title_kw in lowered)
+        process_matches = bool(
+            not title_kw and process_kw and process_path and process_kw in process_path.casefold()
+        )
+        if not (title_matches or process_matches):
+            return None
+        pseudo = extract_pseudo_retro(title)
+    else:
+        if window_class != "UnityWndClass":
+            return None
+        # Preserve known Dofus title forms, including historical builds where
+        # the product name was omitted but class + version metadata remained.
+        parts = [part.strip() for part in _UNITY_TITLE_SEPARATOR.split(title) if part.strip()]
+        pseudo_candidate = extract_pseudo_unity(title)
+        has_class_anchor = bool(extract_character_class(title, pseudo_candidate))
+        has_version_metadata = any(
+            re.fullmatch(r"v?\d+(?:\.\d+)+", part, flags=re.IGNORECASE)
+            for part in parts
+        )
+        if "dofus" not in lowered and not (has_class_anchor and has_version_metadata):
+            return None
+        pseudo = pseudo_candidate
+        mode = "unity"
+
+    if not pseudo:
+        return None
+
+    return GameWindow(
+        hwnd=hwnd,
+        title=title,
+        pseudo=pseudo,
+        character_class=extract_character_class(title, pseudo),
+        pid=pid,
+        window_class=window_class,
+        game_mode=mode,
+        process_path=process_path,
+    )
+
+
+def same_game_window_identity(expected: GameWindow, current: GameWindow | None) -> bool:
+    """Return whether a freshly identified HWND still represents the same target."""
+    if current is None or int(expected.hwnd) != int(current.hwnd):
+        return False
+    if expected.window_class and current.window_class != expected.window_class:
+        return False
+    if expected.game_mode and current.game_mode != expected.game_mode:
+        return False
+    if expected.pid and current.pid and current.pid != expected.pid:
+        return False
+    if expected.process_path and current.process_path:
+        if current.process_path.casefold() != expected.process_path.casefold():
+            return False
+    return current.pseudo.casefold() == expected.pseudo.casefold()
+
+
 # -------------------------- Window enumeration --------------------------
 
 def list_unity_windows(class_name: str = "UnityWndClass") -> List[GameWindow]:
@@ -278,9 +366,15 @@ def list_unity_windows(class_name: str = "UnityWndClass") -> List[GameWindow]:
         if hwnd in seen:
             continue
         seen.add(hwnd)
-        pseudo = extract_pseudo_unity(title)
-        character_class = extract_character_class(title, pseudo)
-        out.append(GameWindow(hwnd=hwnd, title=title, pseudo=pseudo, character_class=character_class))
+        window = identify_game_window(
+            hwnd,
+            title,
+            "unity",
+            window_class_hint=class_name,
+        )
+        if window is None:
+            continue
+        out.append(window)
 
     return out
 
@@ -326,10 +420,17 @@ def list_retro_windows(
         if not ok:
             continue
 
+        window = identify_game_window(
+            hwnd,
+            title,
+            "retro",
+            retro_title_keyword=title_keyword,
+            retro_process_keyword=process_keyword,
+        )
+        if window is None:
+            continue
         seen.add(hwnd)
-        pseudo = extract_pseudo_retro(title)
-        character_class = extract_character_class(title, pseudo)
-        out.append(GameWindow(hwnd=hwnd, title=title, pseudo=pseudo, character_class=character_class))
+        out.append(window)
 
     return out
 

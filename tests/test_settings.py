@@ -9,6 +9,7 @@ from dwm.storage.atomic import atomic_write_text
 from dwm.storage.settings import (
     DEFAULT_WINDOW_COLUMN_ORDER,
     MODERN_DARK_THEME,
+    FutureSettingsSchemaError,
     Settings,
     load_settings,
     save_settings,
@@ -224,6 +225,39 @@ class SettingsTests(unittest.TestCase):
 
         self.assertEqual(recovered.language, "en")
         self.assertEqual(recovered.refresh_seconds, 6)
+
+    def test_invalid_primary_is_not_promoted_over_valid_backup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            backup = settings_backup_path(path)
+            backup.write_text(
+                '{"schema_version": 25, "language": "en", "refresh_seconds": 9}',
+                encoding="utf-8",
+            )
+            path.write_text('{"schema_version":', encoding="utf-8")
+
+            recovered = load_settings(path)
+            save_settings(path, recovered)
+
+            self.assertEqual(load_settings(backup).language, "en")
+            self.assertEqual(load_settings(backup).refresh_seconds, 9)
+
+    def test_future_settings_schema_is_not_replaced_or_overwritten(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            future = '{"schema_version": 999, "language": "xx"}'
+            path.write_text(future, encoding="utf-8")
+            settings_backup_path(path).write_text(
+                '{"schema_version": 25, "language": "fr"}',
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(FutureSettingsSchemaError):
+                load_settings(path)
+            with self.assertRaises(FutureSettingsSchemaError):
+                save_settings(path, Settings(language="fr"))
+
+            self.assertEqual(path.read_text(encoding="utf-8"), future)
 
     def test_atomic_write_failure_preserves_original_and_cleans_temporary_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
