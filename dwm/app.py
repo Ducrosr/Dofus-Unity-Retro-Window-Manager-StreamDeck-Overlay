@@ -4890,8 +4890,8 @@ class WindowManagerApp:
                 hwnd,
                 title,
                 self.game_mode,
-                retro_title_keyword=self.settings.retro_title_keyword,
-                retro_process_keyword=self.settings.retro_process_keyword,
+                retro_title_keyword=getattr(self.settings, "retro_title_keyword", "dofus retro v"),
+                retro_process_keyword=getattr(self.settings, "retro_process_keyword", ""),
             )
             if gw is None:
                 return
