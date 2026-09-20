@@ -1,4 +1,4 @@
-import { releaseStreamDeckForeground } from "./streamdeck-foreground";
+import { releaseStreamDeckForeground } from "./streamdeck-foreground.ts";
 
 const BASE_URL = "http://127.0.0.1:32145/v1";
 const POLL_INTERVAL_MS = 750;
