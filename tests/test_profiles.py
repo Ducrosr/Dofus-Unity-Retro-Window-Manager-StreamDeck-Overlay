@@ -7,7 +7,15 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
-from dwm.storage.profiles import Profile, list_profiles, load_profile, migrate_pickles, profile_path, save_profile
+from dwm.storage.profiles import (
+    Profile,
+    UnsupportedProfileSchemaError,
+    list_profiles,
+    load_profile,
+    migrate_pickles,
+    profile_path,
+    save_profile,
+)
 
 
 class ProfileTests(unittest.TestCase):
@@ -77,6 +85,27 @@ class ProfileTests(unittest.TestCase):
 
             self.assertEqual(path.read_text(encoding="utf-8"), previous_contents)
             self.assertEqual(list(profiles_dir.glob("*.tmp")), [])
+
+    def test_future_profile_schema_cannot_be_loaded_or_overwritten(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp)
+            path = profile_path(profiles_dir, "Future")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                '{"schema_version": 999, "name": "Future", "order": []}',
+                encoding="utf-8",
+            )
+            original = path.read_text(encoding="utf-8")
+
+            with self.assertRaises(UnsupportedProfileSchemaError):
+                load_profile(profiles_dir, "Future")
+            with self.assertRaises(UnsupportedProfileSchemaError):
+                save_profile(
+                    profiles_dir,
+                    Profile("Future", ["Iop"], {}, "", ""),
+                )
+
+            self.assertEqual(path.read_text(encoding="utf-8"), original)
 
     def test_migrate_primitive_legacy_pickle(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
