@@ -78,13 +78,18 @@ class DwmCommandError extends Error {
 	}
 }
 
-class DwmClient {
+export class DwmClient {
 	private readonly listeners = new Set<Listener>();
 	private state: BridgeState = { connected: false };
 	private timer?: NodeJS.Timeout;
 	private polling = false;
 	private signature = "";
 	private requestSequence = 0;
+	private readonly releaseForeground: () => Promise<boolean>;
+
+	constructor(releaseForeground: () => Promise<boolean> = releaseStreamDeckForeground) {
+		this.releaseForeground = releaseForeground;
+	}
 
 	subscribe(listener: Listener): () => void {
 		this.listeners.add(listener);
@@ -201,7 +206,7 @@ class DwmClient {
 		// Release Stream Deck proactively before the single mutation attempt.
 		// Never retry focus/rotate/attention after an ambiguous backend timeout:
 		// the Python command may already have started on the Tk thread.
-		await releaseStreamDeckForeground().catch(() => false);
+		await this.releaseForeground().catch(() => false);
 		await this.command(path, {
 			...payload,
 			request_id: this.nextRequestId(),
