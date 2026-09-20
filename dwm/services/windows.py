@@ -4,7 +4,7 @@ import re
 import unicodedata
 from typing import List
 
-from .win32_enum import enum_top_level_windows, get_class_name
+from .win32_enum import enum_top_level_windows, get_class_name, get_window_title
 
 from ..models import GameWindow
 
@@ -267,20 +267,123 @@ def _get_process_image_path(hwnd: int) -> str:
         return ""
 
 
-# -------------------------- Window enumeration --------------------------
+# -------------------------- Dofus identity / window enumeration --------------------------
+
+def _normalized_identity(value: str) -> str:
+    return unicodedata.normalize("NFKC", str(value or "")).strip().casefold()
+
+
+def _is_recognized_unity_title(title: str, process_image: str = "") -> bool:
+    """Reject unrelated Unity windows while preserving known Dofus title formats."""
+    lowered = _normalized_identity(title)
+    if "dofus" in lowered:
+        return True
+    pseudo = extract_pseudo_unity(title)
+    character_class = extract_character_class(title, pseudo)
+    if pseudo and character_class:
+        return True
+    return "dofus" in _normalized_identity(process_image)
+
+
+def inspect_game_window(
+    hwnd: int,
+    game_mode: str,
+    retro_title_keyword: str = "dofus retro v",
+    retro_process_keyword: str = "",
+    *,
+    title: str | None = None,
+    class_name: str | None = None,
+) -> GameWindow | None:
+    """Inspect one HWND and return a Dofus identity only when it still matches.
+
+    Process information is best-effort. A privilege boundary may make it
+    unavailable, so class/title recognition remains authoritative rather than
+    rejecting an otherwise valid elevated Dofus client.
+    """
+    hwnd = int(hwnd)
+    gm = (game_mode or "unity").strip().lower()
+    current_class = get_class_name(hwnd) if class_name is None else str(class_name or "")
+    current_title = get_window_title(hwnd) if title is None else str(title or "")
+    if not current_title:
+        return None
+
+    process_id = _get_pid(hwnd)
+    process_image = _get_process_image_path(hwnd)
+
+    if gm == "retro":
+        if current_class != "Chrome_WidgetWin_1":
+            return None
+        title_kw = (retro_title_keyword or "dofus retro v").strip().casefold()
+        process_kw = (retro_process_keyword or "").strip().casefold()
+        title_matches = bool(title_kw and title_kw in current_title.casefold())
+        process_matches = bool(
+            not title_kw
+            and process_kw
+            and process_image
+            and process_kw in process_image.casefold()
+        )
+        if not title_matches and not process_matches:
+            return None
+        pseudo = extract_pseudo_retro(current_title)
+    else:
+        if current_class != "UnityWndClass":
+            return None
+        if not _is_recognized_unity_title(current_title, process_image):
+            return None
+        pseudo = extract_pseudo_unity(current_title)
+
+    if not pseudo:
+        return None
+    return GameWindow(
+        hwnd=hwnd,
+        title=current_title,
+        pseudo=pseudo,
+        character_class=extract_character_class(current_title, pseudo),
+        process_id=process_id,
+        window_class=current_class,
+        game_mode=gm,
+        process_image=process_image,
+    )
+
+
+def same_window_identity(expected: GameWindow, current: GameWindow) -> bool:
+    """Compare stable identity fields while tolerating title/version updates."""
+    if int(expected.hwnd) != int(current.hwnd):
+        return False
+    if _normalized_identity(expected.pseudo) != _normalized_identity(current.pseudo):
+        return False
+    if expected.window_class and current.window_class:
+        if expected.window_class != current.window_class:
+            return False
+    if expected.game_mode and current.game_mode:
+        if expected.game_mode != current.game_mode:
+            return False
+    if expected.process_id and current.process_id:
+        if int(expected.process_id) != int(current.process_id):
+            return False
+    if expected.process_image and current.process_image:
+        if _normalized_identity(expected.process_image) != _normalized_identity(current.process_image):
+            return False
+    return True
+
 
 def list_unity_windows(class_name: str = "UnityWndClass") -> List[GameWindow]:
-    """Return Dofus Unity windows detected through the native Win32 API."""
+    """Return recognized Dofus Unity windows through the native Win32 API."""
     out: List[GameWindow] = []
-    seen = set()
+    seen: set[int] = set()
 
     for hwnd, title in enum_top_level_windows(class_name=class_name, visible_only=True):
         if hwnd in seen:
             continue
         seen.add(hwnd)
-        pseudo = extract_pseudo_unity(title)
-        character_class = extract_character_class(title, pseudo)
-        out.append(GameWindow(hwnd=hwnd, title=title, pseudo=pseudo, character_class=character_class))
+        window = inspect_game_window(
+            hwnd,
+            "unity",
+            title=title,
+            class_name=class_name,
+        )
+        if window is not None:
+            out.append(window)
 
     return out
 
@@ -290,46 +393,24 @@ def list_retro_windows(
     title_keyword: str = "dofus retro v",
     process_keyword: str = "",
 ) -> List[GameWindow]:
-    """Return detected Dofus Retro windows.
-
-    Note: Chrome_WidgetWin_1 is used by many Chromium/Electron apps, so we apply
-    a strong title filter by default (expected to contain 'Dofus Retro v').
-
-    If you *really* need it, you can provide a process_keyword as a fallback.
-    """
-    title_kw = (title_keyword or "dofus retro v").lower()
-    proc_kw = (process_keyword or "").lower()
-
+    """Return recognized Dofus Retro windows without accepting arbitrary Chromium windows."""
     out: List[GameWindow] = []
-    seen = set()
+    seen: set[int] = set()
 
-    candidates = enum_top_level_windows(class_name=class_name, visible_only=True)
-
-    for hwnd, title in candidates:
-        if not title:
-            continue
+    for hwnd, title in enum_top_level_windows(class_name=class_name, visible_only=True):
         if hwnd in seen:
             continue
-
-        # Filtering:
-        # - Prefer a strict title match (reduces false positives a lot).
-        # - Optionally fallback on process path if title_keyword is empty.
-        ok = False
-        t = title.lower()
-        if title_kw:
-            ok = title_kw in t
-        else:
-            if proc_kw:
-                p = _get_process_image_path(hwnd).lower()
-                if p and proc_kw in p:
-                    ok = True
-        if not ok:
-            continue
-
         seen.add(hwnd)
-        pseudo = extract_pseudo_retro(title)
-        character_class = extract_character_class(title, pseudo)
-        out.append(GameWindow(hwnd=hwnd, title=title, pseudo=pseudo, character_class=character_class))
+        window = inspect_game_window(
+            hwnd,
+            "retro",
+            title_keyword,
+            process_keyword,
+            title=title,
+            class_name=class_name,
+        )
+        if window is not None:
+            out.append(window)
 
     return out
 
