@@ -33,22 +33,7 @@ test("focus sends one request with the published mode and profile context", asyn
 	const originalFetch = globalThis.fetch;
 	const requests: Array<Record<string, unknown>> = [];
 
-	globalThis.fetch = (async (input, init) => {
-		const url = String(input);
-		if (url.endsWith("/status")) {
-			return {
-				ok: true,
-				status: 200,
-				json: async () => ({
-					api_version: 1,
-					app_version: "test",
-					game_mode: "retro",
-					profile: "Team Retro",
-					windows: [],
-				}),
-			} as Response;
-		}
-
+	globalThis.fetch = (async (_input, init) => {
 		requests.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
 		return {
 			ok: true,
@@ -59,10 +44,29 @@ test("focus sends one request with the published mode and profile context", asyn
 
 	try {
 		const client = new DwmClient();
-		const unsubscribe = client.subscribe(() => undefined);
-		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+		const writable = client as unknown as {
+			state: {
+				connected: boolean;
+				status: {
+					api_version: number;
+					app_version: string;
+					game_mode: "retro";
+					profile: string;
+					windows: [];
+				};
+			};
+		};
+		writable.state = {
+			connected: true,
+			status: {
+				api_version: 1,
+				app_version: "test",
+				game_mode: "retro",
+				profile: "Team Retro",
+				windows: [],
+			},
+		};
 		await client.focus({ hwnd: 123, slot: 2, pseudo: "Nealla" });
-		unsubscribe();
 
 		assert.equal(requests.length, 1);
 		assert.deepEqual(requests[0], {
