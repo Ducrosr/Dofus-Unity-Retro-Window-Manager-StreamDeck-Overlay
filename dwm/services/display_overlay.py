@@ -260,8 +260,20 @@ def place_inside_rect(
     return max(left, min(x, max_x)), max(top, min(y, max_y))
 
 
-def parse_tk_geometry(value: object) -> tuple[int, int, int, int] | None:
-    """Parse a complete Tk geometry string into width, height, x and y."""
+def parse_tk_geometry(
+    value: object,
+    *,
+    legacy_bounds: tuple[int, int, int, int] | None = None,
+) -> tuple[int, int, int, int] | None:
+    """Parse Tk geometry into absolute desktop coordinates.
+
+    New DWM geometries prefix each signed coordinate with ``+``. This emits
+    ``+-1250`` for a monitor left of the primary display because bare ``-1250``
+    means an offset from the right edge to Tk.
+
+    Older saved geometries may contain bare negative offsets. They are only
+    converted when explicit virtual-desktop bounds are supplied.
+    """
     match = _TK_GEOMETRY_PATTERN.fullmatch(str(value or "").strip())
     if match is None:
         return None
@@ -269,7 +281,25 @@ def parse_tk_geometry(value: object) -> tuple[int, int, int, int] | None:
     height = int(match.group("height"))
     if width <= 0 or height <= 0:
         return None
-    return width, height, int(match.group("x")), int(match.group("y"))
+
+    x_token = match.group("x")
+    y_token = match.group("y")
+
+    def absolute_coordinate(token: str, *, size: int, high: int) -> int | None:
+        if token.startswith("+"):
+            return int(token[1:])
+        if legacy_bounds is None:
+            return None
+        offset = int(token[1:])
+        return high - size - offset
+
+    right = int(legacy_bounds[2]) if legacy_bounds is not None else 0
+    bottom = int(legacy_bounds[3]) if legacy_bounds is not None else 0
+    x = absolute_coordinate(x_token, size=width, high=right)
+    y = absolute_coordinate(y_token, size=height, high=bottom)
+    if x is None or y is None:
+        return None
+    return width, height, x, y
 
 
 def recover_window_position(
@@ -325,4 +355,5 @@ def recover_window_position(
 
 
 def format_tk_geometry(width: int, height: int, x: int, y: int) -> str:
-    return f"{int(width)}x{int(height)}{int(x):+d}{int(y):+d}"
+    """Format absolute coordinates without invoking Tk negative-edge syntax."""
+    return f"{int(width)}x{int(height)}+{int(x)}+{int(y)}"
