@@ -4653,7 +4653,9 @@ class WindowManagerApp:
         bridge_meta = clean_payload.pop("_bridge", {})
         if not isinstance(bridge_meta, dict):
             bridge_meta = {}
-        request_id = str(bridge_meta.get("request_id") or "")
+        request_id = str(
+            bridge_meta.get("request_id") or f"local-{time.monotonic_ns():x}"
+        )
         try:
             deadline = float(bridge_meta.get("deadline_monotonic"))
         except (TypeError, ValueError):
