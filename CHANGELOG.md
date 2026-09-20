@@ -1,5 +1,35 @@
 # Historique
 
+## En développement — durcissement après audit Astra
+
+### Runtime, focus et concurrence
+
+- La pompe Tk traite désormais les messages par lots bornés, acquitte chaque entrée en `finally` et poursuit après une exception d’application de scan.
+- Les scans et événements Win32 portent des générations distinctes ; un résultat de scan ou un événement provenant d’un ancien contexte ne peut plus écraser l’état courant.
+- Les commandes mutatrices sont bloquées dès le début de la fermeture ; une rotation différée est annulée et les commandes Stream Deck encore en attente reçoivent un état `app_closing`.
+- Les cibles Dofus sont reconnues par un chemin commun Unity/Retro et portent une empreinte PID/classe/mode/processus. La seule cible concernée est revalidée juste avant le focus afin de refuser un HWND réutilisé sans imposer un scan complet.
+- Le comportement Win32 de focus existant reste inchangé.
+
+### OBS, overlays et multi-écran
+
+- Le popup OBS n’utilise plus de remplacement global temporaire de `Toplevel` : la fenêtre appartient explicitement à `OverlayUI` et conserve son HWND entre état inactif et notification.
+- Les changements de palette et de verrouillage mettent à jour l’overlay persistant en place au lieu de recréer son `Toplevel`.
+- La fermeture des overlays est terminale et idempotente ; les fenêtres de simulation sont explicitement séparées des fenêtres de production capturables par OBS.
+- Les coordonnées Tk négatives absolues sont encodées sous la forme `+-1250`. Les anciennes géométries `-1250`, relatives au bord selon Tk, ne sont migrées qu’avec un référentiel d’écran explicite.
+
+### Stream Deck et données
+
+- Les mutations `focus`, `rotate` et `next-attention` ne sont plus rejouées après une erreur ambiguë. Chaque requête possède un identifiant logique, une échéance et un état atomique `queued/started/expired/finished`.
+- Le bridge renvoie des codes d’erreur structurés et le statut conserve `scan_revision` tout en exposant `scan_ok` / `scan_error`.
+- `settings.json.bak` n’est mis à jour qu’à partir d’un principal sémantiquement valide ; un principal invalide ne remplace plus un secours valide.
+- Les schémas de réglages ou de profils plus récents que cette version sont déclarés incompatibles et ne sont jamais écrasés automatiquement.
+- Le watcher Retro associe désormais chaque capture à un HWND et une génération, rejette les frames/fermetures périmées et arrête ses contrôles hors verrou.
+
+### Validation
+
+- Des tests de régression ont été ajoutés pour la pompe Tk, le shutdown, les scans/hooks périmés, les HWND réutilisés, le cycle de vie OBS, les coordonnées négatives, les timeouts Stream Deck, les backups/schémas futurs et les générations de capture Retro.
+- Les validations automatisées de cette branche doivent encore être exécutées sur Windows avant fusion ; les essais Dofus/OBS/Stream Deck réels restent distincts des tests mockés.
+
 ## 2.20.0-beta.6 — 2026-09-17
 
 ### OBS et overlay
