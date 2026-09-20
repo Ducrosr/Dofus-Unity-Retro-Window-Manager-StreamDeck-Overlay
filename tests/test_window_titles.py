@@ -52,6 +52,37 @@ class WindowTitleTests(unittest.TestCase):
         self.assertEqual(result[0].pseudo, "Korra")
         self.assertEqual(result[0].character_class, "Féca")
 
+    def test_unity_scanner_rejects_unrelated_unity_window(self) -> None:
+        with (
+            patch.object(
+                windows,
+                "enum_top_level_windows",
+                return_value=[(101, "Unrelated Unity Game")],
+            ),
+            patch.object(windows, "get_class_name", return_value="UnityWndClass"),
+        ):
+            result = windows.list_unity_windows()
+
+        self.assertEqual(result, [])
+
+    def test_identified_window_carries_process_fingerprint_when_available(self) -> None:
+        with (
+            patch.object(windows, "get_class_name", return_value="UnityWndClass"),
+            patch.object(windows, "_get_pid", return_value=4242),
+            patch.object(windows, "_get_process_image_path", return_value=r"C:\\Games\\Dofus.exe"),
+        ):
+            result = windows.identify_game_window(
+                101,
+                "Korra - Féca - Dofus",
+                "unity",
+            )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.pid, 4242)
+        self.assertEqual(result.window_class, "UnityWndClass")
+        self.assertEqual(result.game_mode, "unity")
+        self.assertTrue(result.process_path.endswith("Dofus.exe"))
+
     def test_extract_retro_pseudo_before_marker(self) -> None:
         self.assertEqual(extract_pseudo_retro("Eniripsa - Dofus Retro v1.44"), "Eniripsa")
 
