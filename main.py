@@ -9,6 +9,18 @@ from dwm.services.windows_startup import set_startup_enabled
 from dwm.storage.settings import SettingsSchemaTooNewError, load_settings, save_settings
 
 
+def load_startup_settings(path, logger):
+    """Load startup settings without ever downgrading a future schema."""
+    try:
+        return load_settings(path)
+    except SettingsSchemaTooNewError as exc:
+        logger.error(
+            "Configuration créée par une version plus récente ; démarrage annulé",
+            exc,
+        )
+        return None
+
+
 def should_prompt_for_game_mode(settings, *, use_saved_mode: bool) -> bool:
     """Keep the legacy mode picker except while the guided setup is pending."""
     return not bool(use_saved_mode) and bool(settings.onboarding_completed)
@@ -107,13 +119,8 @@ def main() -> None:
         logger.warn(f"Impossible d'enregistrer le lanceur Stream Deck : {exc}")
 
     settings_path = dirs["root"] / "settings.json"
-    try:
-        settings = load_settings(settings_path)
-    except SettingsSchemaTooNewError as exc:
-        logger.error(
-            "Configuration créée par une version plus récente ; démarrage annulé",
-            exc,
-        )
+    settings = load_startup_settings(settings_path, logger)
+    if settings is None:
         return
 
     if settings.start_with_windows:
