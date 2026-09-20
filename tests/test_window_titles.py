@@ -52,6 +52,73 @@ class WindowTitleTests(unittest.TestCase):
         self.assertEqual(result[0].pseudo, "Korra")
         self.assertEqual(result[0].character_class, "Féca")
 
+    def test_unity_scanner_rejects_unrelated_unity_window(self) -> None:
+        with (
+            patch.object(
+                windows,
+                "enum_top_level_windows",
+                return_value=[(101, "Unrelated Unity Game")],
+            ),
+            patch.object(windows, "_get_process_image_path", return_value=""),
+            patch.object(windows, "_get_pid", return_value=4321),
+        ):
+            result = windows.list_unity_windows()
+
+        self.assertEqual(result, [])
+
+    def test_unity_scanner_preserves_known_class_anchored_title_without_dofus_word(self) -> None:
+        with (
+            patch.object(
+                windows,
+                "enum_top_level_windows",
+                return_value=[(101, "Korra - Féca - 3.4.1.17")],
+            ),
+            patch.object(windows, "_get_process_image_path", return_value=""),
+            patch.object(windows, "_get_pid", return_value=4321),
+        ):
+            result = windows.list_unity_windows()
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].pseudo, "Korra")
+        self.assertEqual(result[0].process_id, 4321)
+        self.assertEqual(result[0].window_class, "UnityWndClass")
+        self.assertEqual(result[0].game_mode, "unity")
+
+    def test_window_identity_detects_pid_reuse_but_tolerates_unavailable_process_path(self) -> None:
+        expected = windows.GameWindow(
+            101,
+            "Korra - Féca - 3.4",
+            "Korra",
+            "Féca",
+            process_id=111,
+            window_class="UnityWndClass",
+            game_mode="unity",
+            process_image=r"C:\\Dofus.exe",
+        )
+        reused = windows.GameWindow(
+            101,
+            "Korra - Féca - 3.4",
+            "Korra",
+            "Féca",
+            process_id=222,
+            window_class="UnityWndClass",
+            game_mode="unity",
+            process_image="",
+        )
+        inaccessible = windows.GameWindow(
+            101,
+            "Korra - Féca - 3.4",
+            "Korra",
+            "Féca",
+            process_id=0,
+            window_class="UnityWndClass",
+            game_mode="unity",
+            process_image="",
+        )
+
+        self.assertFalse(windows.same_window_identity(expected, reused))
+        self.assertTrue(windows.same_window_identity(expected, inaccessible))
+
     def test_extract_retro_pseudo_before_marker(self) -> None:
         self.assertEqual(extract_pseudo_retro("Eniripsa - Dofus Retro v1.44"), "Eniripsa")
 
