@@ -16,6 +16,25 @@ from .settings import normalize_profile_overlays
 PROFILE_SCHEMA_VERSION = 4
 
 
+class FutureProfileSchemaError(ValueError):
+    """Raised when a profile was created by a newer schema."""
+
+
+def _profile_schema_version(data: object) -> int:
+    if not isinstance(data, dict):
+        raise ValueError("profile root must be a JSON object")
+    raw = data.get("schema_version", 0)
+    try:
+        version = int(raw or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("profile schema_version must be an integer") from exc
+    if version > PROFILE_SCHEMA_VERSION:
+        raise FutureProfileSchemaError(
+            f"profile schema {version} is newer than supported schema {PROFILE_SCHEMA_VERSION}"
+        )
+    return version
+
+
 class _LegacyProfileUnpickler(pickle.Unpickler):
     """Load primitive legacy profile data without allowing global objects."""
 
@@ -64,6 +83,7 @@ class Profile:
 
     @staticmethod
     def from_dict(d: dict) -> "Profile":
+        _profile_schema_version(d)
         now = datetime.now().isoformat(timespec="seconds")
         return Profile(
             name=d.get("name", ""),
@@ -107,6 +127,7 @@ def list_profiles(profiles_dir: Path) -> List[str]:
 def load_profile(profiles_dir: Path, name: str) -> Profile:
     p = profile_path(profiles_dir, name)
     data = json.loads(p.read_text(encoding="utf-8"))
+    _profile_schema_version(data)
     pr = Profile.from_dict(data)
     if not pr.name:
         pr.name = p.stem
@@ -120,6 +141,9 @@ def save_profile(profiles_dir: Path, profile: Profile) -> None:
         profile.created_at = now
     profile.updated_at = now
     path = profile_path(profiles_dir, profile.name)
+    if path.exists():
+        existing = json.loads(path.read_text(encoding="utf-8"))
+        _profile_schema_version(existing)
     atomic_write_text(
         path,
         json.dumps(profile.to_dict(), indent=2, ensure_ascii=False),
