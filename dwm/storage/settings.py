@@ -508,6 +508,10 @@ class Settings:
     def from_dict(d: dict) -> "Settings":
         # Backward compatible: schema v1 had no game info.
         schema = int(d.get("schema_version", 1) or 1)
+        if schema > SETTINGS_SCHEMA_VERSION:
+            raise FutureSettingsSchemaError(
+                f"settings schema {schema} is newer than supported schema {SETTINGS_SCHEMA_VERSION}"
+            )
 
         # Migration: old defaults were too broad ("dofus"), leading to false positives.
         retro_title = (d.get("retro_title_keyword") or "").strip().lower()
