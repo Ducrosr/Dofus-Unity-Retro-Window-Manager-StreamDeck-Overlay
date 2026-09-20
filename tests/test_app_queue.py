@@ -75,6 +75,35 @@ class AppQueueTests(unittest.TestCase):
         self.assertTrue(app._refresh_again_requested)
         self.assertEqual(app._queue.unfinished_tasks, 0)
 
+    def test_schedule_refresh_rearms_even_if_refresh_raises(self) -> None:
+        app = self.make_app()
+        app.settings = SimpleNamespace(
+            refresh_seconds=5,
+            adaptive_performance_enabled=True,
+        )
+        app.auto_refresh_enabled = SimpleNamespace(get=lambda: True)
+        app.win_events = None
+        app._all_windows = {}
+        app.refresh_windows = Mock(side_effect=RuntimeError("scan failed"))
+
+        app._schedule_refresh()
+
+        self.assertEqual(len(app.root.after_calls), 1)
+        delay, callback = app.root.after_calls[0]
+        self.assertGreaterEqual(delay, 1000)
+        self.assertEqual(callback, app._schedule_refresh)
+
+    def test_busy_queue_yields_back_to_tk_instead_of_draining_forever(self) -> None:
+        app = self.make_app()
+        for index in range(100):
+            app._queue.put(("notice", 4, 7, f"notice-{index}"))
+
+        app._process_queue()
+
+        self.assertGreater(app._queue.qsize(), 0)
+        self.assertTrue(app.root.after_calls)
+        self.assertEqual(app.root.after_calls[-1][0], 0)
+
     def test_expired_streamdeck_request_is_cancelled_before_mutation(self) -> None:
         app = self.make_app()
         response: "queue.Queue[dict[str, object]]" = queue.Queue(maxsize=1)
