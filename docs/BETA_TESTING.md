@@ -135,3 +135,61 @@ Les tests automatisés couvrent les transitions de contexte via des API Windows 
 - Accepter puis annuler le choix du fichier : aucun ZIP créé.
 - Accepter et enregistrer : vérifier le ZIP anonymisé et l’absence d’envoi réseau.
 - Ouvrir une deuxième instance : aucune fausse alerte sur la première encore ouverte.
+
+
+## Campagne de fiabilisation post-bêta 6 — PR #9
+
+Cette campagne concerne la branche de travail de fiabilisation issue de l'audit du commit `0610ef1`. Elle ne constitue pas une release. Sauvegardez la configuration avant les essais.
+
+### Runtime et fermeture
+
+- Ouvrir une Combobox pendant plusieurs ouvertures/fermetures de clients : le scan automatique doit continuer après fermeture de la liste.
+- Produire une rafale Suivant/Précédent puis quitter immédiatement : aucune rotation tardive ne doit se produire après le début de fermeture.
+- Quitter avec le Stream Deck connecté et plusieurs commandes déclenchées : les commandes non commencées doivent être refusées, sans double focus à la relance.
+- Relancer immédiatement après fermeture : aucun processus, popup ou overlay fantôme ne doit rester.
+
+### Dofus Unity / Retro
+
+- Tester 0, 1 puis 8 clients dans chaque mode.
+- Fermer/reconnecter un personnage et vérifier ordre, emplacements fixes, profils et personnages ignorés.
+- Changer de mode pendant un scan puis revenir : aucun résultat de l'ancien mode ne doit remplacer l'état courant.
+- Tester un focus déjà actif, une fenêtre minimisée et un focus refusé ; aucune stratégie Win32 alternative ni transparence des clients n'est introduite.
+- Si possible, recréer rapidement une fenêtre afin de favoriser la réutilisation d'un HWND : une cible devenue différente doit être refusée puis redétectée.
+
+### OBS
+
+- Configurer une source Window Capture sur l'overlay persistant et une autre sur le popup de focus.
+- Changer palette, verrouillage, dimensions et mode : l'overlay persistant ne doit pas nécessiter de nouvelle sélection de fenêtre OBS.
+- Déclencher rapidement plusieurs popups : OBS doit rester attaché à la même fenêtre de popup.
+- Fermer DWM puis vérifier la disparition des deux fenêtres ; aucun popup orphelin ne doit rester.
+- La surface inactive du popup OBS reste volontairement inchangée dans ce lot ; toute modification future nécessite une validation OBS réelle.
+
+### Stream Deck
+
+- Tester backend absent, démarrage puis redémarrage de DWM : la reconnexion automatique doit continuer.
+- Déclencher `Suivant`, `Précédent` ou `Prochaine alerte` pendant une réponse backend volontairement retardée : une action ne doit jamais être rejouée automatiquement.
+- Changer de mode/profil juste avant une commande : la commande périmée doit être refusée jusqu'à actualisation.
+- Tester une cible qui disparaît et, si applicable, une différence de privilèges Stream Deck/DWM.
+
+### Écrans et DPI
+
+- Tester un écran à gauche et au-dessus du principal ; enregistrer une coordonnée X ou Y négative puis relancer.
+- Débrancher/rebrancher l'écran choisi.
+- Tester 100 %, 125 %, 150 % et 200 %, ainsi qu'un mélange de DPI entre deux écrans.
+- La position interne doit rester absolue ; une coordonnée négative ne doit plus être interprétée par Tk comme un ancrage depuis le bord opposé.
+
+### Données
+
+- Corrompre une copie de `settings.json` en conservant un `.bak` valide : le secours doit être chargé et rester intact lors de la prochaine sauvegarde.
+- Sur une copie de test, utiliser un `schema_version` supérieur à celui du programme pour Settings puis Profile : DWM doit refuser l'écrasement automatique de ces données.
+- Vérifier ensuite une ancienne configuration réelle afin de confirmer que les migrations historiques restent fonctionnelles.
+
+### Watcher Retro facultatif
+
+À tester uniquement avec les dépendances de `requirements-popup.txt`, sans les ajouter au build principal.
+
+- Remplacer rapidement une fenêtre suivie par une autre portant le même titre : la capture précédente doit être arrêtée et une nouvelle capture liée au nouveau HWND doit être créée.
+- Désactiver/réactiver la détection puis quitter pendant l'arrêt d'une capture.
+- Vérifier invitations de groupe/échange réelles et confirmer qu'un focus échoué ne modifie pas l'index de rotation.
+
+Les résultats automatisés et les limites de validation sont consignés dans `VALIDATION_PR9.md`.
