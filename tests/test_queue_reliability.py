@@ -90,6 +90,25 @@ class QueueReliabilityTests(unittest.TestCase):
 
         app._apply_win_event.assert_not_called()
 
+    def test_streamdeck_mutation_rejects_stale_mode_before_side_effect(self) -> None:
+        app = _pump_app()
+        app.game_mode = "unity"
+        app._active_profile_name = "Team"
+        app.request_rotation = Mock(return_value=True)
+
+        result = app._execute_streamdeck_command(
+            "rotate",
+            {
+                "direction": "forward",
+                "game_mode": "retro",
+                "profile": "Team",
+            },
+        )
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error_code"], "context_changed")
+        app.request_rotation.assert_not_called()
+
     def test_shutdown_cancels_queued_streamdeck_mutation(self) -> None:
         app = _pump_app()
         app._execute_streamdeck_command = Mock()
@@ -118,7 +137,7 @@ class QueueReliabilityTests(unittest.TestCase):
                 "direction": "forward",
                 "_bridge": {
                     "request_id": "req-expire",
-                    "deadline_monotonic": time.monotonic() + 0.01,
+                    "deadline_monotonic": time.monotonic() - 1.0,
                 },
             },
         )
