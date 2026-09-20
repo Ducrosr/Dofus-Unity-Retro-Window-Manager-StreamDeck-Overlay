@@ -88,7 +88,7 @@ class CharacterLifecycleTests(unittest.TestCase):
         app._apply_windows([app._all_windows[101], GameWindow(102, "Autre - Dofus", "Autre", ""), app._all_windows[103]])
         self.assertNotIn(102, app._ignored)
         self.assertEqual(app._managed_order, [101, 103, 102])
-        self.assertEqual(app._streamdeck_order, [101, 103, 102])
+        self.assertEqual(app._streamdeck_order, [101, -2, 103, 102])
         self.assertEqual(app._roster.bindings(app._all_windows), [101, -2, 103, 102])
 
     @patch("dwm.app.get_foreground_hwnd", return_value=101)
