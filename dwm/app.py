@@ -34,8 +34,10 @@ from .services.windows import (
     extract_character_class,
     extract_pseudo_retro,
     extract_pseudo_unity,
+    inspect_game_window,
     list_game_windows,
     list_visible_dofus_candidates,
+    same_window_identity,
     suspect_privilege_mismatch,
 )
 from .services.focus import FocusError, focus_hwnd, get_foreground_hwnd, is_window
@@ -213,6 +215,95 @@ SWAP_POSITION_LABELS = {
     "bottom_right": "En bas à droite",
 }
 ROTATION_COALESCE_MS = 18
+QUEUE_BATCH_LIMIT = 32
+
+
+def _command_error(
+    message: str,
+    code: str,
+    status: int,
+    *,
+    execution: str = "not_started",
+) -> dict[str, object]:
+    return {
+        "ok": False,
+        "error": message,
+        "error_code": code,
+        "execution": execution,
+        "retryable": False,
+        "_status": int(status),
+    }
+
+
+class _QueuedStreamDeckCommand:
+    """Atomically tracks whether a queued mutation has started."""
+
+    def __init__(
+        self,
+        command: str,
+        payload: dict[str, object],
+        *,
+        request_id: str,
+        deadline: float,
+    ) -> None:
+        self.command = str(command)
+        self.payload = dict(payload)
+        self.request_id = str(request_id)
+        self.deadline = float(deadline)
+        self.response: "queue.Queue[dict[str, object]]" = queue.Queue(maxsize=1)
+        self._lock = threading.Lock()
+        self._state = "queued"
+
+    @property
+    def state(self) -> str:
+        with self._lock:
+            return self._state
+
+    def _respond_locked(self, result: dict[str, object]) -> None:
+        result = dict(result)
+        result.setdefault("request_id", self.request_id)
+        try:
+            self.response.put_nowait(result)
+        except queue.Full:
+            pass
+
+    def try_start(self) -> bool:
+        with self._lock:
+            if self._state != "queued":
+                return False
+            if time.monotonic() >= self.deadline:
+                self._state = "expired"
+                self._respond_locked(
+                    _command_error(
+                        "La commande a expiré avant son exécution.",
+                        "command_expired",
+                        504,
+                    )
+                )
+                return False
+            self._state = "started"
+            return True
+
+    def cancel_if_queued(
+        self,
+        message: str,
+        code: str,
+        status: int = 503,
+    ) -> bool:
+        with self._lock:
+            if self._state != "queued":
+                return False
+            self._state = "cancelled"
+            self._respond_locked(_command_error(message, code, status))
+            return True
+
+    def complete(self, result: dict[str, object]) -> None:
+        with self._lock:
+            if self._state != "started":
+                return
+            self._state = "completed"
+            self._respond_locked(result)
+
 OFFICIAL_REPOSITORY_URL = (
     "https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay"
 )
@@ -540,6 +631,8 @@ class WindowManagerApp:
         self._available_release: ReleaseInfo | None = None
         self._scan_revision = 0
         self._game_mode_revision = 0
+        self._structure_generation = 0
+        self._event_hook_generation = 0
         self.streamdeck_bridge: StreamDeckBridge | None = None
         self.shell_attention: ShellAttentionHook | None = None
         self._start_minimized = bool(start_minimized)
@@ -2157,6 +2250,7 @@ class WindowManagerApp:
             reorder_character=lambda _hwnd, _destination: None,
             focus_next_attention=lambda: False,
             palette=resolved_theme_palette(self.root, preview_settings.theme),
+            capture_for_obs=False,
         )
         self._display_simulation_ui = simulation_ui
         active_index = 0
