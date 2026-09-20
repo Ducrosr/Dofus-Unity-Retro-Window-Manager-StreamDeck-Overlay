@@ -4325,21 +4325,20 @@ class WindowManagerApp:
             except Exception:
                 pass
         finally:
-            if self._stop_event.is_set():
-                return
-            hook = getattr(self, "win_events", None)
-            try:
-                hook_healthy = bool(hook and hook.is_running())
-            except Exception:
-                hook_healthy = False
-            delay_seconds = adaptive_refresh_delay_seconds(
-                self.settings.refresh_seconds,
-                enabled=bool(getattr(self.settings, "adaptive_performance_enabled", True)),
-                event_hook_healthy=hook_healthy,
-                has_windows=bool(self._all_windows),
-            )
-            self._scheduled_refresh_delay_seconds = delay_seconds
-            self.root.after(delay_seconds * 1000, self._schedule_refresh)
+            if not self._stop_event.is_set():
+                hook = getattr(self, "win_events", None)
+                try:
+                    hook_healthy = bool(hook and hook.is_running())
+                except Exception:
+                    hook_healthy = False
+                delay_seconds = adaptive_refresh_delay_seconds(
+                    self.settings.refresh_seconds,
+                    enabled=bool(getattr(self.settings, "adaptive_performance_enabled", True)),
+                    event_hook_healthy=hook_healthy,
+                    has_windows=bool(self._all_windows),
+                )
+                self._scheduled_refresh_delay_seconds = delay_seconds
+                self.root.after(delay_seconds * 1000, self._schedule_refresh)
 
     def _on_toggle_autorefresh(self):
         self.settings.auto_refresh = bool(self.auto_refresh_enabled.get())
