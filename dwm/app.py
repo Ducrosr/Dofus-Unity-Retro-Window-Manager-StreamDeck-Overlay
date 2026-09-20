@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from dataclasses import dataclass, field
 import os
 import queue
 import threading
 import time
+import uuid
 import webbrowser
 from datetime import datetime
 from pathlib import Path
@@ -226,6 +228,39 @@ LANGUAGE_FLAG_ASSETS = {
     "en": ("assets", "flags", "en.png"),
     "es": ("assets", "flags", "es.png"),
 }
+
+@dataclass
+class _QueuedStreamDeckRequest:
+    command: str
+    payload: dict[str, object]
+    response_queue: "queue.Queue[dict[str, object]]"
+    request_id: str
+    deadline: float
+    state: str = "queued"
+    lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+
+    def try_begin(self) -> bool:
+        with self.lock:
+            if self.state != "queued":
+                return False
+            if time.monotonic() > self.deadline:
+                self.state = "expired"
+                return False
+            self.state = "started"
+            return True
+
+    def cancel_if_queued(self) -> bool:
+        with self.lock:
+            if self.state != "queued":
+                return False
+            self.state = "expired"
+            return True
+
+    def finish(self) -> None:
+        with self.lock:
+            if self.state == "started":
+                self.state = "finished"
+
 
 
 def app_theme_palette(theme_name: str) -> dict[str, str]:
@@ -4294,21 +4329,23 @@ class WindowManagerApp:
         save_settings(self.settings_path, self.settings)
 
     def _reject_queued_item_during_shutdown(self, item: object) -> None:
-        if not isinstance(item, tuple) or not item:
+        if not isinstance(item, tuple) or not item or item[0] != "streamdeck":
             return
-        if item[0] != "streamdeck" or len(item) < 4:
+        request = item[1] if len(item) > 1 else None
+        if not isinstance(request, _QueuedStreamDeckRequest):
             return
-        response_queue = item[3]
+        request.cancel_if_queued()
         try:
-            response_queue.put_nowait(
+            request.response_queue.put_nowait(
                 {
                     "ok": False,
                     "error": "L'application est en cours de fermeture.",
                     "code": "app_closing",
+                    "request_id": request.request_id,
                     "_status": 503,
                 }
             )
-        except (AttributeError, queue.Full):
+        except queue.Full:
             pass
 
     def _process_queue_item(self, item: object) -> None:
@@ -4365,18 +4402,35 @@ class WindowManagerApp:
             ):
                 self._log(str(item[3]))
         elif kind == "streamdeck":
-            response_queue = item[3]
-            try:
-                result = self._execute_streamdeck_command(str(item[1]), item[2])
-            except Exception as exc:
+            request = item[1]
+            if not isinstance(request, _QueuedStreamDeckRequest):
+                return
+            if not request.try_begin():
                 result = {
                     "ok": False,
-                    "error": str(exc),
-                    "code": "backend_error",
-                    "_status": 503,
+                    "error": "La commande a expiré avant son exécution.",
+                    "code": "request_expired",
+                    "request_id": request.request_id,
+                    "_status": 504,
                 }
+            else:
+                try:
+                    result = self._execute_streamdeck_command(
+                        request.command,
+                        request.payload,
+                    )
+                except Exception as exc:
+                    result = {
+                        "ok": False,
+                        "error": str(exc),
+                        "code": "backend_error",
+                        "_status": 503,
+                    }
+                finally:
+                    request.finish()
+                result.setdefault("request_id", request.request_id)
             try:
-                response_queue.put_nowait(result)
+                request.response_queue.put_nowait(result)
             except queue.Full:
                 pass
         elif kind == "wevt":
@@ -4447,16 +4501,34 @@ class WindowManagerApp:
     # ---------------------------- Stream Deck bridge ----------------------------
 
     def _dispatch_streamdeck_command(self, command: str, payload: dict[str, object]) -> dict[str, object]:
-        """Queue a bridge command so every Tk/Win32 mutation stays on the UI thread."""
+        """Queue one mutation with a deadline and an atomic queued/started state."""
         if self._stop_event.is_set():
-            return {"ok": False, "error": "L'application est en cours de fermeture.", "_status": 503}
+            return {
+                "ok": False,
+                "error": "L'application est en cours de fermeture.",
+                "code": "app_closing",
+                "_status": 503,
+            }
 
         response_queue: "queue.Queue[dict[str, object]]" = queue.Queue(maxsize=1)
-        self._queue.put(("streamdeck", command, payload, response_queue))
+        raw_request_id = str(payload.get("request_id") or "").strip()
+        request_id = raw_request_id[:128] or uuid.uuid4().hex
+        deadline = time.monotonic() + 2.0
+        request = _QueuedStreamDeckRequest(
+            command=command,
+            payload=dict(payload),
+            response_queue=response_queue,
+            request_id=request_id,
+            deadline=deadline,
+        )
+        self._queue.put(("streamdeck", request))
         try:
-            return response_queue.get(timeout=2.0)
+            return response_queue.get(timeout=max(0.0, deadline - time.monotonic()))
         except queue.Empty as exc:
-            raise TimeoutError("Délai de réponse de l'interface dépassé.") from exc
+            request.cancel_if_queued()
+            raise TimeoutError(
+                f"Délai de réponse de l'interface dépassé (request_id={request_id})."
+            ) from exc
 
     def _execute_streamdeck_command(self, command: str, payload: dict[str, object]) -> dict[str, object]:
         if self._stop_event.is_set():
@@ -4466,6 +4538,23 @@ class WindowManagerApp:
                 "code": "app_closing",
                 "_status": 503,
             }
+        if command in {"focus", "rotate", "next_attention"}:
+            requested_mode = payload.get("game_mode", self.game_mode)
+            requested_profile = payload.get(
+                "profile",
+                getattr(self, "_active_profile_name", ""),
+            )
+            if (
+                requested_mode != self.game_mode
+                or requested_profile != getattr(self, "_active_profile_name", "")
+            ):
+                return {
+                    "ok": False,
+                    "error": "Le contexte Dofus a changé. Actualisez le Stream Deck.",
+                    "code": "context_changed",
+                    "_status": 409,
+                }
+
         if command == "show":
             self._show_main_window()
             return {"ok": True}
@@ -4502,8 +4591,6 @@ class WindowManagerApp:
             return {"ok": True, "accepted": True, "direction": direction}
 
         if command == "focus":
-            if payload.get("game_mode", self.game_mode) != self.game_mode or payload.get("profile", getattr(self, "_active_profile_name", "")) != getattr(self, "_active_profile_name", ""):
-                return {"ok": False, "error": "Le profil a changé. Réessayez après actualisation.", "_status": 409}
             raw_hwnd = payload.get("hwnd")
             slot: int | None = None
             if raw_hwnd is not None:
