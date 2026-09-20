@@ -8,7 +8,7 @@ import time
 import types
 import unittest
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 if os.name != "nt":
     hotkeys_stub = types.ModuleType("dwm.services.hotkeys_win")
@@ -63,6 +63,53 @@ class AppQueueTests(unittest.TestCase):
         )
         self.assertEqual(app._queue.unfinished_tasks, 0)
         self.assertTrue(app.root.after_calls)
+
+    def test_scan_result_started_before_structure_change_is_rejected_with_barrier(self) -> None:
+        entered = threading.Event()
+        release = threading.Event()
+        queued = threading.Event()
+
+        class SignalingQueue(queue.Queue):
+            def put(self, item, block=True, timeout=None):
+                super().put(item, block=block, timeout=timeout)
+                if item[0] == "windows":
+                    queued.set()
+
+        app = self.make_app()
+        app._queue = SignalingQueue()
+        app._refresh_inflight = False
+        app._last_scan_monotonic = 0.0
+        app._min_scan_interval_sec = 0.0
+        app._scan_started_monotonic = None
+        app.game_mode = "unity"
+        app.game_label = "Unity"
+        app.settings = SimpleNamespace(
+            retro_title_keyword="dofus retro v",
+            retro_process_keyword="",
+        )
+        app._apply_windows = Mock()
+        app._finish_refresh = Mock()
+
+        def blocked_scan(*_args):
+            entered.set()
+            if not release.wait(2):
+                raise AssertionError("scan barrier was not released")
+            return [object()]
+
+        with (
+            patch("dwm.app.list_game_windows", side_effect=blocked_scan),
+            patch("dwm.app.get_last_enum_error", return_value=""),
+        ):
+            self.assertTrue(app.refresh_windows(force=True))
+            self.assertTrue(entered.wait(1))
+            app._structure_generation += 1
+            release.set()
+            self.assertTrue(queued.wait(1))
+            app._process_queue()
+
+        app._apply_windows.assert_not_called()
+        app._finish_refresh.assert_called_once_with()
+        self.assertTrue(app._refresh_again_requested)
 
     def test_stale_scan_is_finalized_and_requests_one_catchup(self) -> None:
         app = self.make_app()
