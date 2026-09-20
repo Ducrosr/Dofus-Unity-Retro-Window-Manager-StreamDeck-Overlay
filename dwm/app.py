@@ -4244,7 +4244,7 @@ class WindowManagerApp:
         return True
 
     def _finish_refresh(self) -> None:
-        """Publish scan completion and run one explicitly queued refresh."""
+        """Publish scan completion and run at most one explicitly queued refresh."""
         if self._scan_started_monotonic is not None:
             self.runtime_metrics.record_scan(
                 time.monotonic() - self._scan_started_monotonic
@@ -4252,10 +4252,17 @@ class WindowManagerApp:
         self._scan_started_monotonic = None
         self._refresh_inflight = False
         self._scan_revision += 1
-        self._publish_streamdeck_state()
-        if self._refresh_again_requested:
-            self._refresh_again_requested = False
-            self.root.after(0, lambda: self.refresh_windows(quiet=True, force=True))
+        if not self._stop_event.is_set():
+            self._publish_streamdeck_state()
+
+        run_again = self._refresh_again_requested
+        self._refresh_again_requested = False
+        if run_again and not self._stop_event.is_set():
+            self.root.after(
+                0,
+                lambda: self.refresh_windows(quiet=True, force=True),
+            )
+
 
     def _apply_windows(self, wins: list[GameWindow]):
         # Update map. A reused HWND must not inherit ignored/attention/focus
@@ -4349,21 +4356,37 @@ class WindowManagerApp:
     def _schedule_refresh(self):
         if self._stop_event.is_set():
             return
-        if self.auto_refresh_enabled.get():
-            self.refresh_windows(quiet=True)
-        hook = getattr(self, "win_events", None)
+
+        delay_seconds = max(1, int(getattr(self.settings, "refresh_seconds", 10)))
         try:
-            hook_healthy = bool(hook and hook.is_running())
-        except Exception:
-            hook_healthy = False
-        delay_seconds = adaptive_refresh_delay_seconds(
-            self.settings.refresh_seconds,
-            enabled=bool(getattr(self.settings, "adaptive_performance_enabled", True)),
-            event_hook_healthy=hook_healthy,
-            has_windows=bool(self._all_windows),
-        )
-        self._scheduled_refresh_delay_seconds = delay_seconds
-        self.root.after(delay_seconds * 1000, self._schedule_refresh)
+            if self.auto_refresh_enabled.get():
+                self.refresh_windows(quiet=True)
+            hook = getattr(self, "win_events", None)
+            try:
+                hook_healthy = bool(hook and hook.is_running())
+            except Exception:
+                hook_healthy = False
+            delay_seconds = adaptive_refresh_delay_seconds(
+                self.settings.refresh_seconds,
+                enabled=bool(
+                    getattr(self.settings, "adaptive_performance_enabled", True)
+                ),
+                event_hook_healthy=hook_healthy,
+                has_windows=bool(self._all_windows),
+            )
+            self._scheduled_refresh_delay_seconds = delay_seconds
+        except Exception as exc:
+            try:
+                self.logger.error("Scheduled refresh failed", exc)
+            except Exception:
+                pass
+        finally:
+            if not self._stop_event.is_set():
+                self.root.after(
+                    max(1, int(delay_seconds * 1000)),
+                    self._schedule_refresh,
+                )
+
 
     def _on_toggle_autorefresh(self):
         self.settings.auto_refresh = bool(self.auto_refresh_enabled.get())
