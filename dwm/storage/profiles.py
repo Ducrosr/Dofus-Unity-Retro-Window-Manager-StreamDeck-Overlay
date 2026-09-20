@@ -16,6 +16,11 @@ from .settings import normalize_profile_overlays
 PROFILE_SCHEMA_VERSION = 4
 
 
+class UnsupportedProfileSchemaError(ValueError):
+    """Raised when a profile was written by a newer unsupported schema."""
+
+
+
 class _LegacyProfileUnpickler(pickle.Unpickler):
     """Load primitive legacy profile data without allowing global objects."""
 
@@ -64,6 +69,14 @@ class Profile:
 
     @staticmethod
     def from_dict(d: dict) -> "Profile":
+        if not isinstance(d, dict):
+            raise ValueError("profile root must be a JSON object")
+        schema = int(d.get("schema_version", 1) or 1)
+        if schema > PROFILE_SCHEMA_VERSION:
+            raise UnsupportedProfileSchemaError(
+                f"profile schema {schema} is newer than supported schema "
+                f"{PROFILE_SCHEMA_VERSION}"
+            )
         now = datetime.now().isoformat(timespec="seconds")
         return Profile(
             name=d.get("name", ""),
@@ -104,13 +117,31 @@ def list_profiles(profiles_dir: Path) -> List[str]:
     return sorted(set(names), key=str.lower)
 
 
+def profile_backup_path(path: Path) -> Path:
+    return path.with_name(f"{path.name}.bak")
+
+
+def _read_profile(path: Path) -> Profile:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("profile root must be a JSON object")
+    profile = Profile.from_dict(data)
+    if not profile.name:
+        profile.name = path.stem.removesuffix(".json")
+    return profile
+
+
 def load_profile(profiles_dir: Path, name: str) -> Profile:
-    p = profile_path(profiles_dir, name)
-    data = json.loads(p.read_text(encoding="utf-8"))
-    pr = Profile.from_dict(data)
-    if not pr.name:
-        pr.name = p.stem
-    return pr
+    path = profile_path(profiles_dir, name)
+    try:
+        return _read_profile(path)
+    except UnsupportedProfileSchemaError:
+        raise
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError, TypeError):
+        backup = profile_backup_path(path)
+        if not backup.exists():
+            raise
+        return _read_profile(backup)
 
 
 def save_profile(profiles_dir: Path, profile: Profile) -> None:
@@ -120,6 +151,21 @@ def save_profile(profiles_dir: Path, profile: Profile) -> None:
         profile.created_at = now
     profile.updated_at = now
     path = profile_path(profiles_dir, profile.name)
+
+    if path.exists():
+        try:
+            current = path.read_text(encoding="utf-8")
+            data = json.loads(current)
+            if not isinstance(data, dict):
+                raise ValueError("profile root must be a JSON object")
+            Profile.from_dict(data)
+        except UnsupportedProfileSchemaError:
+            raise
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError, TypeError):
+            pass
+        else:
+            atomic_write_text(profile_backup_path(path), current)
+
     atomic_write_text(
         path,
         json.dumps(profile.to_dict(), indent=2, ensure_ascii=False),
