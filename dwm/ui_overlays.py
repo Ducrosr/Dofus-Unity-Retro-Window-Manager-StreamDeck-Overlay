@@ -1231,8 +1231,14 @@ class OverlayUI:
         self._destroy_toast_window()
 
     def _destroy_toast_window(self) -> None:
+        window = self.toast_window
+        self.toast_window = None
         self._toast_images.clear()
-        self._deactivate_toast_window()
+        if window is not None:
+            try:
+                window.destroy()
+            except Exception:
+                pass
 
     def _show_swap_notification_now(self, request: _SwapNotificationRequest) -> None:
         if self._closed:
