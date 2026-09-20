@@ -4166,8 +4166,13 @@ class WindowManagerApp:
         threading.Thread(target=worker, daemon=True).start()
         return True
 
-    def _finish_refresh(self, *, applied: bool = True) -> None:
-        """Finalize one scan attempt and coalesce any required catch-up scan."""
+    def _finish_refresh(
+        self,
+        *,
+        applied: bool = True,
+        catch_up: bool = False,
+    ) -> None:
+        """Finalize one scan attempt and optionally coalesce one catch-up scan."""
         if self._scan_started_monotonic is not None:
             self.runtime_metrics.record_scan(
                 time.monotonic() - self._scan_started_monotonic
@@ -4179,7 +4184,7 @@ class WindowManagerApp:
             self._publish_streamdeck_state()
         except Exception as exc:
             self._log(f"Publication Stream Deck après scan impossible : {exc}")
-        if not applied:
+        if catch_up:
             self._refresh_again_requested = True
         if self._refresh_again_requested and not self._stop_event.is_set():
             self._refresh_again_requested = False
@@ -4317,7 +4322,7 @@ class WindowManagerApp:
                     except Exception as exc:
                         self._log(f"Application du scan impossible : {exc}")
                     finally:
-                        self._finish_refresh(applied=applied)
+                        self._finish_refresh(applied=applied, catch_up=not applied)
                 elif kind == "error":
                     if len(item) >= 4:
                         mode_revision, generation, message = int(item[1]), int(item[2]), str(item[3])
@@ -4325,7 +4330,7 @@ class WindowManagerApp:
                         mode_revision, generation, message = int(item[1]), self._structure_generation, str(item[2])
                     if mode_revision == self._game_mode_revision and generation == self._structure_generation:
                         self._log(message)
-                    self._finish_refresh(applied=False)
+                    self._finish_refresh(applied=False, catch_up=False)
                 elif kind == "notice":
                     if len(item) >= 4:
                         mode_revision, generation, message = int(item[1]), int(item[2]), str(item[3])
