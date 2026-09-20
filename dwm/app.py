@@ -31,11 +31,11 @@ from PIL import Image, ImageTk
 from . import __release_tag__, __version__
 from .models import GameWindow
 from .services.windows import (
-    extract_character_class,
-    extract_pseudo_retro,
-    extract_pseudo_unity,
     list_game_windows,
     list_visible_dofus_candidates,
+    recognize_game_window,
+    revalidate_game_window,
+    same_game_window_identity,
     suspect_privilege_mismatch,
 )
 from .services.focus import FocusError, focus_hwnd, get_foreground_hwnd, is_window
@@ -543,6 +543,7 @@ class WindowManagerApp:
         self._last_scan_ok = True
         self._last_scan_error = ""
         self._game_mode_revision = 0
+        self._structure_generation = 0
         self.streamdeck_bridge: StreamDeckBridge | None = None
         self.shell_attention: ShellAttentionHook | None = None
         self._start_minimized = bool(start_minimized)
