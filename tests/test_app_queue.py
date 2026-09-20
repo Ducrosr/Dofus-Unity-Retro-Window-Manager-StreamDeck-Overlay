@@ -149,7 +149,7 @@ class AppQueueTests(unittest.TestCase):
 
         self.assertGreater(app._queue.qsize(), 0)
         self.assertTrue(app.root.after_calls)
-        self.assertEqual(app.root.after_calls[-1][0], 0)
+        self.assertEqual(app.root.after_calls[-1][0], 1)
 
     def test_expired_streamdeck_request_is_cancelled_before_mutation(self) -> None:
         app = self.make_app()
