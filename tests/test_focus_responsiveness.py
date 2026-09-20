@@ -354,6 +354,34 @@ class OverlayResponsivenessTests(unittest.TestCase):
         overlay._destroy_persistent.assert_not_called()
         overlay._render_persistent.assert_called_once_with()
 
+    def test_lock_change_restyles_same_persistent_toplevel(self) -> None:
+        overlay = OverlayUI.__new__(OverlayUI)
+        overlay._closed = False
+        overlay.root = Mock()
+        overlay.palette = {"line": "#123456"}
+        window = Mock()
+        overlay.persistent_window = window
+        overlay.obs_capture = True
+        overlay._monitor_job = "monitor-job"
+        overlay._ensure_persistent = Mock()
+        overlay._render_persistent = Mock()
+
+        with patch("dwm.ui_overlays._apply_non_activating_style") as apply_style:
+            overlay.configure_persistent(
+                enabled=True,
+                x=10,
+                y=20,
+                opacity=88,
+                locked=True,
+                width=300,
+                auto_width=True,
+                height=0,
+            )
+
+        self.assertIs(overlay.persistent_window, window)
+        apply_style.assert_called_once_with(window, click_through=True)
+        overlay._render_persistent.assert_called_once_with()
+
     def test_close_all_is_terminal_and_idempotent(self) -> None:
         overlay = OverlayUI.__new__(OverlayUI)
         overlay._closed = False
