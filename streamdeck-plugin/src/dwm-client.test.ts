@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { DwmClient, DwmCommandError } from "./dwm-client";
+import { DwmClient, DwmCommandError } from "./dwm-client.ts";
 
 test("non-idempotent rotate is never replayed after an ambiguous backend error", async () => {
 	const originalFetch = globalThis.fetch;
