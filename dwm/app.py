@@ -33,9 +33,6 @@ from PIL import Image, ImageTk
 from . import __release_tag__, __version__
 from .models import GameWindow
 from .services.windows import (
-    extract_character_class,
-    extract_pseudo_retro,
-    extract_pseudo_unity,
     identify_game_window,
     list_game_windows,
     list_visible_dofus_candidates,
@@ -6898,8 +6895,13 @@ class WindowManagerApp:
     def _handle_popup_event(self, evt: PopupEvent) -> None:
         if self._stop_event.is_set() or not self._popup_watch_enabled:
             return
-        if int(getattr(evt, "generation", self._event_hook_generation)) != self._event_hook_generation:
-            return
+        watcher = getattr(self, "popup_watcher", None)
+        if watcher is not None:
+            try:
+                if not watcher.is_current_event(evt):
+                    return
+            except Exception:
+                return
 
         hwnd = int(evt.hwnd)
         if hwnd not in self._managed_order or hwnd in self._ignored:
