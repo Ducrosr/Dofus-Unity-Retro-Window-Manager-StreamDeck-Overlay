@@ -6,7 +6,9 @@ import os
 import queue
 import threading
 import time
+import uuid
 import webbrowser
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from tkinter import BooleanVar, Canvas, Label as TkLabel, StringVar, Text, Tk, Toplevel, filedialog, messagebox, simpledialog
@@ -31,11 +33,10 @@ from PIL import Image, ImageTk
 from . import __release_tag__, __version__
 from .models import GameWindow
 from .services.windows import (
-    extract_character_class,
-    extract_pseudo_retro,
-    extract_pseudo_unity,
+    identify_game_window,
     list_game_windows,
     list_visible_dofus_candidates,
+    revalidate_game_window,
     suspect_privilege_mismatch,
 )
 from .services.focus import FocusError, focus_hwnd, get_foreground_hwnd, is_window
@@ -213,6 +214,53 @@ SWAP_POSITION_LABELS = {
     "bottom_right": "En bas à droite",
 }
 ROTATION_COALESCE_MS = 18
+QUEUE_BUDGET_MESSAGES = 64
+QUEUE_BUDGET_SECONDS = 0.012
+STREAMDECK_COMMAND_TIMEOUT_SECONDS = 2.0
+
+
+@dataclass
+class _StreamDeckRequest:
+    request_id: str
+    command: str
+    payload: dict[str, object]
+    deadline: float
+    response_queue: "queue.Queue[dict[str, object]]"
+    lock: threading.Lock = field(default_factory=threading.Lock)
+    started: bool = False
+    completed: bool = False
+    cancelled: bool = False
+
+    def try_start(self, now: float) -> bool:
+        with self.lock:
+            if self.completed or self.cancelled or now >= self.deadline:
+                if not self.started:
+                    self.cancelled = True
+                return False
+            self.started = True
+            return True
+
+    def cancel_if_not_started(self) -> bool:
+        with self.lock:
+            if self.started or self.completed:
+                return False
+            self.cancelled = True
+            return True
+
+    def complete(self, result: dict[str, object]) -> bool:
+        with self.lock:
+            if self.completed:
+                return False
+            self.completed = True
+        payload = dict(result)
+        payload.setdefault("request_id", self.request_id)
+        try:
+            self.response_queue.put_nowait(payload)
+        except queue.Full:
+            return False
+        return True
+
+
 OFFICIAL_REPOSITORY_URL = (
     "https://github.com/Ducrosr/Dofus-Unity-Retro-Window-Manager-StreamDeck-Overlay"
 )
@@ -540,6 +588,8 @@ class WindowManagerApp:
         self._available_release: ReleaseInfo | None = None
         self._scan_revision = 0
         self._game_mode_revision = 0
+        self._structure_generation = 0
+        self._event_hook_generation = 0
         self.streamdeck_bridge: StreamDeckBridge | None = None
         self.shell_attention: ShellAttentionHook | None = None
         self._start_minimized = bool(start_minimized)
@@ -630,6 +680,7 @@ class WindowManagerApp:
             reorder_character=self._reorder_from_overlay,
             focus_next_attention=lambda: self.focus_next_attention(source="Overlay"),
             palette=resolved_theme_palette(self.root, self.settings.theme),
+            obs_capture=True,
         )
         self._apply_display_preferences()
         self.update_listboxes()
@@ -660,6 +711,7 @@ class WindowManagerApp:
         # ---- Optional Retro in-game popup watcher (Groupe/Echange) ----
         # Works best when windows are stacked (off-screen capture via Windows Graphics Capture).
         self.popup_watcher = None
+        self._popup_watcher_generation = 0
         self._popup_event_pump_started = False
         self._popup_queue = queue.SimpleQueue()
         # Global cooldown to avoid ping-pong when multiple popups are detected at once
@@ -670,10 +722,12 @@ class WindowManagerApp:
         if self.game_mode == "retro" and _POPUP_WATCH_AVAILABLE and self._popup_watch_enabled:
             try:
                 # Emit into a thread-safe queue; handled on the Tk thread.
+                self._popup_watcher_generation += 1
                 self.popup_watcher = RetroPopupWatcher(
                     emit=lambda evt: self._popup_queue.put(evt),
                     max_fps_per_window=4.0,
                     cooldown_sec=2.0,
+                    generation_seed=self._popup_watcher_generation,
                 )
                 self.popup_watcher.set_enabled(self._popup_watch_enabled)
                 self._ensure_popup_event_pump()
@@ -2346,6 +2400,32 @@ class WindowManagerApp:
         )
 
     def _focus_hwnd_measured(self, hwnd: int) -> None:
+        if WindowManagerApp._is_stopping(self):
+            raise FocusError("L'application est en cours de fermeture.")
+        expected = self._all_windows.get(hwnd)
+        if expected is None:
+            raise FocusError("La fenêtre Dofus n'est plus connue.")
+
+        has_identity = bool(
+            expected.pid
+            or expected.window_class
+            or expected.game_mode
+            or expected.process_path
+        )
+        if has_identity:
+            current = revalidate_game_window(
+                expected,
+                retro_title_keyword=self.settings.retro_title_keyword,
+                retro_process_keyword=self.settings.retro_process_keyword,
+            )
+            if current is None:
+                self._invalidate_window_target(hwnd)
+                self.refresh_windows(quiet=True, force=True)
+                raise FocusError(
+                    "La fenêtre a changé d'identité avant le focus ; actualisation demandée."
+                )
+            self._all_windows[hwnd] = current
+
         started_at = time.monotonic()
         succeeded = False
         try:
@@ -2358,6 +2438,24 @@ class WindowManagerApp:
                     time.monotonic() - started_at,
                     succeeded=succeeded,
                 )
+
+    def _invalidate_window_target(self, hwnd: int) -> None:
+        self._all_windows.pop(hwnd, None)
+        self._ignored.discard(hwnd)
+        self.attention_state.clear(hwnd)
+        if hwnd in self._managed_order:
+            self._managed_order.remove(hwnd)
+        if hwnd in self._streamdeck_order:
+            self._streamdeck_order.remove(hwnd)
+        if self._active_game_hwnd == hwnd:
+            self._active_game_hwnd = None
+        self._structure_generation = getattr(self, "_structure_generation", 0) + 1
+        if self._managed_order:
+            self.rotation_index %= len(self._managed_order)
+        else:
+            self.rotation_index = 0
+        self._request_ui_update()
+
 
     def _focus_from_auxiliary_display(self, hwnd: int) -> bool:
         window = self._all_windows.get(hwnd)
@@ -2446,7 +2544,7 @@ class WindowManagerApp:
             button.configure(state=("normal" if count else "disabled"))
 
     def _poll_active_game_window(self) -> None:
-        if self._stop_event.is_set():
+        if WindowManagerApp._is_stopping(self):
             return
         overlay_ui = getattr(self, "overlay_ui", None)
         if overlay_ui is not None and overlay_ui.has_visible_character_list:
@@ -2468,7 +2566,7 @@ class WindowManagerApp:
         self._start_update_check(manual=True)
 
     def _start_update_check(self, *, manual: bool) -> None:
-        if self._stop_event.is_set():
+        if WindowManagerApp._is_stopping(self):
             return
         if self._update_check_inflight:
             if manual:
@@ -2512,7 +2610,7 @@ class WindowManagerApp:
         threading.Thread(target=worker, name="DWMUpdateCheck", daemon=True).start()
 
         def poll_result() -> None:
-            if self._stop_event.is_set():
+            if WindowManagerApp._is_stopping(self):
                 return
             try:
                 result, error, checked_at = results.get_nowait()
@@ -3538,7 +3636,7 @@ class WindowManagerApp:
         TtkButton(buttons, text="Fermer", command=win.destroy).pack(side="right")
 
     def offer_interrupted_session_diagnostic(self) -> None:
-        if self._stop_event.is_set():
+        if WindowManagerApp._is_stopping(self):
             return
         self._log("La session précédente s’est terminée anormalement.")
         if messagebox.askyesno(
@@ -3949,6 +4047,8 @@ class WindowManagerApp:
 
     def switch_game_mode(self, game_mode: str) -> bool:
         """Switch Unity/Retro immediately without restarting the application."""
+        if WindowManagerApp._is_stopping(self):
+            return False
         new_mode = normalize_game_mode(game_mode, self.game_mode)
         if new_mode == self.game_mode:
             self.game_mode_var.set(self.game_label)
@@ -3971,6 +4071,7 @@ class WindowManagerApp:
         self._apply_runtime_theme(selected_theme)
         self._apply_display_preferences()
         self._game_mode_revision += 1
+        self._structure_generation = getattr(self, "_structure_generation", 0) + 1
         self.game_mode_var.set(self.game_label)
         self.game_subtitle_var.set(
             tr("Mode {game} · gestion locale des fenêtres", game=self.game_label)
@@ -4022,10 +4123,18 @@ class WindowManagerApp:
         if not getattr(self.settings, "event_hook_enabled", True):
             return
         self._stop_win_event_hook()
+        self._event_hook_generation = getattr(self, "_event_hook_generation", 0) + 1
+        hook_generation = self._event_hook_generation
+        mode_revision = self._game_mode_revision
         try:
-            classes, keyword_map = win_event_filter(self.game_mode, self.settings.retro_title_keyword)
+            classes, keyword_map = win_event_filter(
+                self.game_mode,
+                self.settings.retro_title_keyword,
+            )
             self.win_events = WinEventHook(
-                lambda evt, hwnd: self._queue.put(("wevt", evt, hwnd)),
+                lambda evt, hwnd: self._queue.put(
+                    ("wevt", mode_revision, hook_generation, evt, hwnd)
+                ),
                 class_names=classes,
                 title_keyword_by_class=keyword_map,
             )
@@ -4034,15 +4143,20 @@ class WindowManagerApp:
             if error:
                 self._log(f"WinEventHook: {error}")
             self.shell_attention = ShellAttentionHook(
-                lambda evt, hwnd: self._queue.put(("wevt", evt, hwnd))
+                lambda evt, hwnd: self._queue.put(
+                    ("wevt", mode_revision, hook_generation, evt, hwnd)
+                )
             )
             self.shell_attention.start()
             shell_error = self.shell_attention.get_last_error()
             if shell_error:
-                self._log(f"Attention Windows : repli Shell indisponible ({shell_error})")
+                self._log(
+                    f"Attention Windows : repli Shell indisponible ({shell_error})"
+                )
         except Exception as exc:
             self._log(f"WinEventHook: impossible de démarrer ({exc})")
             self.win_events = None
+
 
     def _stop_win_event_hook(self) -> None:
         hook = getattr(self, "win_events", None)
@@ -4066,6 +4180,8 @@ class WindowManagerApp:
         - quiet=True avoids extra logs (useful for auto-refresh).
         - force=True bypasses debounce.
         """
+        if WindowManagerApp._is_stopping(self):
+            return False
         if self._refresh_inflight:
             if force:
                 self._refresh_again_requested = True
@@ -4080,19 +4196,35 @@ class WindowManagerApp:
         self._refresh_inflight = True
         self._scan_started_monotonic = now
         mode_revision = self._game_mode_revision
+        structure_generation = getattr(self, "_structure_generation", 0)
         scan_mode = self.game_mode
         game_label = self.game_label
+        retro_title_keyword = self.settings.retro_title_keyword
+        retro_process_keyword = self.settings.retro_process_keyword
         if not quiet:
             self._log(f"Scan des fenêtres {game_label}...")
 
         def worker():
             try:
-                wins = list_game_windows(scan_mode, self.settings.retro_title_keyword, self.settings.retro_process_keyword)
+                wins = list_game_windows(
+                    scan_mode,
+                    retro_title_keyword,
+                    retro_process_keyword,
+                )
                 enum_error = get_last_enum_error()
                 if not wins and enum_error:
-                    self._queue.put(("error", mode_revision, f"Erreur scan Win32: {enum_error}"))
+                    self._queue.put(
+                        (
+                            "error",
+                            mode_revision,
+                            structure_generation,
+                            f"Erreur scan Win32: {enum_error}",
+                        )
+                    )
                 else:
-                    self._queue.put(("windows", mode_revision, wins))
+                    self._queue.put(
+                        ("windows", mode_revision, structure_generation, wins)
+                    )
                     if not wins:
                         candidates = list_visible_dofus_candidates()
                         if candidates:
@@ -4104,18 +4236,21 @@ class WindowManagerApp:
                                 (
                                     "notice",
                                     mode_revision,
+                                    structure_generation,
                                     "Fenêtre(s) Dofus visible(s), mais non reconnue(s) par le mode "
                                     f"{game_label}: {sample}",
                                 )
                             )
             except Exception as e:
-                self._queue.put(("error", mode_revision, f"Erreur scan: {e}"))
+                self._queue.put(
+                    ("error", mode_revision, structure_generation, f"Erreur scan: {e}")
+                )
 
         threading.Thread(target=worker, daemon=True).start()
         return True
 
     def _finish_refresh(self) -> None:
-        """Publish scan completion and run one explicitly queued refresh."""
+        """Publish scan completion and run at most one explicitly queued refresh."""
         if self._scan_started_monotonic is not None:
             self.runtime_metrics.record_scan(
                 time.monotonic() - self._scan_started_monotonic
@@ -4123,14 +4258,45 @@ class WindowManagerApp:
         self._scan_started_monotonic = None
         self._refresh_inflight = False
         self._scan_revision += 1
-        self._publish_streamdeck_state()
-        if self._refresh_again_requested:
-            self._refresh_again_requested = False
-            self.root.after(0, lambda: self.refresh_windows(quiet=True, force=True))
+        if not WindowManagerApp._is_stopping(self):
+            self._publish_streamdeck_state()
+
+        run_again = self._refresh_again_requested
+        self._refresh_again_requested = False
+        if run_again and not self._stop_event.is_set():
+            self.root.after(
+                0,
+                lambda: self.refresh_windows(quiet=True, force=True),
+            )
+
 
     def _apply_windows(self, wins: list[GameWindow]):
-        # Update map
+        # Update map. A reused HWND must not inherit ignored/attention/focus
+        # state from a different character/process identity.
+        previous_map = self._all_windows
         new_map = {w.hwnd: w for w in wins}
+        replaced_hwnds = {
+            hwnd
+            for hwnd, current in new_map.items()
+            if hwnd in previous_map
+            and (
+                character_key(previous_map[hwnd].pseudo) != character_key(current.pseudo)
+                or (
+                    previous_map[hwnd].pid
+                    and current.pid
+                    and previous_map[hwnd].pid != current.pid
+                )
+            )
+        }
+        for hwnd in replaced_hwnds:
+            self._ignored.discard(hwnd)
+            self.attention_state.clear(hwnd)
+            if hwnd in self._managed_order:
+                self._managed_order.remove(hwnd)
+            if hwnd in self._streamdeck_order:
+                self._streamdeck_order.remove(hwnd)
+            if self._active_game_hwnd == hwnd:
+                self._active_game_hwnd = None
         self._ignored = {
             hwnd for hwnd in self._ignored
             if hwnd in new_map and hwnd in self._all_windows
@@ -4143,8 +4309,10 @@ class WindowManagerApp:
 
         # Compute a lightweight signature to detect whether the scan changed.
         new_sig = tuple(sorted((w.hwnd, w.title) for w in wins))
-        unchanged = new_sig == self._windows_sig
+        unchanged = new_sig == self._windows_sig and not replaced_hwnds
         self._windows_sig = new_sig
+        if not unchanged:
+            self._structure_generation = getattr(self, "_structure_generation", 0) + 1
 
         # If nothing changed, just update the timestamp and skip rebuilding the UI.
         if unchanged:
@@ -4196,103 +4364,248 @@ class WindowManagerApp:
         self._update_popup_watcher_targets()
 
     def _schedule_refresh(self):
-        if self._stop_event.is_set():
+        if WindowManagerApp._is_stopping(self):
             return
-        if self.auto_refresh_enabled.get():
-            self.refresh_windows(quiet=True)
-        hook = getattr(self, "win_events", None)
+
+        delay_seconds = max(1, int(getattr(self.settings, "refresh_seconds", 10)))
         try:
-            hook_healthy = bool(hook and hook.is_running())
-        except Exception:
-            hook_healthy = False
-        delay_seconds = adaptive_refresh_delay_seconds(
-            self.settings.refresh_seconds,
-            enabled=bool(getattr(self.settings, "adaptive_performance_enabled", True)),
-            event_hook_healthy=hook_healthy,
-            has_windows=bool(self._all_windows),
-        )
-        self._scheduled_refresh_delay_seconds = delay_seconds
-        self.root.after(delay_seconds * 1000, self._schedule_refresh)
+            if self.auto_refresh_enabled.get():
+                self.refresh_windows(quiet=True)
+            hook = getattr(self, "win_events", None)
+            try:
+                hook_healthy = bool(hook and hook.is_running())
+            except Exception:
+                hook_healthy = False
+            delay_seconds = adaptive_refresh_delay_seconds(
+                self.settings.refresh_seconds,
+                enabled=bool(
+                    getattr(self.settings, "adaptive_performance_enabled", True)
+                ),
+                event_hook_healthy=hook_healthy,
+                has_windows=bool(self._all_windows),
+            )
+            self._scheduled_refresh_delay_seconds = delay_seconds
+        except Exception as exc:
+            try:
+                self.logger.error("Scheduled refresh failed", exc)
+            except Exception:
+                pass
+        finally:
+            if not WindowManagerApp._is_stopping(self):
+                self.root.after(
+                    max(1, int(delay_seconds * 1000)),
+                    self._schedule_refresh,
+                )
+
 
     def _on_toggle_autorefresh(self):
         self.settings.auto_refresh = bool(self.auto_refresh_enabled.get())
         save_settings(self.settings_path, self.settings)
 
     def _process_queue(self):
-        while True:
-            try:
-                item = self._queue.get_nowait()
-            except queue.Empty:
-                break
-
-            kind = item[0]
-            if kind == "windows":
-                if int(item[1]) == self._game_mode_revision:
-                    self._apply_windows(item[2])
-                self._finish_refresh()
-            elif kind == "error":
-                if int(item[1]) == self._game_mode_revision:
-                    self._log(str(item[2]))
-                self._finish_refresh()
-            elif kind == "notice":
-                if int(item[1]) == self._game_mode_revision:
-                    self._log(str(item[2]))
-            elif kind == "streamdeck":
-                response_queue = item[3]
+        started = time.monotonic()
+        processed = 0
+        try:
+            while processed < QUEUE_BUDGET_MESSAGES:
+                if (time.monotonic() - started) >= QUEUE_BUDGET_SECONDS:
+                    break
                 try:
-                    result = self._execute_streamdeck_command(str(item[1]), item[2])
+                    item = self._queue.get_nowait()
+                except queue.Empty:
+                    break
+
+                processed += 1
+                kind = item[0]
+                try:
+                    if WindowManagerApp._is_stopping(self):
+                        if kind == "streamdeck":
+                            request = item[1]
+                            if isinstance(request, _StreamDeckRequest):
+                                request.cancel_if_not_started()
+                                request.complete(
+                                    {
+                                        "ok": False,
+                                        "error": "L'application est en cours de fermeture.",
+                                        "error_code": "closing",
+                                        "_status": 503,
+                                    }
+                                )
+                        elif (
+                            kind in {"windows", "error"}
+                            and bool(getattr(self, "_refresh_inflight", False))
+                        ):
+                            self._finish_refresh()
+                        continue
+
+                    if kind == "windows":
+                        try:
+                            mode_revision = int(item[1])
+                            structure_generation = int(item[2])
+                            if (
+                                mode_revision == self._game_mode_revision
+                                and structure_generation == getattr(self, "_structure_generation", 0)
+                            ):
+                                self._apply_windows(item[3])
+                            else:
+                                self._refresh_again_requested = True
+                        except Exception as exc:
+                            self._log(f"Application du scan impossible: {exc}")
+                        finally:
+                            self._finish_refresh()
+                    elif kind == "error":
+                        try:
+                            mode_revision = int(item[1])
+                            structure_generation = int(item[2])
+                            if (
+                                mode_revision == self._game_mode_revision
+                                and structure_generation == getattr(self, "_structure_generation", 0)
+                            ):
+                                self._log(str(item[3]))
+                            else:
+                                self._refresh_again_requested = True
+                        finally:
+                            self._finish_refresh()
+                    elif kind == "notice":
+                        if (
+                            int(item[1]) == self._game_mode_revision
+                            and int(item[2]) == self._structure_generation
+                        ):
+                            self._log(str(item[3]))
+                    elif kind == "streamdeck":
+                        request = item[1]
+                        if not isinstance(request, _StreamDeckRequest):
+                            continue
+                        if not request.try_start(time.monotonic()):
+                            request.complete(
+                                {
+                                    "ok": False,
+                                    "error": "La commande a expiré avant son exécution.",
+                                    "error_code": "deadline_exceeded",
+                                    "_status": 504,
+                                }
+                            )
+                            continue
+                        try:
+                            result = self._execute_streamdeck_command(
+                                request.command,
+                                request.payload,
+                            )
+                        except Exception as exc:
+                            result = {
+                                "ok": False,
+                                "error": str(exc),
+                                "error_code": "backend_error",
+                                "_status": 503,
+                            }
+                        request.complete(result)
+                    elif kind == "wevt":
+                        mode_revision = int(item[1])
+                        hook_generation = int(item[2])
+                        if (
+                            mode_revision == self._game_mode_revision
+                            and hook_generation == getattr(self, "_event_hook_generation", 0)
+                        ):
+                            self._apply_win_event(str(item[3]), int(item[4]))
+                    elif kind == "tray":
+                        self._handle_tray_action(
+                            str(item[1]),
+                            str(item[2]) if len(item) > 2 else "",
+                        )
+                    elif kind == "update_check":
+                        self._finish_update_check(
+                            manual=bool(item[1]),
+                            result=item[2] if isinstance(item[2], UpdateCheckResult) else None,
+                            error=str(item[3] or ""),
+                            checked_at=str(item[4] or ""),
+                        )
                 except Exception as exc:
-                    result = {"ok": False, "error": str(exc), "_status": 503}
-                try:
-                    response_queue.put_nowait(result)
-                except queue.Full:
-                    pass
-            elif kind == "wevt":
-                # Window event hook notifications (create/destroy/namechange)
-                try:
-                    _evt, _hwnd = item[1], int(item[2])
-                    self._apply_win_event(str(_evt), _hwnd)
-                except Exception:
-                    pass
-            elif kind == "tray":
-                self._handle_tray_action(str(item[1]), str(item[2]) if len(item) > 2 else "")
-            elif kind == "update_check":
-                self._finish_update_check(
-                    manual=bool(item[1]),
-                    result=item[2] if isinstance(item[2], UpdateCheckResult) else None,
-                    error=str(item[3] or ""),
-                    checked_at=str(item[4] or ""),
-                )
-
-            self._queue.task_done()
-            if self._stop_event.is_set():
+                    try:
+                        self.logger.error(f"Queue item failed: {kind}", exc)
+                    except Exception:
+                        pass
+                finally:
+                    self._queue.task_done()
+        finally:
+            if WindowManagerApp._is_stopping(self):
                 return
-
-        if not self._stop_event.is_set():
             try:
                 self._sync_tray_state()
             except Exception:
-                # A tray/UI-state issue must never stop the main Tk queue.
-                # WinEvent notifications also pass through this queue, so losing
-                # the recurring callback would stop automatic Dofus window updates.
                 pass
-            self.root.after(100, self._process_queue)
+            delay = 1 if not self._queue.empty() else 100
+            self.root.after(delay, self._process_queue)
 
-    # ---------------------------- Stream Deck bridge ----------------------------
+
+    def _is_stopping(self) -> bool:
+        stop_event = getattr(self, "_stop_event", None)
+        return bool(stop_event is not None and stop_event.is_set())
 
     def _dispatch_streamdeck_command(self, command: str, payload: dict[str, object]) -> dict[str, object]:
-        """Queue a bridge command so every Tk/Win32 mutation stays on the UI thread."""
-        if self._stop_event.is_set():
-            return {"ok": False, "error": "L'application est en cours de fermeture.", "_status": 503}
+        """Queue one command with an atomic deadline-aware lifecycle."""
+        if WindowManagerApp._is_stopping(self):
+            return {
+                "ok": False,
+                "error": "L'application est en cours de fermeture.",
+                "error_code": "closing",
+                "_status": 503,
+            }
 
         response_queue: "queue.Queue[dict[str, object]]" = queue.Queue(maxsize=1)
-        self._queue.put(("streamdeck", command, payload, response_queue))
+        request = _StreamDeckRequest(
+            request_id=uuid.uuid4().hex,
+            command=str(command),
+            payload=dict(payload),
+            deadline=time.monotonic() + STREAMDECK_COMMAND_TIMEOUT_SECONDS,
+            response_queue=response_queue,
+        )
+        self._queue.put(("streamdeck", request))
+        remaining = max(0.0, request.deadline - time.monotonic())
         try:
-            return response_queue.get(timeout=2.0)
-        except queue.Empty as exc:
-            raise TimeoutError("Délai de réponse de l'interface dépassé.") from exc
+            return response_queue.get(timeout=remaining)
+        except queue.Empty:
+            cancelled = request.cancel_if_not_started()
+            return {
+                "ok": False,
+                "error": (
+                    "La commande a expiré avant son exécution."
+                    if cancelled
+                    else "Le résultat de la commande est indéterminé."
+                ),
+                "error_code": (
+                    "deadline_exceeded" if cancelled else "outcome_unknown"
+                ),
+                "request_id": request.request_id,
+                "_status": 504,
+            }
 
     def _execute_streamdeck_command(self, command: str, payload: dict[str, object]) -> dict[str, object]:
+        if WindowManagerApp._is_stopping(self):
+            return {
+                "ok": False,
+                "error": "L'application est en cours de fermeture.",
+                "error_code": "closing",
+                "_status": 503,
+            }
+
+        if command in {"focus", "rotate", "next_attention"}:
+            current_mode = getattr(self, "game_mode", "")
+            current_profile = getattr(self, "_active_profile_name", "")
+            requested_mode = payload.get("game_mode")
+            requested_profile = payload.get("profile")
+            if (
+                (requested_mode is not None and requested_mode != current_mode)
+                or (
+                    requested_profile is not None
+                    and requested_profile != current_profile
+                )
+            ):
+                return {
+                    "ok": False,
+                    "error": "Le contexte a changé. Actualisez le Stream Deck.",
+                    "error_code": "context_changed",
+                    "_status": 409,
+                }
+
         if command == "show":
             self._show_main_window()
             return {"ok": True}
@@ -4329,8 +4642,6 @@ class WindowManagerApp:
             return {"ok": True, "accepted": True, "direction": direction}
 
         if command == "focus":
-            if payload.get("game_mode", self.game_mode) != self.game_mode or payload.get("profile", getattr(self, "_active_profile_name", "")) != getattr(self, "_active_profile_name", ""):
-                return {"ok": False, "error": "Le profil a changé. Réessayez après actualisation.", "_status": 409}
             raw_hwnd = payload.get("hwnd")
             slot: int | None = None
             if raw_hwnd is not None:
@@ -4341,7 +4652,7 @@ class WindowManagerApp:
                 except (TypeError, ValueError):
                     return {"ok": False, "error": "Identifiant de fenêtre invalide.", "_status": 400}
                 if hwnd not in self._all_windows:
-                    return {"ok": False, "error": "Le personnage attribué n'est plus disponible.", "_status": 410}
+                    return {"ok": False, "error": "Le personnage attribué n'est plus disponible.", "error_code": "target_gone", "_status": 410}
                 if hwnd in self._streamdeck_order:
                     slot = self._streamdeck_order.index(hwnd) + 1
             else:
@@ -4359,10 +4670,10 @@ class WindowManagerApp:
 
             window = self._all_windows.get(hwnd)
             if window is not None and "pseudo" in payload and character_key(str(payload["pseudo"])) != character_key(window.pseudo):
-                return {"ok": False, "error": "Le personnage attribué a changé.", "_status": 410}
+                return {"ok": False, "error": "Le personnage attribué a changé.", "error_code": "target_changed", "_status": 410}
             if window is None or not is_window(hwnd):
                 self.refresh_windows(quiet=True, force=True)
-                return {"ok": False, "error": "La fenêtre n'existe plus.", "_status": 410}
+                return {"ok": False, "error": "La fenêtre n'existe plus.", "error_code": "target_gone", "_status": 410}
 
             try:
                 self._focus_hwnd_measured(hwnd)
@@ -4630,6 +4941,8 @@ class WindowManagerApp:
 
     def _request_ui_update(self):
         """Debounce UI rebuilds (listboxes) when many events arrive quickly."""
+        if WindowManagerApp._is_stopping(self):
+            return
         if self._ui_update_pending:
             return
         self._ui_update_pending = True
@@ -4637,6 +4950,8 @@ class WindowManagerApp:
 
     def _do_ui_update(self):
         self._ui_update_pending = False
+        if WindowManagerApp._is_stopping(self):
+            return
         self.last_update_time.set(datetime.now().strftime("Maj: %H:%M:%S"))
         self.update_listboxes()
         self._update_popup_watcher_targets()
@@ -4646,7 +4961,7 @@ class WindowManagerApp:
 
         This avoids full scans: we only query the single hwnd's class/title.
         """
-        if self._stop_event.is_set():
+        if WindowManagerApp._is_stopping(self):
             return
 
         evt = (evt or "").strip().lower()
@@ -4699,34 +5014,20 @@ class WindowManagerApp:
 
             cn = get_class_name(hwnd)
             title = get_window_title(hwnd)
-            if not title:
+            gw = identify_game_window(
+                hwnd,
+                self.game_mode,
+                getattr(self.settings, "retro_title_keyword", "dofus retro v"),
+                getattr(self.settings, "retro_process_keyword", ""),
+                title=title,
+                class_name=cn,
+            )
+            prev = self._all_windows.get(hwnd)
+            if gw is None:
+                if prev is not None:
+                    self._invalidate_window_target(hwnd)
                 return
 
-            if self.game_mode == "unity":
-                if cn != "UnityWndClass":
-                    return
-                pseudo = extract_pseudo_unity(title)
-                gw = GameWindow(
-                    hwnd=hwnd,
-                    title=title,
-                    pseudo=pseudo,
-                    character_class=extract_character_class(title, pseudo),
-                )
-            else:
-                if cn != "Chrome_WidgetWin_1":
-                    return
-                kw = (self.settings.retro_title_keyword or "dofus retro v").lower().strip()
-                if kw and kw not in title.lower():
-                    return
-                pseudo = extract_pseudo_retro(title)
-                gw = GameWindow(
-                    hwnd=hwnd,
-                    title=title,
-                    pseudo=pseudo,
-                    character_class=extract_character_class(title, pseudo),
-                )
-
-            prev = self._all_windows.get(hwnd)
             if prev is None:
                 self._all_windows[hwnd] = gw
                 if hwnd not in self._streamdeck_order:
@@ -4736,10 +5037,24 @@ class WindowManagerApp:
                 changed_structure = True
             elif prev.title != gw.title or prev.pseudo != gw.pseudo or prev.character_class != gw.character_class:
                 # A title change also requires updating an optional capture target.
-                if character_key(prev.pseudo) != character_key(gw.pseudo):
+                identity_changed = (
+                    character_key(prev.pseudo) != character_key(gw.pseudo)
+                    or (prev.pid and gw.pid and prev.pid != gw.pid)
+                )
+                if identity_changed:
                     self._ignored.discard(hwnd)
                     self.attention_state.clear(hwnd)
+                    if hwnd in self._managed_order:
+                        self._managed_order.remove(hwnd)
+                    if hwnd in self._streamdeck_order:
+                        self._streamdeck_order.remove(hwnd)
+                    if self._active_game_hwnd == hwnd:
+                        self._active_game_hwnd = None
                 self._all_windows[hwnd] = gw
+                if hwnd not in self._streamdeck_order:
+                    self._streamdeck_order.append(hwnd)
+                if hwnd not in self._ignored and hwnd not in self._managed_order:
+                    self._managed_order.append(hwnd)
                 changed_structure = True
 
         else:
@@ -4748,6 +5063,7 @@ class WindowManagerApp:
         if not changed_structure:
             return
 
+        self._structure_generation = getattr(self, "_structure_generation", 0) + 1
         self._reconcile_character_roster()
         self._schedule_smart_profile_match()
 
@@ -4923,6 +5239,8 @@ class WindowManagerApp:
 
     def request_rotation(self, direction: str) -> bool:
         """Coalesce rapid UI/hotkey presses and focus only the final target."""
+        if WindowManagerApp._is_stopping(self):
+            return False
         if direction not in {"forward", "backward"} or not self._managed_order:
             return False
         self._pending_rotation_delta += 1 if direction == "forward" else -1
@@ -4934,11 +5252,15 @@ class WindowManagerApp:
         return True
 
     def _flush_rotation_requests(self) -> None:
+        self._rotation_request_job = None
+        if WindowManagerApp._is_stopping(self):
+            self._pending_rotation_delta = 0
+            return
         delta = self._pending_rotation_delta
         self._pending_rotation_delta = 0
-        self._rotation_request_job = None
         if delta:
             self._rotate_by_delta(delta)
+
 
     def rotate(self, direction: str) -> bool:
         if direction not in {"forward", "backward"}:
@@ -6490,10 +6812,14 @@ class WindowManagerApp:
         # Lazy-init if user enables it later
         if self._popup_watch_enabled and self.popup_watcher is None and _POPUP_WATCH_AVAILABLE:
             try:
+                self._popup_watcher_generation = (
+                    getattr(self, "_popup_watcher_generation", 0) + 1
+                )
                 self.popup_watcher = RetroPopupWatcher(
                     emit=lambda evt: self._popup_queue.put(evt),
                     max_fps_per_window=4.0,
                     cooldown_sec=2.0,
+                    generation_seed=self._popup_watcher_generation,
                 )
                 self.popup_watcher.set_enabled(True)
                 self._ensure_popup_event_pump()
@@ -6583,7 +6909,7 @@ class WindowManagerApp:
     def _process_popup_events(self):
         """Poll popup events emitted by the watcher; runs on Tk thread."""
         # If app is closing, stop polling
-        if self._stop_event.is_set():
+        if WindowManagerApp._is_stopping(self):
             return
 
         while True:
@@ -6606,26 +6932,38 @@ class WindowManagerApp:
         self.root.after(50, self._process_popup_events)
 
     def _handle_popup_event(self, evt: PopupEvent) -> None:
-        if not self._popup_watch_enabled:
+        if self._stop_event.is_set() or not self._popup_watch_enabled:
             return
+        watcher = getattr(self, "popup_watcher", None)
+        if watcher is not None:
+            try:
+                if not watcher.is_current_event(evt):
+                    return
+            except Exception:
+                return
 
         hwnd = int(evt.hwnd)
         if hwnd not in self._managed_order or hwnd in self._ignored:
             return
 
-        # Avoid ping-pong when several clients display a popup together.
         now = time.monotonic()
         if now < self._popup_global_cooldown_until:
             return
 
+        previous_index = self.rotation_index
         try:
-            self.rotation_index = self._managed_order.index(hwnd)
+            target_index = self._managed_order.index(hwnd)
             self._focus_hwnd_measured(hwnd)
+            self.rotation_index = target_index
             self._record_character_focus(hwnd, notify=True)
-            self._popup_global_cooldown_until = now + self._popup_global_cooldown_sec
+            self._popup_global_cooldown_until = (
+                now + self._popup_global_cooldown_sec
+            )
             self._log(f"Popup détecté → focus {evt.title}")
         except (FocusError, ValueError) as exc:
+            self.rotation_index = previous_index
             self._log(f"PopupWatch focus échoué: {exc}")
+
 
     def _register_hotkeys(self):
         self._update_hotkey_context()
@@ -6674,7 +7012,7 @@ class WindowManagerApp:
         self._log(tr("Raccourcis suspendus") if self._hotkeys_paused else tr("Raccourcis réactivés"))
 
     def _check_hotkey_errors(self):
-        if self._stop_event.is_set():
+        if WindowManagerApp._is_stopping(self):
             return
 
         # Watchdog: restart the listener if it stopped.
@@ -6700,13 +7038,44 @@ class WindowManagerApp:
 # ---------------------------- Lifecycle ----------------------------
 
     def on_close(self, *, force: bool = False):
-        if self._stop_event.is_set():
+        if WindowManagerApp._is_stopping(self):
             return
         if not force and self.settings.minimize_to_tray and self.tray.is_running:
             self._hide_main_window()
             return
 
         self._stop_event.set()
+        if self._refresh_inflight:
+            self._finish_refresh()
+        if getattr(self, "_rotation_request_job", None) is not None:
+            try:
+                self.root.after_cancel(self._rotation_request_job)
+            except Exception:
+                pass
+            self._rotation_request_job = None
+        self._pending_rotation_delta = 0
+        pending_queue = getattr(self, "_queue", None)
+        if isinstance(pending_queue, queue.Queue):
+            while True:
+                try:
+                    pending_item = pending_queue.get_nowait()
+                except queue.Empty:
+                    break
+                try:
+                    if pending_item[0] == "streamdeck" and isinstance(
+                        pending_item[1], _StreamDeckRequest
+                    ):
+                        pending_item[1].cancel_if_not_started()
+                        pending_item[1].complete(
+                            {
+                                "ok": False,
+                                "error": "L'application est en cours de fermeture.",
+                                "error_code": "closing",
+                                "_status": 503,
+                            }
+                        )
+                finally:
+                    pending_queue.task_done()
         self.status_var.set(tr("Fermeture en cours…"))
         try:
             self.settings.auto_refresh = bool(self.auto_refresh_enabled.get())

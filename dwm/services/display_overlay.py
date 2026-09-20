@@ -28,7 +28,9 @@ DEFAULT_ROTATION_OVERLAY_LAYOUT = {
 }
 
 _TK_GEOMETRY_PATTERN = re.compile(
-    r"^(?P<width>\d+)x(?P<height>\d+)(?P<x>[+-]\d+)(?P<y>[+-]\d+)$"
+    r"^(?P<width>\d+)x(?P<height>\d+)"
+    r"(?P<x>\+(?:-\d+|\d+)|-\d+)"
+    r"(?P<y>\+(?:-\d+|\d+)|-\d+)$"
 )
 
 
@@ -260,8 +262,28 @@ def place_inside_rect(
     return max(left, min(x, max_x)), max(top, min(y, max_y))
 
 
+def _parse_tk_axis(value: str) -> int:
+    """Parse one Tk geometry axis, including DWM's explicit absolute-negative form."""
+    if value.startswith("+-"):
+        return -int(value[2:])
+    return int(value)
+
+
+def tk_geometry_uses_relative_negative_offset(value: object) -> bool:
+    """Return True for legacy Tk '-N' offsets relative to the right/bottom edge."""
+    match = _TK_GEOMETRY_PATTERN.fullmatch(str(value or "").strip())
+    if match is None:
+        return False
+    return match.group("x").startswith("-") or match.group("y").startswith("-")
+
+
 def parse_tk_geometry(value: object) -> tuple[int, int, int, int] | None:
-    """Parse a complete Tk geometry string into width, height, x and y."""
+    """Parse a Tk geometry into width, height and DWM absolute coordinates.
+
+    New DWM geometries encode a negative absolute coordinate as '+-1250' so Tk
+    does not reinterpret it as a right/bottom edge offset. Legacy '-1250'
+    geometries remain readable and are explicitly normalized by the UI layer.
+    """
     match = _TK_GEOMETRY_PATTERN.fullmatch(str(value or "").strip())
     if match is None:
         return None
@@ -269,7 +291,12 @@ def parse_tk_geometry(value: object) -> tuple[int, int, int, int] | None:
     height = int(match.group("height"))
     if width <= 0 or height <= 0:
         return None
-    return width, height, int(match.group("x")), int(match.group("y"))
+    return (
+        width,
+        height,
+        _parse_tk_axis(match.group("x")),
+        _parse_tk_axis(match.group("y")),
+    )
 
 
 def recover_window_position(
@@ -324,5 +351,14 @@ def recover_window_position(
     return recovered_x, recovered_y
 
 
+def _format_absolute_tk_axis(value: int) -> str:
+    coordinate = int(value)
+    return f"+{coordinate}"
+
+
 def format_tk_geometry(width: int, height: int, x: int, y: int) -> str:
-    return f"{int(width)}x{int(height)}{int(x):+d}{int(y):+d}"
+    """Return a Tk geometry preserving absolute virtual-desktop coordinates."""
+    return (
+        f"{int(width)}x{int(height)}"
+        f"{_format_absolute_tk_axis(x)}{_format_absolute_tk_axis(y)}"
+    )

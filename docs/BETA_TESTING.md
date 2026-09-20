@@ -135,3 +135,48 @@ Les tests automatisés couvrent les transitions de contexte via des API Windows 
 - Accepter puis annuler le choix du fichier : aucun ZIP créé.
 - Accepter et enregistrer : vérifier le ZIP anonymisé et l’absence d’envoi réseau.
 - Ouvrir une deuxième instance : aucune fausse alerte sur la première encore ouverte.
+
+
+## Lot de durcissement après audit — PR #10
+
+Ce lot corrige des courses et cas limites internes. Les tests automatisés ne remplacent pas les essais réels suivants. Indiquez **non testé** lorsqu'un matériel ou scénario n'est pas disponible.
+
+### Windows / fermeture / focus
+
+- [ ] Ouvrir une Combobox pendant qu'un scan automatique se produit : la liste reste utilisable et les scans suivants continuent.
+- [ ] Tester un focus déjà actif, une fenêtre minimisée et un refus de focus Windows ; aucun autre client ne doit devenir la cible par erreur.
+- [ ] Enchaîner rapidement Suivant/Précédent puis quitter : aucune rotation différée ne doit s'exécuter après le début de fermeture.
+- [ ] Quitter sous rafale Stream Deck puis relancer immédiatement : aucune action de l'ancienne instance ne doit apparaître dans la nouvelle.
+
+### Dofus Unity / Retro
+
+- [ ] Tester 0, 1 puis 8 clients en conservant l'ordre, les emplacements fixes et les personnages ignorés.
+- [ ] Fermer puis reconnecter un personnage : le nouveau HWND doit retrouver son identité sans hériter d'un autre personnage.
+- [ ] Changer Unity ↔ Retro pendant ou juste après un scan : aucun résultat de l'ancien mode ne doit remplacer l'état courant.
+- [ ] Vérifier les profils, alias, positions, raccourcis et alertes après reconnexion.
+
+### OBS
+
+- [ ] Avec les deux sources Window Capture déjà configurées, changer palette, verrouillage, dimensions et mode : les sources restent attachées.
+- [ ] Déclencher plusieurs changements rapides de focus : le popup se remplace sans fenêtre orpheline.
+- [ ] Fermer puis relancer DWM : aucune ancienne surface popup ne subsiste.
+- [ ] Vérifier que la surface inactive du popup reste compatible avec le Color Key actuel ; cette stratégie n'a volontairement pas été changée.
+
+### Stream Deck
+
+- [ ] Tester backend absent puis redémarré : le plugin se reconnecte automatiquement.
+- [ ] Provoquer une réponse backend retardée : une commande focus/rotation/alerte ne doit jamais être exécutée deux fois.
+- [ ] Tester une cible disparue et un changement de profil/mode entre affichage de la touche et appui.
+- [ ] Tester Stream Deck et DWM avec différences de privilèges et noter précisément le résultat ; aucun retry ambigu n'est effectué.
+
+### Multi-écran / DPI
+
+- [ ] Écran à gauche et écran au-dessus : enregistrer puis relancer avec des coordonnées X/Y négatives.
+- [ ] Débrancher/rebrancher l'écran choisi et vérifier le repli puis le retour attendu.
+- [ ] Tester 100 %, 125 %, 150 % et 200 %, ainsi qu'un mélange de DPI entre écrans.
+
+### Watcher Retro facultatif
+
+- [ ] Construire séparément avec les dépendances popup et relever la version exacte de `windows-capture`.
+- [ ] Vérifier qu'une fermeture/recréation rapide d'une fenêtre ne réutilise pas une ancienne capture.
+- [ ] Tester l'arrêt de DWM pendant une détection active.

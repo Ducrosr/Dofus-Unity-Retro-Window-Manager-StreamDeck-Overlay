@@ -7,7 +7,17 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
-from dwm.storage.profiles import Profile, list_profiles, load_profile, migrate_pickles, profile_path, save_profile
+from dwm.storage.profiles import (
+    PROFILE_SCHEMA_VERSION,
+    Profile,
+    ProfileSchemaTooNewError,
+    list_profiles,
+    load_profile,
+    migrate_pickles,
+    profile_backup_path,
+    profile_path,
+    save_profile,
+)
 
 
 class ProfileTests(unittest.TestCase):
@@ -77,6 +87,49 @@ class ProfileTests(unittest.TestCase):
 
             self.assertEqual(path.read_text(encoding="utf-8"), previous_contents)
             self.assertEqual(list(profiles_dir.glob("*.tmp")), [])
+
+    def test_corrupt_profile_does_not_replace_valid_backup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp)
+            now = datetime.now().isoformat(timespec="seconds")
+            profile = Profile("Équipe", ["Iop"], {}, now, now)
+            save_profile(profiles_dir, profile)
+            profile.order = ["Eni"]
+            save_profile(profiles_dir, profile)
+
+            path = profile_path(profiles_dir, profile.name)
+            backup = profile_backup_path(path)
+            valid_backup = backup.read_text(encoding="utf-8")
+            path.write_text('{"schema_version":', encoding="utf-8")
+
+            profile.order = ["Cra"]
+            save_profile(profiles_dir, profile)
+
+            self.assertEqual(backup.read_text(encoding="utf-8"), valid_backup)
+            self.assertEqual(load_profile(profiles_dir, profile.name).order, ["Cra"])
+
+    def test_future_profile_schema_is_not_overwritten(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp)
+            path = profile_path(profiles_dir, "Future")
+            future = (
+                '{"schema_version": '
+                + str(PROFILE_SCHEMA_VERSION + 1)
+                + ', "name": "Future"}'
+            )
+            path.write_text(future, encoding="utf-8")
+
+            with self.assertRaises(ProfileSchemaTooNewError):
+                load_profile(profiles_dir, "Future")
+
+            now = datetime.now().isoformat(timespec="seconds")
+            with self.assertRaises(ProfileSchemaTooNewError):
+                save_profile(
+                    profiles_dir,
+                    Profile("Future", ["Iop"], {}, now, now),
+                )
+
+            self.assertEqual(path.read_text(encoding="utf-8"), future)
 
     def test_migrate_primitive_legacy_pickle(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -16,6 +16,10 @@ from .settings import normalize_profile_overlays
 PROFILE_SCHEMA_VERSION = 4
 
 
+class ProfileSchemaTooNewError(ValueError):
+    """Raised when a profile belongs to a newer, unsupported DWM schema."""
+
+
 class _LegacyProfileUnpickler(pickle.Unpickler):
     """Load primitive legacy profile data without allowing global objects."""
 
@@ -64,6 +68,12 @@ class Profile:
 
     @staticmethod
     def from_dict(d: dict) -> "Profile":
+        schema = int(d.get("schema_version", 1) or 1)
+        if schema > PROFILE_SCHEMA_VERSION:
+            raise ProfileSchemaTooNewError(
+                f"Schéma de profil {schema} plus récent que la version prise en charge "
+                f"({PROFILE_SCHEMA_VERSION})."
+            )
         now = datetime.now().isoformat(timespec="seconds")
         return Profile(
             name=d.get("name", ""),
@@ -104,13 +114,39 @@ def list_profiles(profiles_dir: Path) -> List[str]:
     return sorted(set(names), key=str.lower)
 
 
+def profile_backup_path(path: Path) -> Path:
+    return path.with_name(f"{path.name}.bak")
+
+
+def _read_profile(path: Path) -> Profile:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("profile root must be a JSON object")
+    profile = Profile.from_dict(data)
+    if not profile.name:
+        profile.name = path.stem.removesuffix(".bak")
+    return profile
+
+
 def load_profile(profiles_dir: Path, name: str) -> Profile:
-    p = profile_path(profiles_dir, name)
-    data = json.loads(p.read_text(encoding="utf-8"))
-    pr = Profile.from_dict(data)
-    if not pr.name:
-        pr.name = p.stem
-    return pr
+    path = profile_path(profiles_dir, name)
+    backup = profile_backup_path(path)
+    if path.exists():
+        try:
+            return _read_profile(path)
+        except ProfileSchemaTooNewError:
+            raise
+        except Exception:
+            pass
+    if backup.exists():
+        try:
+            return _read_profile(backup)
+        except ProfileSchemaTooNewError:
+            raise
+        except Exception:
+            pass
+    # Preserve the historical error shape when neither copy is usable.
+    return _read_profile(path)
 
 
 def save_profile(profiles_dir: Path, profile: Profile) -> None:
@@ -120,6 +156,18 @@ def save_profile(profiles_dir: Path, profile: Profile) -> None:
         profile.created_at = now
     profile.updated_at = now
     path = profile_path(profiles_dir, profile.name)
+
+    if path.exists():
+        try:
+            _read_profile(path)
+            current = path.read_text(encoding="utf-8")
+        except ProfileSchemaTooNewError:
+            raise
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError, TypeError):
+            current = ""
+        if current:
+            atomic_write_text(profile_backup_path(path), current)
+
     atomic_write_text(
         path,
         json.dumps(profile.to_dict(), indent=2, ensure_ascii=False),

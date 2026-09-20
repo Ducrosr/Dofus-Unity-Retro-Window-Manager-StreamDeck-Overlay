@@ -4,7 +4,7 @@ import re
 import unicodedata
 from typing import List
 
-from .win32_enum import enum_top_level_windows, get_class_name
+from .win32_enum import enum_top_level_windows, get_class_name, get_window_title
 
 from ..models import GameWindow
 
@@ -267,20 +267,130 @@ def _get_process_image_path(hwnd: int) -> str:
         return ""
 
 
+def _looks_like_unity_dofus(title: str, pseudo: str, character_class: str, process_path: str) -> bool:
+    lowered_title = (title or "").casefold()
+    lowered_process = (process_path or "").casefold()
+    return (
+        "dofus" in lowered_title
+        or "dofus" in lowered_process
+        or bool(pseudo and character_class)
+    )
+
+
+def identify_game_window(
+    hwnd: int,
+    game_mode: str,
+    retro_title_keyword: str = "dofus retro v",
+    retro_process_keyword: str = "",
+    *,
+    title: str | None = None,
+    class_name: str | None = None,
+) -> GameWindow | None:
+    """Recognize one HWND as a Dofus client and attach a fresh identity snapshot."""
+    mode = (game_mode or "unity").strip().lower()
+    current_title = get_window_title(hwnd) if title is None else str(title)
+    current_class = get_class_name(hwnd) if class_name is None else str(class_name)
+    if not current_title:
+        return None
+
+    pid = _get_pid(hwnd)
+    process_path = _get_process_image_path(hwnd)
+
+    if mode == "retro":
+        if current_class != "Chrome_WidgetWin_1":
+            return None
+        title_keyword = (retro_title_keyword or "dofus retro v").strip().casefold()
+        process_keyword = (retro_process_keyword or "").strip().casefold()
+        title_matches = bool(title_keyword and title_keyword in current_title.casefold())
+        process_matches = bool(
+            not title_keyword
+            and process_keyword
+            and process_keyword in process_path.casefold()
+        )
+        if not (title_matches or process_matches):
+            return None
+        pseudo = extract_pseudo_retro(current_title)
+    else:
+        if current_class != "UnityWndClass":
+            return None
+        pseudo = extract_pseudo_unity(current_title)
+        character_class = extract_character_class(current_title, pseudo)
+        if not _looks_like_unity_dofus(
+            current_title,
+            pseudo,
+            character_class,
+            process_path,
+        ):
+            return None
+
+    character_class = extract_character_class(current_title, pseudo)
+    return GameWindow(
+        hwnd=int(hwnd),
+        title=current_title,
+        pseudo=pseudo,
+        character_class=character_class,
+        pid=pid,
+        window_class=current_class,
+        game_mode=mode,
+        process_path=process_path,
+    )
+
+
+def revalidate_game_window(
+    expected: GameWindow,
+    *,
+    retro_title_keyword: str = "dofus retro v",
+    retro_process_keyword: str = "",
+) -> GameWindow | None:
+    """Refresh one target and reject a reused HWND or changed character identity."""
+    mode = expected.game_mode or (
+        "retro" if expected.window_class == "Chrome_WidgetWin_1" else "unity"
+    )
+    current = identify_game_window(
+        expected.hwnd,
+        mode,
+        retro_title_keyword,
+        retro_process_keyword,
+    )
+    if current is None:
+        return None
+
+    if expected.window_class and current.window_class != expected.window_class:
+        return None
+    if expected.game_mode and current.game_mode != expected.game_mode:
+        return None
+    if expected.pseudo.strip().casefold() != current.pseudo.strip().casefold():
+        return None
+    if expected.pid and current.pid and expected.pid != current.pid:
+        return None
+    if (
+        expected.process_path
+        and current.process_path
+        and expected.process_path.casefold() != current.process_path.casefold()
+    ):
+        return None
+    return current
+
+
 # -------------------------- Window enumeration --------------------------
 
 def list_unity_windows(class_name: str = "UnityWndClass") -> List[GameWindow]:
-    """Return Dofus Unity windows detected through the native Win32 API."""
+    """Return only recognized Dofus Unity windows."""
     out: List[GameWindow] = []
-    seen = set()
+    seen: set[int] = set()
 
     for hwnd, title in enum_top_level_windows(class_name=class_name, visible_only=True):
         if hwnd in seen:
             continue
         seen.add(hwnd)
-        pseudo = extract_pseudo_unity(title)
-        character_class = extract_character_class(title, pseudo)
-        out.append(GameWindow(hwnd=hwnd, title=title, pseudo=pseudo, character_class=character_class))
+        window = identify_game_window(
+            hwnd,
+            "unity",
+            title=title,
+            class_name=class_name,
+        )
+        if window is not None:
+            out.append(window)
 
     return out
 
@@ -327,9 +437,16 @@ def list_retro_windows(
             continue
 
         seen.add(hwnd)
-        pseudo = extract_pseudo_retro(title)
-        character_class = extract_character_class(title, pseudo)
-        out.append(GameWindow(hwnd=hwnd, title=title, pseudo=pseudo, character_class=character_class))
+        window = identify_game_window(
+            hwnd,
+            "retro",
+            title_keyword,
+            process_keyword,
+            title=title,
+            class_name=class_name,
+        )
+        if window is not None:
+            out.append(window)
 
     return out
 

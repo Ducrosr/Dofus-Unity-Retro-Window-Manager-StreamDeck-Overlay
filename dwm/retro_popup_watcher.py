@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import time
 import threading
+import time
 from dataclasses import dataclass
 from typing import Callable, Dict, List
 
@@ -12,22 +12,25 @@ from windows_capture import CaptureControl, Frame, InternalCaptureControl, Windo
 from .retro_popup_detector import detect_retro_modal_popup
 
 
-@dataclass
+@dataclass(frozen=True)
 class WatchedWindow:
     hwnd: int
     title: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class PopupEvent:
     hwnd: int
     title: str
     ts: float
+    generation: int = 0
 
 
 @dataclass
 class _State:
     hwnd: int
+    title: str
+    generation: int
     last_check: float
     stable_active: bool
     last_emit: float
@@ -38,11 +41,8 @@ class _State:
 class RetroPopupWatcher:
     """Detect modal popups in stacked Retro windows with Windows Graphics Capture.
 
-    Key points:
-    - No polling scans needed; frames arrive from WGC even if window is behind.
-    - Uses hysteresis so we don't get stuck in a constant True state:
-      - stable_active becomes True only after N consecutive True frames
-      - stable_active becomes False only after M consecutive False frames
+    Capture identity is the pair (HWND, generation). The title is kept only
+    because windows-capture selects a target by window name.
     """
 
     def __init__(
@@ -52,129 +52,159 @@ class RetroPopupWatcher:
         cooldown_sec: float = 2.0,
         true_needed: int = 2,
         false_needed: int = 3,
+        generation_seed: int = 0,
     ):
         self._emit = emit
         self._enabled = False
         self._lock = threading.RLock()
+        self._next_generation = max(0, int(generation_seed)) << 32
 
         self._min_dt = 1.0 / max(0.5, float(max_fps_per_window))
         self._cooldown = float(cooldown_sec)
-
         self._true_needed = max(1, int(true_needed))
         self._false_needed = max(1, int(false_needed))
 
-        self._captures: Dict[str, WindowsCapture] = {}
-        self._capture_controls: Dict[str, CaptureControl] = {}
-        self._failures: Dict[str, str] = {}
-        self._state: Dict[str, _State] = {}
-        self._frames_seen: Dict[str, int] = {}
-        self._last_frame_ts: Dict[str, float] = {}
-        self._last_has_popup: Dict[str, bool] = {}
+        self._captures: Dict[int, WindowsCapture] = {}
+        self._capture_controls: Dict[int, CaptureControl] = {}
+        self._failures: Dict[int, str] = {}
+        self._state: Dict[int, _State] = {}
+        self._frames_seen: Dict[int, int] = {}
+        self._last_frame_ts: Dict[int, float] = {}
+        self._last_has_popup: Dict[int, bool] = {}
 
     def set_enabled(self, enabled: bool) -> None:
         with self._lock:
             self._enabled = bool(enabled)
 
+    def _new_generation(self) -> int:
+        self._next_generation += 1
+        return self._next_generation
+
+    def _detach_locked(self, hwnd: int) -> CaptureControl | None:
+        self._captures.pop(hwnd, None)
+        control = self._capture_controls.pop(hwnd, None)
+        self._state.pop(hwnd, None)
+        self._failures.pop(hwnd, None)
+        self._frames_seen.pop(hwnd, None)
+        self._last_frame_ts.pop(hwnd, None)
+        self._last_has_popup.pop(hwnd, None)
+        return control
+
+    @staticmethod
+    def _stop_controls(controls: List[CaptureControl]) -> None:
+        for control in controls:
+            try:
+                control.stop()
+            except Exception:
+                pass
+
     def update_targets(self, windows: List[WatchedWindow]) -> None:
-        """
-        Keep capture targets in sync with the managed windows list.
-        Note: stopping & restarting WGC rapidly can be flaky; we stop only when target disappears.
-        """
+        """Synchronize capture sessions without reusing one capture for another HWND."""
+        wanted = {int(window.hwnd): str(window.title) for window in windows if int(window.hwnd)}
+        controls_to_stop: List[CaptureControl] = []
+        additions: list[tuple[int, str, int]] = []
+
         with self._lock:
-            wanted_titles = {w.title for w in windows}
-            title_to_hwnd = {w.title: int(w.hwnd) for w in windows}
-
-            # Remove old
-            for title in list(self._captures.keys()):
-                if title not in wanted_titles:
-                    self._captures.pop(title, None)
-                    control = self._capture_controls.pop(title, None)
+            for hwnd, state in list(self._state.items()):
+                wanted_title = wanted.get(hwnd)
+                if wanted_title is None or wanted_title != state.title:
+                    control = self._detach_locked(hwnd)
                     if control is not None:
-                        try:
-                            control.stop()
-                        except Exception:
-                            pass
-                    self._state.pop(title, None)
-                    try:
-                        self._failures.pop(title, None)
-                        self._frames_seen.pop(title, None)
-                        self._last_frame_ts.pop(title, None)
-                        self._last_has_popup.pop(title, None)
-                    except Exception:
-                        pass
+                        controls_to_stop.append(control)
 
-            # Add/update
-            for title in wanted_titles:
-                hwnd = title_to_hwnd[title]
-                if title in self._captures:
-                    st = self._state.get(title)
-                    if st:
-                        st.hwnd = hwnd
-                    else:
-                        self._state[title] = _State(hwnd=hwnd, last_check=0.0, stable_active=False,
-                                                    last_emit=0.0, true_streak=0, false_streak=0)
+            for hwnd, title in wanted.items():
+                if hwnd in self._state:
                     continue
+                generation = self._new_generation()
+                self._state[hwnd] = _State(
+                    hwnd=hwnd,
+                    title=title,
+                    generation=generation,
+                    last_check=0.0,
+                    stable_active=False,
+                    last_emit=0.0,
+                    true_streak=0,
+                    false_streak=0,
+                )
+                self._frames_seen[hwnd] = 0
+                self._last_frame_ts[hwnd] = 0.0
+                self._last_has_popup[hwnd] = False
+                additions.append((hwnd, title, generation))
 
-                try:
-                    cap = WindowsCapture(
-                        cursor_capture=None,
-                        draw_border=False,
-                        monitor_index=None,
-                        window_name=title,
-                    )
-                except Exception as exc:
-                    self._failures[title] = repr(exc)
-                    continue
+        # CaptureControl.stop() can wait for capture callbacks. Never call it
+        # while holding the watcher lock.
+        self._stop_controls(controls_to_stop)
 
-                self._captures[title] = cap
-                self._failures.pop(title, None)
+        for hwnd, title, generation in additions:
+            self._start_capture(hwnd, title, generation)
 
-                self._frames_seen[title] = 0
-                self._last_frame_ts[title] = 0.0
-                self._last_has_popup[title] = False
-                self._state[title] = _State(hwnd=hwnd, last_check=0.0, stable_active=False,
-                                            last_emit=0.0, true_streak=0, false_streak=0)
+    def _start_capture(self, hwnd: int, title: str, generation: int) -> None:
+        try:
+            capture = WindowsCapture(
+                cursor_capture=None,
+                draw_border=False,
+                monitor_index=None,
+                window_name=title,
+            )
+        except Exception as exc:
+            with self._lock:
+                state = self._state.get(hwnd)
+                if state is not None and state.generation == generation:
+                    self._failures[hwnd] = repr(exc)
+                    self._state.pop(hwnd, None)
+                    self._frames_seen.pop(hwnd, None)
+                    self._last_frame_ts.pop(hwnd, None)
+                    self._last_has_popup.pop(hwnd, None)
+            return
 
-                @cap.event  # type: ignore
-                def on_frame_arrived(frame: Frame, capture_control: InternalCaptureControl, _title=title):
-                    self._on_frame(_title, frame)
+        @capture.event  # type: ignore
+        def on_frame_arrived(
+            frame: Frame,
+            capture_control: InternalCaptureControl,
+            _hwnd=hwnd,
+            _generation=generation,
+        ):
+            self._on_frame(_hwnd, _generation, frame)
 
-                @cap.event  # type: ignore
-                def on_closed(_title=title):
-                    with self._lock:
-                        self._captures.pop(_title, None)
-                        self._capture_controls.pop(_title, None)
-                        self._state.pop(_title, None)
-                        try:
-                            self._failures.pop(_title, None)
-                            self._frames_seen.pop(_title, None)
-                            self._last_frame_ts.pop(_title, None)
-                            self._last_has_popup.pop(_title, None)
-                        except Exception:
-                            pass
+        @capture.event  # type: ignore
+        def on_closed(_hwnd=hwnd, _generation=generation):
+            with self._lock:
+                state = self._state.get(_hwnd)
+                if state is None or state.generation != _generation:
+                    return
+                self._detach_locked(_hwnd)
 
-                try:
-                    control = cap.start_free_threaded()
-                    if title in self._captures:
-                        self._capture_controls[title] = control
-                    else:
-                        # The target closed while the capture was starting.
-                        control.stop()
-                except Exception as exc:
-                    # Remove partially-added capture and record failure
-                    self._captures.pop(title, None)
-                    self._capture_controls.pop(title, None)
-                    self._failures[title] = repr(exc)
-                    continue
+        with self._lock:
+            state = self._state.get(hwnd)
+            if state is None or state.generation != generation:
+                return
+            self._captures[hwnd] = capture
+            self._failures.pop(hwnd, None)
+
+        try:
+            control = capture.start_free_threaded()
+        except Exception as exc:
+            with self._lock:
+                state = self._state.get(hwnd)
+                if state is not None and state.generation == generation:
+                    self._detach_locked(hwnd)
+                    self._failures[hwnd] = repr(exc)
+            return
+
+        stop_immediately = False
+        with self._lock:
+            state = self._state.get(hwnd)
+            if state is None or state.generation != generation:
+                stop_immediately = True
+            else:
+                self._capture_controls[hwnd] = control
+        if stop_immediately:
+            self._stop_controls([control])
 
     def shutdown(self) -> None:
         with self._lock:
             self._enabled = False
-            for control in list(self._capture_controls.values()):
-                try:
-                    control.stop()
-                except Exception:
-                    pass
+            controls = list(self._capture_controls.values())
             self._captures.clear()
             self._capture_controls.clear()
             self._state.clear()
@@ -182,77 +212,100 @@ class RetroPopupWatcher:
             self._last_frame_ts.clear()
             self._last_has_popup.clear()
             self._failures.clear()
+        self._stop_controls(controls)
 
-    def _on_frame(self, title: str, frame: Frame) -> None:
+    def is_current_event(self, event: PopupEvent) -> bool:
+        with self._lock:
+            state = self._state.get(int(event.hwnd))
+            return bool(
+                self._enabled
+                and state is not None
+                and state.generation == int(event.generation)
+                and state.title == str(event.title)
+            )
+
+    def _on_frame(self, hwnd: int, generation: int, frame: Frame) -> None:
         now = time.monotonic()
 
         with self._lock:
-            st = self._state.get(title)
-            if not st:
+            state = self._state.get(hwnd)
+            if (
+                state is None
+                or state.generation != generation
+                or not self._enabled
+                or (now - state.last_check) < self._min_dt
+            ):
                 return
+            state.last_check = now
 
-            if (now - st.last_check) < self._min_dt:
-                return
-            st.last_check = now
-
-            if not self._enabled:
-                return
-
-        # Convert the captured frame to the detector's BGR numpy format.
         try:
             bgr_frame = frame.convert_to_bgr()
-            img: np.ndarray = bgr_frame.frame_buffer
+            image: np.ndarray = bgr_frame.frame_buffer
         except Exception:
             return
 
-        with self._lock:
-            try:
-                self._frames_seen[title] = self._frames_seen.get(title, 0) + 1
-                self._last_frame_ts[title] = now
-            except Exception:
-                pass
         try:
-            has_popup = bool(detect_retro_modal_popup(img))
+            has_popup = bool(detect_retro_modal_popup(image))
         except Exception:
             has_popup = False
 
+        event: PopupEvent | None = None
         with self._lock:
-            try:
-                self._last_has_popup[title] = bool(has_popup)
-            except Exception:
-                pass
-            st = self._state.get(title)
-            if not st:
+            # Detection is intentionally outside the lock. Revalidate identity
+            # afterwards so an old frame can never activate a replacement HWND.
+            state = self._state.get(hwnd)
+            if (
+                state is None
+                or state.generation != generation
+                or not self._enabled
+            ):
                 return
 
-            if has_popup:
-                st.true_streak += 1
-                st.false_streak = 0
-            else:
-                st.false_streak += 1
-                st.true_streak = 0
+            self._frames_seen[hwnd] = self._frames_seen.get(hwnd, 0) + 1
+            self._last_frame_ts[hwnd] = now
+            self._last_has_popup[hwnd] = has_popup
 
-            if not st.stable_active:
-                if st.true_streak >= self._true_needed:
-                    st.stable_active = True
-                    st.true_streak = 0
-                    if (now - st.last_emit) >= self._cooldown:
-                        st.last_emit = now
-                        try:
-                            self._emit(PopupEvent(hwnd=st.hwnd, title=title, ts=now))
-                        except Exception:
-                            pass
+            if has_popup:
+                state.true_streak += 1
+                state.false_streak = 0
             else:
-                if st.false_streak >= self._false_needed:
-                    st.stable_active = False
-                    st.false_streak = 0
+                state.false_streak += 1
+                state.true_streak = 0
+
+            if not state.stable_active:
+                if state.true_streak >= self._true_needed:
+                    state.stable_active = True
+                    state.true_streak = 0
+                    if (now - state.last_emit) >= self._cooldown:
+                        state.last_emit = now
+                        event = PopupEvent(
+                            hwnd=state.hwnd,
+                            title=state.title,
+                            ts=now,
+                            generation=state.generation,
+                        )
+            elif state.false_streak >= self._false_needed:
+                state.stable_active = False
+                state.false_streak = 0
+
+        if event is not None:
+            try:
+                self._emit(event)
+            except Exception:
+                pass
 
     def get_stats(self) -> dict:
-        """Return lightweight stats for debugging."""
         with self._lock:
             return {
                 "enabled": bool(self._enabled),
-                "targets": list(self._captures.keys()),
+                "targets": [
+                    {
+                        "hwnd": state.hwnd,
+                        "title": state.title,
+                        "generation": state.generation,
+                    }
+                    for state in self._state.values()
+                ],
                 "frames_seen": dict(self._frames_seen),
                 "last_frame_ts": dict(self._last_frame_ts),
                 "last_has_popup": dict(self._last_has_popup),

@@ -1,5 +1,37 @@
 # Historique
 
+## En développement — durcissement après audit technique
+
+### Runtime et fermeture
+
+- La pompe Tk traite désormais chaque message isolément, acquitte systématiquement la file et se réarme même après une erreur d'application d'un scan.
+- Les longues rafales de messages rendent régulièrement la main à Tk au lieu de monopoliser la boucle UI.
+- Les scans et événements Windows portent une génération structurelle : un résultat devenu obsolète est rejeté puis remplacé par un seul rattrapage.
+- Le début de fermeture bloque les nouvelles mutations, annule la rotation différée et répond explicitement aux commandes Stream Deck encore en attente.
+
+### Fenêtres, focus et Stream Deck
+
+- La reconnaissance des fenêtres Dofus est centralisée et conserve une empreinte PID/classe/mode/personnage/processus quand ces informations sont disponibles.
+- La cible est revalidée juste avant le focus ; un HWND réutilisé est invalidé localement sans scan complet systématique.
+- Les commandes Stream Deck non idempotentes ne sont plus rejouées automatiquement après un timeout ambigu.
+- Les réponses du bridge portent des codes d'erreur structurés et un identifiant logique de requête ; rotation et prochaine alerte vérifient aussi le contexte mode/profil.
+
+### Overlay, OBS et multi-écran
+
+- Les coordonnées virtuelles négatives sont enregistrées sous une forme Tk absolue (`+-1250`) et les anciennes géométries `-1250` sont migrées explicitement.
+- L'overlay et le popup OBS possèdent explicitement leurs `Toplevel` ; aucune substitution globale temporaire de `Toplevel` n'est utilisée.
+- Le même `Toplevel` persistant est conservé lors des changements de palette et de verrouillage.
+- La fermeture des surfaces est terminale et idempotente ; les fenêtres de simulation restent distinctes des surfaces de production OBS.
+- La stratégie actuelle de surface magenta inactive pour la capture OBS est conservée en attente de validation réelle.
+
+### Données et module Retro facultatif
+
+- Un fichier de paramètres ou profil principal n'est promu en `.bak` qu'après validation sémantique.
+- Les schémas provenant d'une version future sont refusés explicitement et ne peuvent plus être écrasés automatiquement par une version plus ancienne.
+- Le watcher Retro associe chaque capture à un HWND et une génération, rejette les callbacks/frames obsolètes et arrête les contrôles de capture hors verrou.
+- La dépendance `windows-capture` reste cantonnée au build facultatif.
+
+
 ## 2.20.0-beta.6 — 2026-09-17
 
 ### OBS et overlay

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 import types
 import unittest
 from types import SimpleNamespace
@@ -25,6 +26,7 @@ if os.name != "nt":
     sys.modules[hotkeys_stub.__name__] = hotkeys_stub
 
 from dwm.app import ROTATION_COALESCE_MS, WindowManagerApp  # noqa: E402
+from dwm.services.focus import FocusError  # noqa: E402
 
 
 class FakeRoot:
@@ -168,6 +170,63 @@ class FocusResponsivenessTests(unittest.TestCase):
         app._record_character_focus.assert_called_once_with(103, notify=True)
         app.update_listboxes.assert_not_called()
 
+    def test_reused_hwnd_is_invalidated_before_focus(self) -> None:
+        app = WindowManagerApp.__new__(WindowManagerApp)
+        app._stop_event = threading.Event()
+        app._all_windows = {
+            101: GameWindow(
+                101,
+                "Korra - Féca - Dofus",
+                "Korra",
+                "Féca",
+                pid=100,
+                window_class="UnityWndClass",
+                game_mode="unity",
+            )
+        }
+        app.settings = SimpleNamespace(
+            retro_title_keyword="dofus retro v",
+            retro_process_keyword="",
+        )
+        app._invalidate_window_target = Mock()
+        app.refresh_windows = Mock()
+
+        with (
+            patch("dwm.app.revalidate_game_window", return_value=None),
+            patch("dwm.app.focus_hwnd") as focus,
+        ):
+            with self.assertRaises(FocusError):
+                app._focus_hwnd_measured(101)
+
+        focus.assert_not_called()
+        app._invalidate_window_target.assert_called_once_with(101)
+        app.refresh_windows.assert_called_once_with(quiet=True, force=True)
+
+    def test_popup_focus_failure_preserves_rotation_index(self) -> None:
+        app = WindowManagerApp.__new__(WindowManagerApp)
+        app._stop_event = threading.Event()
+        app._popup_watch_enabled = True
+        app.popup_watcher = Mock()
+        app.popup_watcher.is_current_event.return_value = True
+        app._managed_order = [101, 102]
+        app._ignored = set()
+        app.rotation_index = 0
+        app._popup_global_cooldown_until = 0.0
+        app._popup_global_cooldown_sec = 2.0
+        app._focus_hwnd_measured = Mock(side_effect=FocusError("blocked"))
+        app._record_character_focus = Mock()
+        app._log = Mock()
+        event = SimpleNamespace(
+            hwnd=102,
+            title="Nat - Dofus Retro v1.44",
+            generation=3,
+        )
+
+        app._handle_popup_event(event)
+
+        self.assertEqual(app.rotation_index, 0)
+        app._record_character_focus.assert_not_called()
+
     def test_streamdeck_rotation_joins_the_same_coalesced_queue(self) -> None:
         app = WindowManagerApp.__new__(WindowManagerApp)
         app.request_rotation = Mock(return_value=True)
@@ -276,6 +335,67 @@ class OverlayResponsivenessTests(unittest.TestCase):
         self.assertEqual(request.entry.hwnd, 2)
         self.assertEqual(request.anchor, "top_right")
         self.assertEqual(request.duration_ms, 1200)
+
+    def test_palette_change_keeps_same_persistent_toplevel(self) -> None:
+        overlay = OverlayUI.__new__(OverlayUI)
+        overlay._closed = False
+        overlay.palette = {}
+        window = Mock()
+        overlay.persistent_window = window
+        overlay.persistent_enabled = True
+        overlay.compact_window = None
+        overlay._destroy_persistent = Mock()
+        overlay._render_persistent = Mock()
+        overlay._refresh_compact = Mock()
+
+        overlay.set_palette({"bg": "#111111"})
+
+        self.assertIs(overlay.persistent_window, window)
+        overlay._destroy_persistent.assert_not_called()
+        overlay._render_persistent.assert_called_once_with()
+
+    def test_lock_change_restyles_same_persistent_toplevel(self) -> None:
+        overlay = OverlayUI.__new__(OverlayUI)
+        overlay._closed = False
+        overlay.root = Mock()
+        overlay.palette = {"line": "#123456"}
+        window = Mock()
+        overlay.persistent_window = window
+        overlay.obs_capture = True
+        overlay._monitor_job = "monitor-job"
+        overlay._ensure_persistent = Mock()
+        overlay._render_persistent = Mock()
+
+        with patch("dwm.ui_overlays._apply_non_activating_style") as apply_style:
+            overlay.configure_persistent(
+                enabled=True,
+                x=10,
+                y=20,
+                opacity=88,
+                locked=True,
+                width=300,
+                auto_width=True,
+                height=0,
+            )
+
+        self.assertIs(overlay.persistent_window, window)
+        apply_style.assert_called_once_with(window, click_through=True)
+        overlay._render_persistent.assert_called_once_with()
+
+    def test_close_all_is_terminal_and_idempotent(self) -> None:
+        overlay = OverlayUI.__new__(OverlayUI)
+        overlay._closed = False
+        overlay.hide_swap_notification = Mock()
+        overlay._destroy_persistent = Mock()
+        overlay.close_compact = Mock()
+
+        overlay.close_all()
+        overlay.close_all()
+
+        self.assertTrue(overlay._closed)
+        overlay.hide_swap_notification.assert_called_once_with()
+        overlay._destroy_persistent.assert_called_once_with()
+        overlay.close_compact.assert_called_once_with(show_root=False)
 
     def test_manual_resize_disables_automatic_width(self) -> None:
         overlay = OverlayUI.__new__(OverlayUI)
