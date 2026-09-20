@@ -55,6 +55,17 @@ class RuntimeHardeningTests(unittest.TestCase):
         self.assertEqual(app._queue.unfinished_tasks, 0)
         app.root.after.assert_called_once_with(100, app._process_queue)
 
+    def test_event_from_previous_hook_generation_is_ignored(self) -> None:
+        app = self.make_queue_app()
+        app._hook_generation = 6
+        app._apply_win_event = Mock()
+        app._queue.put(("wevt", 4, 5, "destroy", 101))
+
+        app._process_queue()
+
+        app._apply_win_event.assert_not_called()
+        self.assertEqual(app._queue.unfinished_tasks, 0)
+
     def test_stale_scan_is_finalized_and_requests_one_catchup(self) -> None:
         app = self.make_queue_app()
         app._queue.put(("windows", 4, 8, [GameWindow(101, "old", "old")]))
