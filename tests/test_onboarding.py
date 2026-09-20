@@ -1,14 +1,29 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
+from unittest.mock import Mock, patch
 
 from dwm.services.onboarding import (
     OnboardingChoices,
     apply_onboarding_choices,
     onboarding_required,
 )
-from dwm.storage.settings import Settings
-from main import should_prompt_for_game_mode
+from dwm.storage.settings import Settings, SettingsSchemaTooNewError
+from main import load_startup_settings, should_prompt_for_game_mode
+
+
+class StartupSchemaTests(unittest.TestCase):
+    def test_future_settings_schema_stops_startup_without_fallback(self) -> None:
+        logger = Mock()
+        with patch(
+            "main.load_settings",
+            side_effect=SettingsSchemaTooNewError("future"),
+        ):
+            settings = load_startup_settings(Path("settings.json"), logger)
+
+        self.assertIsNone(settings)
+        logger.error.assert_called_once()
 
 
 class OnboardingTests(unittest.TestCase):
