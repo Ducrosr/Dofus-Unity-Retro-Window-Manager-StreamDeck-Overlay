@@ -149,6 +149,34 @@ class PopupWatcherLifecycleTests(unittest.TestCase):
 
         self.assertEqual(emitted, [])
 
+    def test_new_watcher_session_rejects_previous_session_event(self) -> None:
+        watcher_module = self.import_watcher()
+        first_events = []
+        first = watcher_module.RetroPopupWatcher(
+            emit=first_events.append,
+            true_needed=1,
+            cooldown_sec=0,
+            generation_seed=1,
+        )
+        first.set_enabled(True)
+        first.update_targets([watcher_module.WatchedWindow(hwnd=42, title="A")])
+        first_generation = first.get_stats()["targets"][0]["generation"]
+        old_event = watcher_module.PopupEvent(
+            hwnd=42,
+            title="A",
+            ts=1.0,
+            generation=first_generation,
+        )
+
+        second = watcher_module.RetroPopupWatcher(
+            emit=lambda event: None,
+            generation_seed=2,
+        )
+        second.set_enabled(True)
+        second.update_targets([watcher_module.WatchedWindow(hwnd=42, title="A")])
+
+        self.assertFalse(second.is_current_event(old_event))
+
     def test_shutdown_stops_blocking_control_outside_watcher_lock(self) -> None:
         watcher_module = self.import_watcher()
         entered = threading.Event()
