@@ -5049,6 +5049,8 @@ class WindowManagerApp:
 
     def _request_ui_update(self):
         """Debounce UI rebuilds (listboxes) when many events arrive quickly."""
+        if self._stop_event.is_set():
+            return
         if self._ui_update_pending:
             return
         self._ui_update_pending = True
@@ -5056,15 +5058,14 @@ class WindowManagerApp:
 
     def _do_ui_update(self):
         self._ui_update_pending = False
+        if self._stop_event.is_set():
+            return
         self.last_update_time.set(datetime.now().strftime("Maj: %H:%M:%S"))
         self.update_listboxes()
         self._update_popup_watcher_targets()
 
     def _apply_win_event(self, evt: str, hwnd: int):
-        """Apply a single window event (create/destroy/namechange) incrementally.
-
-        This avoids full scans: we only query the single hwnd's class/title.
-        """
+        """Apply one already-generation-validated WinEvent incrementally."""
         if self._stop_event.is_set():
             return
 
@@ -5072,7 +5073,7 @@ class WindowManagerApp:
         if not hwnd:
             return
 
-        changed_structure = False  # add/remove/reorder -> needs UI update
+        changed_structure = False
 
         if evt == "destroy":
             if hwnd in self._all_windows:
@@ -5082,16 +5083,16 @@ class WindowManagerApp:
                     self._active_game_hwnd = None
                 if hwnd in self._streamdeck_order:
                     self._streamdeck_order.remove(hwnd)
-                if hwnd in self._ignored:
-                    self._ignored.discard(hwnd)
+                self._ignored.discard(hwnd)
                 if hwnd in self._managed_order:
-                    try:
-                        self._managed_order.remove(hwnd)
-                    except ValueError:
-                        pass
+                    self._managed_order.remove(hwnd)
                 changed_structure = True
 
         elif evt == "attention":
+            if hwnd not in self._all_windows:
+                return
+            if self._revalidate_focus_target(hwnd) is None:
+                return
             foreground_hwnd = get_foreground_hwnd()
             active_target = hwnd if foreground_hwnd == hwnd else None
             if self.attention_state.mark(hwnd, self._all_windows.keys(), active_target):
@@ -5105,60 +5106,67 @@ class WindowManagerApp:
         elif evt == "foreground":
             if hwnd not in self._all_windows:
                 return
+            if self._revalidate_focus_target(hwnd) is None:
+                return
             self._record_character_focus(hwnd, notify=False)
             return
 
         elif evt in ("create", "namechange"):
-            # Validate window still exists
             try:
-                if not is_window(hwnd):
-                    return
+                window_exists = is_window(hwnd)
             except Exception:
-                return
+                window_exists = False
 
-            cn = get_class_name(hwnd)
-            title = get_window_title(hwnd)
-            if not title:
-                return
-
-            if self.game_mode == "unity":
-                if cn != "UnityWndClass":
-                    return
-                pseudo = extract_pseudo_unity(title)
-                gw = GameWindow(
-                    hwnd=hwnd,
-                    title=title,
-                    pseudo=pseudo,
-                    character_class=extract_character_class(title, pseudo),
+            current = (
+                inspect_game_window(
+                    hwnd,
+                    self.game_mode,
+                    self.settings.retro_title_keyword,
+                    self.settings.retro_process_keyword,
                 )
-            else:
-                if cn != "Chrome_WidgetWin_1":
-                    return
-                kw = (self.settings.retro_title_keyword or "dofus retro v").lower().strip()
-                if kw and kw not in title.lower():
-                    return
-                pseudo = extract_pseudo_retro(title)
-                gw = GameWindow(
-                    hwnd=hwnd,
-                    title=title,
-                    pseudo=pseudo,
-                    character_class=extract_character_class(title, pseudo),
-                )
+                if window_exists
+                else None
+            )
+            previous = self._all_windows.get(hwnd)
 
-            prev = self._all_windows.get(hwnd)
-            if prev is None:
-                self._all_windows[hwnd] = gw
+            if current is None:
+                # A known HWND that no longer identifies as Dofus must lose all
+                # state immediately instead of being kept until the next scan.
+                if previous is None:
+                    return
+                self._all_windows.pop(hwnd, None)
+                self.attention_state.clear(hwnd)
+                self._ignored.discard(hwnd)
+                if hwnd in self._managed_order:
+                    self._managed_order.remove(hwnd)
+                if hwnd in self._streamdeck_order:
+                    self._streamdeck_order.remove(hwnd)
+                if self._active_game_hwnd == hwnd:
+                    self._active_game_hwnd = None
+                changed_structure = True
+            elif previous is None:
+                self._all_windows[hwnd] = current
                 if hwnd not in self._streamdeck_order:
                     self._streamdeck_order.append(hwnd)
                 if hwnd not in self._ignored and hwnd not in self._managed_order:
                     self._managed_order.append(hwnd)
                 changed_structure = True
-            elif prev.title != gw.title or prev.pseudo != gw.pseudo or prev.character_class != gw.character_class:
-                # A title change also requires updating an optional capture target.
-                if character_key(prev.pseudo) != character_key(gw.pseudo):
-                    self._ignored.discard(hwnd)
-                    self.attention_state.clear(hwnd)
-                self._all_windows[hwnd] = gw
+            elif not same_window_identity(previous, current):
+                # HWND reuse: do not transfer position, ignore or attention state.
+                self.attention_state.clear(hwnd)
+                self._ignored.discard(hwnd)
+                if hwnd in self._managed_order:
+                    self._managed_order.remove(hwnd)
+                if hwnd in self._streamdeck_order:
+                    self._streamdeck_order.remove(hwnd)
+                if self._active_game_hwnd == hwnd:
+                    self._active_game_hwnd = None
+                self._all_windows[hwnd] = current
+                self._managed_order.append(hwnd)
+                self._streamdeck_order.append(hwnd)
+                changed_structure = True
+            elif previous != current:
+                self._all_windows[hwnd] = current
                 changed_structure = True
 
         else:
@@ -5167,21 +5175,18 @@ class WindowManagerApp:
         if not changed_structure:
             return
 
+        self._structure_generation = getattr(self, "_structure_generation", 0) + 1
         self._reconcile_character_roster()
         self._schedule_smart_profile_match()
 
-        # Keep rotation index valid
         if self._managed_order:
             self.rotation_index %= len(self._managed_order)
         else:
             self.rotation_index = 0
 
-        # Update scan signature (cheap enough at event rate)
-        try:
-            self._windows_sig = tuple(sorted((w.hwnd, w.title) for w in self._all_windows.values()))
-        except Exception:
-            pass
-
+        self._windows_sig = tuple(
+            sorted((window.hwnd, window.title) for window in self._all_windows.values())
+        )
         self._request_ui_update()
 
     # ---------------------------- List operations ----------------------------
