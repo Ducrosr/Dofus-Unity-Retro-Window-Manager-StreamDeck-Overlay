@@ -6,7 +6,7 @@
     "scripts": {
         "build": "rolldown -c rolldown.config.ts",
         "build:profiles": "python scripts/build_profiles.py",
-        "test": "node --test src/appearance-preferences.test.ts src/character-selection.test.ts src/display-preferences.test.ts src/launcher.test.ts src/streamdeck-foreground.test.ts src/text-layout.test.ts src/theme.test.ts",
+        "test": "node --test src/appearance-preferences.test.ts src/character-selection.test.ts src/display-preferences.test.ts src/dwm-client.test.ts src/launcher.test.ts src/streamdeck-foreground.test.ts src/text-layout.test.ts src/theme.test.ts",
         "watch": "rolldown -c rolldown.config.ts -w",
         "typecheck": "tsc --noEmit",
         "validate": "streamdeck validate com.remyducros.dofuswindowmanager.sdPlugin --no-update-check",
