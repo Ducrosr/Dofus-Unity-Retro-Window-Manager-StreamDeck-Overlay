@@ -9,7 +9,9 @@ from dwm.storage.atomic import atomic_write_text
 from dwm.storage.settings import (
     DEFAULT_WINDOW_COLUMN_ORDER,
     MODERN_DARK_THEME,
+    SETTINGS_SCHEMA_VERSION,
     Settings,
+    SettingsSchemaTooNewError,
     load_settings,
     save_settings,
     settings_backup_path,
@@ -224,6 +226,37 @@ class SettingsTests(unittest.TestCase):
 
         self.assertEqual(recovered.language, "en")
         self.assertEqual(recovered.refresh_seconds, 6)
+
+    def test_corrupt_primary_never_replaces_valid_backup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            backup = settings_backup_path(path)
+            save_settings(path, Settings(language="en", refresh_seconds=6))
+            save_settings(path, Settings(language="es", refresh_seconds=12))
+            valid_backup = backup.read_text(encoding="utf-8")
+
+            path.write_text('{"schema_version":', encoding="utf-8")
+            save_settings(path, Settings(language="fr", refresh_seconds=9))
+
+            self.assertEqual(backup.read_text(encoding="utf-8"), valid_backup)
+            self.assertEqual(load_settings(path).refresh_seconds, 9)
+
+    def test_future_settings_schema_is_not_replaced_or_downgraded(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            future = (
+                '{"schema_version": '
+                + str(SETTINGS_SCHEMA_VERSION + 1)
+                + ', "language": "en"}'
+            )
+            path.write_text(future, encoding="utf-8")
+
+            with self.assertRaises(SettingsSchemaTooNewError):
+                load_settings(path)
+            with self.assertRaises(SettingsSchemaTooNewError):
+                save_settings(path, Settings(language="fr"))
+
+            self.assertEqual(path.read_text(encoding="utf-8"), future)
 
     def test_atomic_write_failure_preserves_original_and_cleans_temporary_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
