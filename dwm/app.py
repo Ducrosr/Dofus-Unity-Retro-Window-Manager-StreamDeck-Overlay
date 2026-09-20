@@ -2397,7 +2397,7 @@ class WindowManagerApp:
         )
 
     def _focus_hwnd_measured(self, hwnd: int) -> None:
-        if self._stop_event.is_set():
+        if self._is_stopping():
             raise FocusError("L'application est en cours de fermeture.")
         expected = self._all_windows.get(hwnd)
         if expected is None:
@@ -2446,7 +2446,7 @@ class WindowManagerApp:
             self._streamdeck_order.remove(hwnd)
         if self._active_game_hwnd == hwnd:
             self._active_game_hwnd = None
-        self._structure_generation += 1
+        self._structure_generation = getattr(self, "_structure_generation", 0) + 1
         if self._managed_order:
             self.rotation_index %= len(self._managed_order)
         else:
@@ -2541,7 +2541,7 @@ class WindowManagerApp:
             button.configure(state=("normal" if count else "disabled"))
 
     def _poll_active_game_window(self) -> None:
-        if self._stop_event.is_set():
+        if self._is_stopping():
             return
         overlay_ui = getattr(self, "overlay_ui", None)
         if overlay_ui is not None and overlay_ui.has_visible_character_list:
@@ -2563,7 +2563,7 @@ class WindowManagerApp:
         self._start_update_check(manual=True)
 
     def _start_update_check(self, *, manual: bool) -> None:
-        if self._stop_event.is_set():
+        if self._is_stopping():
             return
         if self._update_check_inflight:
             if manual:
@@ -2607,7 +2607,7 @@ class WindowManagerApp:
         threading.Thread(target=worker, name="DWMUpdateCheck", daemon=True).start()
 
         def poll_result() -> None:
-            if self._stop_event.is_set():
+            if self._is_stopping():
                 return
             try:
                 result, error, checked_at = results.get_nowait()
@@ -3633,7 +3633,7 @@ class WindowManagerApp:
         TtkButton(buttons, text="Fermer", command=win.destroy).pack(side="right")
 
     def offer_interrupted_session_diagnostic(self) -> None:
-        if self._stop_event.is_set():
+        if self._is_stopping():
             return
         self._log("La session précédente s’est terminée anormalement.")
         if messagebox.askyesno(
@@ -4044,7 +4044,7 @@ class WindowManagerApp:
 
     def switch_game_mode(self, game_mode: str) -> bool:
         """Switch Unity/Retro immediately without restarting the application."""
-        if self._stop_event.is_set():
+        if self._is_stopping():
             return False
         new_mode = normalize_game_mode(game_mode, self.game_mode)
         if new_mode == self.game_mode:
@@ -4068,7 +4068,7 @@ class WindowManagerApp:
         self._apply_runtime_theme(selected_theme)
         self._apply_display_preferences()
         self._game_mode_revision += 1
-        self._structure_generation += 1
+        self._structure_generation = getattr(self, "_structure_generation", 0) + 1
         self.game_mode_var.set(self.game_label)
         self.game_subtitle_var.set(
             tr("Mode {game} · gestion locale des fenêtres", game=self.game_label)
@@ -4120,7 +4120,7 @@ class WindowManagerApp:
         if not getattr(self.settings, "event_hook_enabled", True):
             return
         self._stop_win_event_hook()
-        self._event_hook_generation += 1
+        self._event_hook_generation = getattr(self, "_event_hook_generation", 0) + 1
         hook_generation = self._event_hook_generation
         mode_revision = self._game_mode_revision
         try:
@@ -4177,7 +4177,7 @@ class WindowManagerApp:
         - quiet=True avoids extra logs (useful for auto-refresh).
         - force=True bypasses debounce.
         """
-        if self._stop_event.is_set():
+        if self._is_stopping():
             return False
         if self._refresh_inflight:
             if force:
@@ -4193,7 +4193,7 @@ class WindowManagerApp:
         self._refresh_inflight = True
         self._scan_started_monotonic = now
         mode_revision = self._game_mode_revision
-        structure_generation = self._structure_generation
+        structure_generation = getattr(self, "_structure_generation", 0)
         scan_mode = self.game_mode
         game_label = self.game_label
         retro_title_keyword = self.settings.retro_title_keyword
@@ -4305,7 +4305,7 @@ class WindowManagerApp:
         unchanged = new_sig == self._windows_sig and not replaced_hwnds
         self._windows_sig = new_sig
         if not unchanged:
-            self._structure_generation += 1
+            self._structure_generation = getattr(self, "_structure_generation", 0) + 1
 
         # If nothing changed, just update the timestamp and skip rebuilding the UI.
         if unchanged:
@@ -4357,7 +4357,7 @@ class WindowManagerApp:
         self._update_popup_watcher_targets()
 
     def _schedule_refresh(self):
-        if self._stop_event.is_set():
+        if self._is_stopping():
             return
 
         delay_seconds = max(1, int(getattr(self.settings, "refresh_seconds", 10)))
@@ -4410,7 +4410,7 @@ class WindowManagerApp:
                 processed += 1
                 kind = item[0]
                 try:
-                    if self._stop_event.is_set():
+                    if self._is_stopping():
                         if kind == "streamdeck":
                             request = item[1]
                             if isinstance(request, _StreamDeckRequest):
@@ -4433,7 +4433,7 @@ class WindowManagerApp:
                             structure_generation = int(item[2])
                             if (
                                 mode_revision == self._game_mode_revision
-                                and structure_generation == self._structure_generation
+                                and structure_generation == getattr(self, "_structure_generation", 0)
                             ):
                                 self._apply_windows(item[3])
                             else:
@@ -4448,7 +4448,7 @@ class WindowManagerApp:
                             structure_generation = int(item[2])
                             if (
                                 mode_revision == self._game_mode_revision
-                                and structure_generation == self._structure_generation
+                                and structure_generation == getattr(self, "_structure_generation", 0)
                             ):
                                 self._log(str(item[3]))
                             else:
@@ -4493,7 +4493,7 @@ class WindowManagerApp:
                         hook_generation = int(item[2])
                         if (
                             mode_revision == self._game_mode_revision
-                            and hook_generation == self._event_hook_generation
+                            and hook_generation == getattr(self, "_event_hook_generation", 0)
                         ):
                             self._apply_win_event(str(item[3]), int(item[4]))
                     elif kind == "tray":
@@ -4516,7 +4516,7 @@ class WindowManagerApp:
                 finally:
                     self._queue.task_done()
         finally:
-            if self._stop_event.is_set():
+            if self._is_stopping():
                 return
             try:
                 self._sync_tray_state()
@@ -4526,9 +4526,13 @@ class WindowManagerApp:
             self.root.after(delay, self._process_queue)
 
 
+    def _is_stopping(self) -> bool:
+        stop_event = getattr(self, "_stop_event", None)
+        return bool(stop_event is not None and stop_event.is_set())
+
     def _dispatch_streamdeck_command(self, command: str, payload: dict[str, object]) -> dict[str, object]:
         """Queue one command with an atomic deadline-aware lifecycle."""
-        if self._stop_event.is_set():
+        if self._is_stopping():
             return {
                 "ok": False,
                 "error": "L'application est en cours de fermeture.",
@@ -4565,7 +4569,7 @@ class WindowManagerApp:
             }
 
     def _execute_streamdeck_command(self, command: str, payload: dict[str, object]) -> dict[str, object]:
-        if self._stop_event.is_set():
+        if self._is_stopping():
             return {
                 "ok": False,
                 "error": "L'application est en cours de fermeture.",
@@ -4925,7 +4929,7 @@ class WindowManagerApp:
 
     def _request_ui_update(self):
         """Debounce UI rebuilds (listboxes) when many events arrive quickly."""
-        if self._stop_event.is_set():
+        if self._is_stopping():
             return
         if self._ui_update_pending:
             return
@@ -4934,7 +4938,7 @@ class WindowManagerApp:
 
     def _do_ui_update(self):
         self._ui_update_pending = False
-        if self._stop_event.is_set():
+        if self._is_stopping():
             return
         self.last_update_time.set(datetime.now().strftime("Maj: %H:%M:%S"))
         self.update_listboxes()
@@ -4945,7 +4949,7 @@ class WindowManagerApp:
 
         This avoids full scans: we only query the single hwnd's class/title.
         """
-        if self._stop_event.is_set():
+        if self._is_stopping():
             return
 
         evt = (evt or "").strip().lower()
@@ -5038,7 +5042,7 @@ class WindowManagerApp:
         if not changed_structure:
             return
 
-        self._structure_generation += 1
+        self._structure_generation = getattr(self, "_structure_generation", 0) + 1
         self._reconcile_character_roster()
         self._schedule_smart_profile_match()
 
@@ -5214,7 +5218,7 @@ class WindowManagerApp:
 
     def request_rotation(self, direction: str) -> bool:
         """Coalesce rapid UI/hotkey presses and focus only the final target."""
-        if self._stop_event.is_set():
+        if self._is_stopping():
             return False
         if direction not in {"forward", "backward"} or not self._managed_order:
             return False
@@ -5228,7 +5232,7 @@ class WindowManagerApp:
 
     def _flush_rotation_requests(self) -> None:
         self._rotation_request_job = None
-        if self._stop_event.is_set():
+        if self._is_stopping():
             self._pending_rotation_delta = 0
             return
         delta = self._pending_rotation_delta
@@ -6880,7 +6884,7 @@ class WindowManagerApp:
     def _process_popup_events(self):
         """Poll popup events emitted by the watcher; runs on Tk thread."""
         # If app is closing, stop polling
-        if self._stop_event.is_set():
+        if self._is_stopping():
             return
 
         while True:
@@ -6983,7 +6987,7 @@ class WindowManagerApp:
         self._log(tr("Raccourcis suspendus") if self._hotkeys_paused else tr("Raccourcis réactivés"))
 
     def _check_hotkey_errors(self):
-        if self._stop_event.is_set():
+        if self._is_stopping():
             return
 
         # Watchdog: restart the listener if it stopped.
@@ -7009,7 +7013,7 @@ class WindowManagerApp:
 # ---------------------------- Lifecycle ----------------------------
 
     def on_close(self, *, force: bool = False):
-        if self._stop_event.is_set():
+        if self._is_stopping():
             return
         if not force and self.settings.minimize_to_tray and self.tray.is_running:
             self._hide_main_window()
