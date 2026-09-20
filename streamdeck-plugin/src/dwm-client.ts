@@ -1,5 +1,3 @@
-import { releaseStreamDeckForeground } from "./streamdeck-foreground";
-
 const BASE_URL = "http://127.0.0.1:32145/v1";
 const POLL_INTERVAL_MS = 750;
 const REQUEST_TIMEOUT_MS = 600;
@@ -58,7 +56,19 @@ export type BridgeState = {
 
 type Listener = (state: BridgeState) => void;
 
-class DwmClient {
+export class DwmCommandError extends Error {
+	constructor(
+		message: string,
+		readonly status: number,
+		readonly code?: string,
+		readonly requestId?: string,
+	) {
+		super(message);
+		this.name = "DwmCommandError";
+	}
+}
+
+export class DwmClient {
 	private readonly listeners = new Set<Listener>();
 	private state: BridgeState = { connected: false };
 	private timer?: NodeJS.Timeout;
@@ -91,11 +101,18 @@ class DwmClient {
 	}
 
 	async rotate(direction: "forward" | "backward"): Promise<void> {
-		await this.focusCommand("rotate", { direction });
+		await this.focusCommand("rotate", {
+			direction,
+			game_mode: this.state.status?.game_mode,
+			profile: this.state.status?.profile,
+		});
 	}
 
 	async nextAttention(): Promise<void> {
-		await this.focusCommand("next-attention", {});
+		await this.focusCommand("next-attention", {
+			game_mode: this.state.status?.game_mode,
+			profile: this.state.status?.profile,
+		});
 	}
 
 	async show(): Promise<void> {
@@ -165,26 +182,29 @@ class DwmClient {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify(payload),
-			signal: AbortSignal.timeout(2000),
+			signal: AbortSignal.timeout(2200),
 		});
-		const result = (await response.json().catch(() => ({}))) as TResult & { error?: string };
+		const result = (await response.json().catch(() => ({}))) as TResult & {
+			error?: string;
+			error_code?: string;
+			request_id?: string;
+		};
 		if (response.ok) return result;
-		throw new Error(result.error || `HTTP ${response.status}`);
+		throw new DwmCommandError(
+			result.error || `HTTP ${response.status}`,
+			response.status,
+			result.error_code,
+			result.request_id,
+		);
 	}
 
-	private async focusCommand(path: "focus" | "rotate" | "next-attention", payload: Record<string, unknown>): Promise<void> {
-		try {
-			await this.command(path, payload);
-			return;
-		} catch (initialError) {
-			// If Stream Deck runs at a higher integrity level than DWM, Windows can
-			// reject every minimization request coming from the Python process. The
-			// plugin inherits Stream Deck's level, so it can release its own desktop
-			// window and retry the exact command once.
-			if (!(await releaseStreamDeckForeground())) throw initialError;
-			await delay(160);
-			await this.command(path, payload);
-		}
+	private async focusCommand(
+		path: "focus" | "rotate" | "next-attention",
+		payload: Record<string, unknown>,
+	): Promise<void> {
+		// These commands are non-idempotent. An HTTP timeout may mean the backend
+		// already started the mutation, so never replay it automatically.
+		await this.command(path, payload);
 	}
 
 	private notify(): void {
