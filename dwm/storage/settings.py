@@ -32,6 +32,7 @@ MODERN_DARK_THEME = UNITY_STANDARD_THEME  # Backward-compatible public name.
 class UnsupportedSettingsSchemaError(ValueError):
     """Raised when settings were written by a newer incompatible DWM version."""
 
+
 DEFAULT_WINDOW_COLUMN_ORDER = ("class", "name", "alias", "hwnd")
 
 
