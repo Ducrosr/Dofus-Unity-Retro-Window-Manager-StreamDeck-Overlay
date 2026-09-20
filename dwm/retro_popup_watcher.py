@@ -32,6 +32,7 @@ class _State:
     hwnd: int
     title: str
     generation: int
+    capture_generation: int
     last_check: float
     stable_active: bool
     last_emit: float
@@ -143,7 +144,7 @@ class RetroPopupWatcher:
             control = None
             with self._lock:
                 state = self._state.get(_hwnd)
-                if state is None or getattr(state, "_capture_generation", _capture_generation) != _capture_generation:
+                if state is None or state.capture_generation != _capture_generation:
                     return
                 control = self._remove_capture_locked(_hwnd)
             # windows-capture is already closing this control; do not recursively stop it.
@@ -156,14 +157,13 @@ class RetroPopupWatcher:
                 hwnd=hwnd,
                 title=title,
                 generation=target_generation,
+                capture_generation=capture_generation,
                 last_check=0.0,
                 stable_active=False,
                 last_emit=0.0,
                 true_streak=0,
                 false_streak=0,
             )
-            # Capture generation is deliberately attached without changing the public model.
-            setattr(state, "_capture_generation", capture_generation)
             self._captures[hwnd] = capture
             self._state[hwnd] = state
             self._failures.pop(hwnd, None)
@@ -176,7 +176,7 @@ class RetroPopupWatcher:
         except Exception as exc:
             with self._lock:
                 state = self._state.get(hwnd)
-                if state is not None and getattr(state, "_capture_generation", None) == capture_generation:
+                if state is not None and state.capture_generation == capture_generation:
                     self._remove_capture_locked(hwnd)
                     self._failures[hwnd] = repr(exc)
             return
@@ -187,7 +187,7 @@ class RetroPopupWatcher:
             if (
                 self._closed
                 or state is None
-                or getattr(state, "_capture_generation", None) != capture_generation
+                or state.capture_generation != capture_generation
             ):
                 should_stop = True
             else:
@@ -236,7 +236,7 @@ class RetroPopupWatcher:
             if (
                 self._closed
                 or state is None
-                or getattr(state, "_capture_generation", None) != capture_generation
+                or state.capture_generation != capture_generation
                 or not self._enabled
             ):
                 return
@@ -262,7 +262,7 @@ class RetroPopupWatcher:
             if (
                 self._closed
                 or state is None
-                or getattr(state, "_capture_generation", None) != capture_generation
+                or state.capture_generation != capture_generation
                 or state.generation != target_generation
                 or state.title != title
                 or not self._enabled
