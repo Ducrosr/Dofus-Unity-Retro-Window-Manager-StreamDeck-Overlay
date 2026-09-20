@@ -5118,8 +5118,9 @@ class WindowManagerApp:
 
             # Window may have disappeared or the HWND may have been reused.
             if window is None:
-                self._log("Fenêtre fermée détectée, mise à jour de la liste…")
-                self._managed_order.remove(hwnd)
+                self._log("Fenêtre fermée ou réattribuée détectée, mise à jour de la liste…")
+                if hwnd in self._managed_order:
+                    self._managed_order.remove(hwnd)
                 self._ignored.discard(hwnd)
                 structure_changed = True
                 if not self._managed_order:
