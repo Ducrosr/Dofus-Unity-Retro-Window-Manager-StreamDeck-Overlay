@@ -9,3 +9,7 @@ class GameWindow:
     title: str
     pseudo: str
     character_class: str = ""
+    process_id: int = 0
+    window_class: str = ""
+    game_mode: str = ""
+    process_image: str = ""
